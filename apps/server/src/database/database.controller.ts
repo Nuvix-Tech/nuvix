@@ -1,5 +1,5 @@
 import { Body, Controller, Param, Query, UseInterceptors } from '@nestjs/common'
-import { Get, Post } from '@nuvix/core'
+import { Delete, Get, Patch, Post } from '@nuvix/core'
 import { Auth, AuthType, Namespace } from '@nuvix/core/decorators'
 import { Models } from '@nuvix/core/helpers'
 import { ApiInterceptor, ResponseInterceptor } from '@nuvix/core/resolvers'
@@ -9,6 +9,7 @@ import {
   CreateSchemaDTO,
   SchemaParamsDTO,
   SchemaQueryDTO,
+  UpdateSchemaDTO,
 } from './DTO/create-schema.dto'
 import { DatabaseService } from './database.service'
 
@@ -65,5 +66,34 @@ export class DatabaseController {
   async getSchema(@Param() { schemaId }: SchemaParamsDTO) {
     const result = await this.databaseService.getSchema(schemaId)
     return result
+  }
+
+  @Patch('schemas/:schemaId', {
+    summary: 'Update schema',
+    description: 'Update a schema description',
+    scopes: 'schemas.write',
+    model: Models.SCHEMA,
+    sdk: {
+      name: 'updateSchema',
+    },
+  })
+  async updateSchema(
+    @Param() { schemaId }: SchemaParamsDTO,
+    @Body() body: UpdateSchemaDTO,
+  ) {
+    return this.databaseService.updateSchema(schemaId, body.description)
+  }
+
+  @Delete('schemas/:schemaId', {
+    summary: 'Delete schema',
+    description: 'Permanently delete a schema and all its tables from the database',
+    scopes: 'schemas.write',
+    sdk: {
+      name: 'deleteSchema',
+      code: 204,
+    },
+  })
+  async deleteSchema(@Param() { schemaId }: SchemaParamsDTO) {
+    await this.databaseService.deleteSchema(schemaId)
   }
 }

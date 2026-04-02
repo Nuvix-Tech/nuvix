@@ -47,6 +47,18 @@ export class CreateSchemaDTO {
   declare type: SchemaType
 }
 
+export class UpdateSchemaDTO {
+  @ApiProperty({
+    description: 'New schema description',
+    example: 'Updated description',
+    type: String,
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  description?: string
+}
+
 // Query
 
 export class SchemaQueryDTO {

@@ -100,6 +100,47 @@ export class InsertQueryDTO extends PickType(SelectQueryDTO, [
   @ArrayToLastElement()
   @IsString()
   columns?: string[]
+
+  /**
+   * Comma-separated column names to use for ON CONFLICT detection. When provided with
+   * `ignore_duplicates=false` (default), conflicting rows will be updated (upsert).
+   * When combined with `ignore_duplicates=true`, conflicting rows are silently skipped.
+   */
+  @IsOptional()
+  @ArrayToLastElement()
+  @IsString()
+  on_conflict?: string
+
+  /**
+   * When true and `on_conflict` is set, conflicting rows are silently ignored (INSERT ... ON CONFLICT DO NOTHING).
+   * When false (default) and `on_conflict` is set, conflicting rows are updated (upsert).
+   */
+  @IsOptional()
+  @ArrayToLastElement()
+  @TransformStringToBoolean()
+  @IsBoolean()
+  ignore_duplicates?: boolean = false
+}
+
+export class UpsertQueryDTO extends PickType(SelectQueryDTO, [
+  'select',
+] as const) {
+  /**
+   * Columns to include in the upsert. When omitted all columns from the body are used.
+   */
+  @IsOptional()
+  @ArrayToLastElement()
+  @IsString()
+  columns?: string[]
+
+  /**
+   * Comma-separated column names to match on for the ON CONFLICT clause. When omitted,
+   * the upsert falls back to DO NOTHING for any unique-constraint violation.
+   */
+  @IsOptional()
+  @ArrayToLastElement()
+  @IsString()
+  on_conflict?: string
 }
 
 export class UpdateQueryDTO extends SelectQueryDTO {
@@ -130,6 +171,16 @@ export class DeleteQueryDTO extends SelectQueryDTO {
   @TransformStringToBoolean()
   @IsBoolean()
   force?: boolean = false
+}
+
+export class CountQueryDTO {
+  /**
+   * Filter to narrow the count. (See [Schemas](https://docs.nuvix.in/schemas/managed-schema#filtering))
+   */
+  @IsOptional()
+  @ArrayToLastElement()
+  @IsString()
+  filter?: string
 }
 
 export class CallFunctionQueryDTO extends SelectQueryDTO {}

@@ -167,4 +167,49 @@ export class DatabaseService {
 
     return schema
   }
+
+  /**
+   * Update a schema's description
+   */
+  public async updateSchema(name: string, description?: string) {
+    const schema = await this.dataSource
+      .table<Schema>('schemas')
+      .withSchema(Schemas.System)
+      .where('name', name)
+      .first()
+
+    if (!schema) {
+      throw new Exception(Exception.SCHEMA_NOT_FOUND)
+    }
+
+    await this.dataSource
+      .table('schemas')
+      .withSchema(Schemas.System)
+      .where('name', name)
+      .update({ description: description ?? null })
+
+    return this.getSchema(name)
+  }
+
+  /**
+   * Delete a schema
+   */
+  public async deleteSchema(name: string) {
+    const schema = await this.dataSource
+      .table<Schema>('schemas')
+      .withSchema(Schemas.System)
+      .where('name', name)
+      .first()
+
+    if (!schema) {
+      throw new Exception(Exception.SCHEMA_NOT_FOUND)
+    }
+
+    await this.dataSource.transaction(tx =>
+      tx.query(
+        tx.$client,
+        tx.raw('select system.drop_schema(?)', [name]).toSQL(),
+      ),
+    )
+  }
 }

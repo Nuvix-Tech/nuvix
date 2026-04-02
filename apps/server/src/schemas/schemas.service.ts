@@ -12,6 +12,7 @@ import { transformPgError } from '@nuvix/utils/database'
 import { ASTToQueryBuilder } from '@nuvix/utils/query'
 import {
   CallFunction,
+  Count,
   Delete,
   GetPermissions,
   Insert,
@@ -19,6 +20,7 @@ import {
   Select,
   Update,
   UpdatePermissions,
+  Upsert,
 } from './schemas.types'
 import { CoreService } from '@nuvix/core/core.service'
 import { DatabaseRole } from '@nuvix/utils'
@@ -74,7 +76,7 @@ export class SchemasService {
     const isArrayData = Array.isArray(input)
 
     let data: Record<string, any> | Record<string, any>[]
-    const { columns, select } = query
+    const { columns, select, onConflict, ignoreDuplicates } = query
 
     if (columns?.length) {
       if (isArrayData) {
@@ -107,7 +109,81 @@ export class SchemasService {
     ast.applyReturning(select)
     qb.insert(data)
 
+    if (onConflict?.length) {
+      if (ignoreDuplicates) {
+        ;(qb as any).onConflict(onConflict).ignore()
+      } else {
+        ;(qb as any).onConflict(onConflict).merge()
+      }
+    }
+
     return this.handleQuery(context, qb)
+  }
+
+  async upsert({ table, input, schema, query, context }: Upsert) {
+    if (!input) {
+      throw new Exception(
+        Exception.INVALID_PARAMS,
+        'Input data is required for upsert operation',
+      )
+    }
+    const isArrayData = Array.isArray(input)
+
+    let data: Record<string, any> | Record<string, any>[]
+    const { columns, select, onConflict } = query
+
+    if (columns?.length) {
+      if (isArrayData) {
+        data = (input as Record<string, any>[]).map(record =>
+          columns.reduce(
+            (acc, column) => {
+              acc[column] = record[column]
+              return acc
+            },
+            {} as Record<string, any>,
+          ),
+        )
+      } else {
+        data = columns.reduce(
+          (acc, column) => {
+            acc[column] = (input as Record<string, any>)[column]
+            return acc
+          },
+          {} as Record<string, any>,
+        )
+      }
+    } else {
+      data = input
+    }
+
+    const qb = this.pg.qb(table).withSchema(schema)
+    const ast = new ASTToQueryBuilder(qb, this.pg, {
+      allowedSchemas: context.ctx.getExposedSchemas(),
+    })
+    ast.applyReturning(select)
+    qb.insert(data)
+
+    if (onConflict?.length) {
+      ;(qb as any).onConflict(onConflict).merge()
+    } else {
+      ;(qb as any).onConflict().ignore()
+    }
+
+    return this.handleQuery(context, qb)
+  }
+
+  async count({ table, schema, query, context }: Count): Promise<number> {
+    const qb = this.pg.table(table).withSchema(schema)
+    const ast = new ASTToQueryBuilder(qb, this.pg, {
+      allowedSchemas: context.ctx.getExposedSchemas(),
+    })
+    ast.applyFilters(query.filter, { applyExtra: false, tableName: table })
+    qb.count('* as count')
+
+    const result = (await this.handleQuery(context, qb)) as Array<{
+      count: string | number
+    }>
+    return Number(result?.[0]?.count ?? 0)
   }
 
   async update({ table, input, query, schema, context }: Update) {
