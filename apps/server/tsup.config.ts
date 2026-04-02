@@ -55,7 +55,7 @@ export default defineConfig(options => {
 
   return {
     entry: ['src/main.ts'],
-    format: ['esm'],
+    format: ['cjs'],
     dts: false,
     sourcemap: isDev,
     clean: !isDev,
@@ -64,7 +64,12 @@ export default defineConfig(options => {
     splitting: false,
     minify: !isDev,
     target: 'es2024',
-    skipNodeModulesBundle: true,
+    skipNodeModulesBundle: false,
+    external: [
+      '@nestjs/platform-express',
+      'class-transformer/storage',
+      '@nestjs/microservices',
+    ],
     bundle: true,
     shims: false,
     tsconfig: './tsconfig.app.json',
@@ -92,30 +97,30 @@ require('dotenv').config({
     esbuildPlugins: isDev
       ? []
       : [
-          copy({
-            assets: [
-              {
-                from: ['../../assets/**/*'],
-                to: ['../assets'],
-              },
-              {
-                from: ['../../docs/references/**/*'],
-                to: ['../docs/references'],
-              },
-              {
-                from: ['../../public/**/*'],
-                to: ['../public'],
-              },
-              {
-                from: ['../../LICENSE', '../../.env.example'],
-                to: ['../'],
-              },
-              {
-                from: ['../../README.md'],
-                to: ['../README.md'],
-              },
-            ],
-          }),
-        ],
+        copy({
+          assets: [
+            {
+              from: ['../../assets/**/*'],
+              to: ['../assets'],
+            },
+            {
+              from: ['../../docs/references/**/*'],
+              to: ['../docs/references'],
+            },
+            {
+              from: ['../../public/**/*'],
+              to: ['../public'],
+            },
+            {
+              from: ['../../LICENSE', '../../.env.example'],
+              to: ['../'],
+            },
+            {
+              from: ['../../README.md'],
+              to: ['../README.md'],
+            },
+          ],
+        }),
+      ],
   }
 })
