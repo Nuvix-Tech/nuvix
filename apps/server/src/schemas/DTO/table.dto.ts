@@ -1,6 +1,7 @@
 import { PickType } from '@nestjs/swagger'
 import {
   ArrayToLastElement,
+  TrySplitStringToArray,
   TransformStringToBoolean,
   TryTransformTo,
 } from '@nuvix/core/validators'
@@ -98,7 +99,8 @@ export class InsertQueryDTO extends PickType(SelectQueryDTO, [
    */
   @IsOptional()
   @ArrayToLastElement()
-  @IsString()
+  @TrySplitStringToArray(',')
+  @IsString({ each: true })
   columns?: string[]
 
   /**
@@ -108,8 +110,9 @@ export class InsertQueryDTO extends PickType(SelectQueryDTO, [
    */
   @IsOptional()
   @ArrayToLastElement()
-  @IsString()
-  on_conflict?: string
+  @TrySplitStringToArray(',')
+  @IsString({ each: true })
+  on_conflict?: string[]
 
   /**
    * When true and `on_conflict` is set, conflicting rows are silently ignored (INSERT ... ON CONFLICT DO NOTHING).
@@ -130,7 +133,8 @@ export class UpsertQueryDTO extends PickType(SelectQueryDTO, [
    */
   @IsOptional()
   @ArrayToLastElement()
-  @IsString()
+  @TrySplitStringToArray(',')
+  @IsString({ each: true })
   columns?: string[]
 
   /**
@@ -139,8 +143,9 @@ export class UpsertQueryDTO extends PickType(SelectQueryDTO, [
    */
   @IsOptional()
   @ArrayToLastElement()
-  @IsString()
-  on_conflict?: string
+  @TrySplitStringToArray(',')
+  @IsString({ each: true })
+  on_conflict?: string[]
 }
 
 export class UpdateQueryDTO extends SelectQueryDTO {
@@ -149,7 +154,8 @@ export class UpdateQueryDTO extends SelectQueryDTO {
    */
   @IsOptional()
   @ArrayToLastElement()
-  @IsString()
+  @TrySplitStringToArray(',')
+  @IsString({ each: true })
   columns?: string[]
 
   /**

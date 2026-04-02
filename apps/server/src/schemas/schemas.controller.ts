@@ -82,13 +82,14 @@ export class SchemasController {
     description: 'Retrieve a single row from a table by its primary key (_id)',
     scopes: 'schemas.tables.read',
   })
+  @CurrentSchemaType(SchemaType.Managed)
   async getRow(
     @Param()
     { schemaId: schema = 'public', tableId: table, rowId }: RowParamsDTO,
     @Req() request: NuvixRequest,
     @Query() query: SelectQueryDTO,
   ) {
-    const rowFilter = `_id.eq.${Number(rowId)}`
+    const rowFilter = `_id.eq(${Number(rowId)})`
     const combinedFilter = query.filter
       ? `and(${query.filter},${rowFilter})`
       : rowFilter
@@ -122,12 +123,6 @@ export class SchemasController {
       ignore_duplicates,
     }: InsertQueryDTO,
   ) {
-    const onConflict = on_conflict
-      ? on_conflict
-          .split(',')
-          .map(c => c.trim())
-          .filter(Boolean)
-      : undefined
     return this.schemasService.insert({
       schema,
       table,
@@ -135,7 +130,7 @@ export class SchemasController {
       query: {
         ...this.parseQuery({ select, table }),
         columns,
-        onConflict,
+        onConflict: on_conflict,
         ignoreDuplicates: ignore_duplicates,
       },
       context: this.buildContext(request),
@@ -154,12 +149,6 @@ export class SchemasController {
     @Body() input: Record<string, any> | Record<string, any>[],
     @Query() { columns, select, on_conflict }: UpsertQueryDTO,
   ) {
-    const onConflict = on_conflict
-      ? on_conflict
-          .split(',')
-          .map(c => c.trim())
-          .filter(Boolean)
-      : undefined
     return this.schemasService.upsert({
       schema,
       table,
@@ -167,7 +156,7 @@ export class SchemasController {
       query: {
         ...this.parseQuery({ select, table }),
         columns,
-        onConflict,
+        onConflict: on_conflict,
       },
       context: this.buildContext(request),
     })
@@ -200,6 +189,7 @@ export class SchemasController {
       'Update a single row in a table identified by its primary key (_id)',
     scopes: 'schemas.tables.write',
   })
+  @CurrentSchemaType(SchemaType.Managed)
   async updateRow(
     @Param()
     { schemaId: schema = 'public', tableId: table, rowId }: RowParamsDTO,
@@ -207,7 +197,7 @@ export class SchemasController {
     @Body() input: Record<string, any>,
     @Query() query: UpdateQueryDTO,
   ) {
-    const rowFilter = `_id.eq.${Number(rowId)}`
+    const rowFilter = `_id.eq(${Number(rowId)})`
     const combinedFilter = query.filter
       ? `and(${query.filter},${rowFilter})`
       : rowFilter
@@ -249,13 +239,14 @@ export class SchemasController {
       'Delete a single row from a table identified by its primary key (_id)',
     scopes: 'schemas.tables.write',
   })
+  @CurrentSchemaType(SchemaType.Managed)
   async deleteRow(
     @Param()
     { schemaId: schema = 'public', tableId: table, rowId }: RowParamsDTO,
     @Req() request: NuvixRequest,
     @Query() query: DeleteQueryDTO,
   ) {
-    const rowFilter = `_id.eq.${Number(rowId)}`
+    const rowFilter = `_id.eq(${Number(rowId)})`
     const combinedFilter = query.filter
       ? `and(${query.filter},${rowFilter})`
       : rowFilter

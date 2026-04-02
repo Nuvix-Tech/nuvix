@@ -6,6 +6,7 @@ import {
   ValidateIf,
   ValidationOptions,
 } from 'class-validator'
+import { Exception } from '../extend/exception'
 
 /**
  * Decorator that checks if a property is a valid unique ID.
@@ -210,6 +211,24 @@ export function TryTransformTo(type: 'number' | 'int') {
         return Number.isNaN(parsed) ? value : parsed
       }
       return value
+    })(target, propertyKey)
+  }
+}
+
+export function TrySplitStringToArray(separator: string) {
+  return (target: any, propertyKey: string) => {
+    Transform(({ value }) => {
+      if (typeof value !== 'string' && typeof value !== 'undefined')
+        throw new Exception(
+          Exception.GENERAL_BAD_REQUEST,
+          `${String(propertyKey)} must be a string to be split into an array.`,
+        )
+      return value
+        ? value
+            .split(separator)
+            .map(item => item.trim())
+            .filter(Boolean)
+        : undefined
     })(target, propertyKey)
   }
 }
