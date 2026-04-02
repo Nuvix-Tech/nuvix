@@ -1,9 +1,10 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { Exception } from '@nuvix/core/extend/exception'
 import type { DeletesJobData } from '@nuvix/core/resolvers'
 import { Database, Doc, DuplicateException, ID, Query } from '@nuvix/db'
-import { DeleteType, QueueFor } from '@nuvix/utils'
+import { AppEvents, DeleteType, QueueFor } from '@nuvix/utils'
 import type { Topics } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import type { CreateTopic, ListTopics, UpdateTopic } from './topics.types'
@@ -15,6 +16,7 @@ export class TopicsService {
 
   constructor(
     private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
     @InjectQueue(QueueFor.DELETES)
     private readonly deletesQueue: Queue<DeletesJobData, unknown, DeleteType>,
   ) {
@@ -36,6 +38,13 @@ export class TopicsService {
 
     try {
       const createdTopic = await this.db.createDocument('topics', topic)
+
+      this.eventEmitter.emit(AppEvents.TOPICS_CREATE, {
+        topicId: createdTopic.getId(),
+        payload: {
+          data: createdTopic,
+        },
+      })
 
       return createdTopic
     } catch (error) {
@@ -98,6 +107,13 @@ export class TopicsService {
 
     const updatedTopic = await this.db.updateDocument('topics', topicId, topic)
 
+    this.eventEmitter.emit(AppEvents.TOPICS_UPDATE, {
+      topicId: updatedTopic.getId(),
+      payload: {
+        data: updatedTopic,
+      },
+    })
+
     return updatedTopic
   }
 
@@ -116,6 +132,11 @@ export class TopicsService {
     await this.deletesQueue.add(DeleteType.TOPIC, {
       document: topic.clone(),
     })
+
+    this.eventEmitter.emit(AppEvents.TOPICS_DELETE, {
+      topicId,
+    })
+
     return
   }
 }

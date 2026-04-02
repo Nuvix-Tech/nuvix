@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Database, Doc, DuplicateException, ID, Query } from '@nuvix/db'
-import { MessageType } from '@nuvix/utils'
+import { AppEvents, MessageType } from '@nuvix/utils'
 import type { Providers } from '@nuvix/utils/types'
 import type {
   CreateApnsProvider,
@@ -33,7 +34,10 @@ import { CoreService } from '@nuvix/core/core.service'
 export class ProvidersService {
   private readonly db: Database
 
-  constructor(private readonly coreService: CoreService) {
+  constructor(
+    private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     this.db = this.coreService.getDatabase()
   }
 
@@ -96,6 +100,13 @@ export class ProvidersService {
         'providers',
         provider,
       )
+
+      this.eventEmitter.emit(AppEvents.PROVIDERS_CREATE, {
+        providerId: createdProvider.getId(),
+        payload: {
+          data: createdProvider,
+        },
+      })
 
       return createdProvider
     } catch (error) {
@@ -456,6 +467,13 @@ export class ProvidersService {
       provider,
     )
 
+    this.eventEmitter.emit(AppEvents.PROVIDERS_UPDATE, {
+      providerId: updatedProvider.getId(),
+      payload: {
+        data: updatedProvider,
+      },
+    })
+
     return updatedProvider
   }
 
@@ -734,5 +752,9 @@ export class ProvidersService {
     }
 
     await this.db.deleteDocument('providers', providerId)
+
+    this.eventEmitter.emit(AppEvents.PROVIDERS_DELETE, {
+      providerId,
+    })
   }
 }

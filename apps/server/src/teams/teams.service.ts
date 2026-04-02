@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { CoreService } from '@nuvix/core'
 import { Exception } from '@nuvix/core/extend/exception'
 import { ID, RequestContext } from '@nuvix/core/helpers'
@@ -11,6 +12,7 @@ import {
   Query,
   Role,
 } from '@nuvix/db'
+import { AppEvents } from '@nuvix/utils'
 import type { UsersDoc } from '@nuvix/utils/types'
 import {
   CreateTeamDTO,
@@ -21,7 +23,10 @@ import {
 @Injectable()
 export class TeamsService {
   protected readonly db: Database
-  constructor(private readonly coreService: CoreService) {
+  constructor(
+    private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     this.db = this.coreService.getDatabase()
   }
 
@@ -107,6 +112,13 @@ export class TeamsService {
       await this.db.purgeCachedDocument('users', user.getId())
     }
 
+    this.eventEmitter.emit(AppEvents.TEAMS_CREATE, {
+      teamId: team.getId(),
+      payload: {
+        data: team,
+      },
+    })
+
     return team
   }
 
@@ -129,6 +141,13 @@ export class TeamsService {
       team,
     )
 
+    this.eventEmitter.emit(AppEvents.TEAMS_UPDATE, {
+      teamId: updatedTeam.getId(),
+      payload: {
+        data: updatedTeam,
+      },
+    })
+
     return updatedTeam
   }
 
@@ -142,7 +161,9 @@ export class TeamsService {
       throw new Exception(Exception.TEAM_NOT_FOUND)
     }
 
-    const deleted = await this.db.deleteDocument('teams', team.getId())
+    const teamId = team.getId()
+
+    const deleted = await this.db.deleteDocument('teams', teamId)
     if (!deleted) {
       throw new Exception(
         Exception.GENERAL_SERVER_ERROR,
@@ -152,6 +173,10 @@ export class TeamsService {
 
     const deletes = new DeletesQueue(this.coreService)
     await deletes.deleteMemberships(team)
+
+    this.eventEmitter.emit(AppEvents.TEAMS_DELETE, {
+      teamId,
+    })
 
     return
   }
@@ -198,6 +223,13 @@ export class TeamsService {
       team.getId(),
       team,
     )
+
+    this.eventEmitter.emit(AppEvents.TEAMS_UPDATE_PREFS, {
+      teamId: updatedTeam.getId(),
+      payload: {
+        data: updatedTeam,
+      },
+    })
 
     return updatedTeam.get('prefs')
   }

@@ -12,6 +12,7 @@ import {
   Role,
 } from '@nuvix/db'
 import {
+  AppEvents,
   configuration,
   DeleteType,
   MessageType,
@@ -103,10 +104,13 @@ export class TargetsService {
       )
 
       await this.db.purgeCachedDocument('users', user.getId())
-      this.event.emit(
-        `user.${user.getId()}.target.${target.getId()}.create`,
-        target,
-      )
+      this.event.emit(AppEvents.USERS_TARGETS_CREATE, {
+        userId: user.getId(),
+        targetId: target.getId(),
+        payload: {
+          data: target,
+        },
+      })
 
       return target
     } catch (error) {
@@ -207,6 +211,14 @@ export class TargetsService {
     )
     await this.db.purgeCachedDocument('users', user.getId())
 
+    this.event.emit(AppEvents.USERS_TARGETS_UPDATE, {
+      userId,
+      targetId,
+      payload: {
+        data: updatedTarget,
+      },
+    })
+
     return updatedTarget
   }
 
@@ -254,6 +266,11 @@ export class TargetsService {
 
     await this.deletesQueue.add(DeleteType.TARGET, {
       document: target.clone(),
+    })
+
+    this.event.emit(AppEvents.USERS_TARGETS_DELETE, {
+      userId,
+      targetId,
     })
   }
 }

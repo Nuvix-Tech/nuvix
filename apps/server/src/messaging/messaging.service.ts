@@ -1,11 +1,13 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { JwtService } from '@nestjs/jwt'
 import { CoreService } from '@nuvix/core'
 import { Exception } from '@nuvix/core/extend/exception'
 import { MessagingJob, MessagingJobData } from '@nuvix/core/resolvers'
 import { Database, Doc, ID, Query } from '@nuvix/db'
 import {
+  AppEvents,
   configuration,
   MessageStatus,
   MessageType,
@@ -33,6 +35,7 @@ export class MessagingService {
   constructor(
     private readonly coreService: CoreService,
     private readonly jwtService: JwtService,
+    private readonly eventEmitter: EventEmitter2,
     @InjectQueue(QueueFor.MESSAGING)
     private readonly queue: Queue<MessagingJobData, any, MessagingJob>,
   ) {
@@ -177,6 +180,13 @@ export class MessagingService {
       }
     }
 
+    this.eventEmitter.emit(AppEvents.MESSAGES_CREATE, {
+      messageId: createdMessage.getId(),
+      payload: {
+        data: createdMessage,
+      },
+    })
+
     return createdMessage
   }
 
@@ -280,6 +290,13 @@ export class MessagingService {
         break
       }
     }
+
+    this.eventEmitter.emit(AppEvents.MESSAGES_CREATE, {
+      messageId: createdMessage.getId(),
+      payload: {
+        data: createdMessage,
+      },
+    })
 
     return createdMessage
   }
@@ -492,6 +509,13 @@ export class MessagingService {
         break
       }
     }
+
+    this.eventEmitter.emit(AppEvents.MESSAGES_CREATE, {
+      messageId: createdMessage.getId(),
+      payload: {
+        data: createdMessage,
+      },
+    })
 
     return createdMessage
   }
@@ -741,6 +765,13 @@ export class MessagingService {
       })
     }
 
+    this.eventEmitter.emit(AppEvents.MESSAGES_UPDATE, {
+      messageId: updatedMessage.getId(),
+      payload: {
+        data: updatedMessage,
+      },
+    })
+
     return updatedMessage
   }
 
@@ -885,6 +916,13 @@ export class MessagingService {
         message: updatedMessage,
       })
     }
+
+    this.eventEmitter.emit(AppEvents.MESSAGES_UPDATE, {
+      messageId: updatedMessage.getId(),
+      payload: {
+        data: updatedMessage,
+      },
+    })
 
     return updatedMessage
   }
@@ -1129,6 +1167,13 @@ export class MessagingService {
       })
     }
 
+    this.eventEmitter.emit(AppEvents.MESSAGES_UPDATE, {
+      messageId: updatedMessage.getId(),
+      payload: {
+        data: updatedMessage,
+      },
+    })
+
     return updatedMessage
   }
 
@@ -1168,5 +1213,9 @@ export class MessagingService {
     }
 
     await this.db.deleteDocument('messages', message.getId())
+
+    this.eventEmitter.emit(AppEvents.MESSAGES_DELETE, {
+      messageId,
+    })
   }
 }

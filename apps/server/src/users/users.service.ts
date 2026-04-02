@@ -25,6 +25,7 @@ import {
   Role,
 } from '@nuvix/db'
 import {
+  AppEvents,
   configuration,
   DeleteType,
   HashAlgorithm,
@@ -135,6 +136,13 @@ export class UsersService {
       user.set('prefs', prefs),
     )
 
+    this.event.emit(AppEvents.USERS_UPDATE_PREFS, {
+      userId: id,
+      payload: {
+        data: updatedUser,
+      },
+    })
+
     return updatedUser.get('prefs')
   }
 
@@ -148,11 +156,20 @@ export class UsersService {
       throw new Exception(Exception.USER_NOT_FOUND)
     }
 
-    return this.db.updateDocument(
+    const updatedUser = await this.db.updateDocument(
       'users',
       user.getId(),
       user.set('status', status),
     )
+
+    this.event.emit(AppEvents.USERS_UPDATE_STATUS, {
+      userId: id,
+      payload: {
+        data: updatedUser,
+      },
+    })
+
+    return updatedUser
   }
 
   /**
@@ -167,7 +184,16 @@ export class UsersService {
 
     user.set('labels', Array.from(new Set(labels)))
 
-    return this.db.updateDocument('users', user.getId(), user)
+    const updatedUser = await this.db.updateDocument('users', user.getId(), user)
+
+    this.event.emit(AppEvents.USERS_UPDATE_LABELS, {
+      userId: id,
+      payload: {
+        data: updatedUser,
+      },
+    })
+
+    return updatedUser
   }
 
   /**
@@ -181,7 +207,16 @@ export class UsersService {
     }
 
     user.set('name', name)
-    return this.db.updateDocument('users', user.getId(), user)
+    const updatedUser = await this.db.updateDocument('users', user.getId(), user)
+
+    this.event.emit(AppEvents.USERS_UPDATE_NAME, {
+      userId: id,
+      payload: {
+        data: updatedUser,
+      },
+    })
+
+    return updatedUser
   }
 
   /**
@@ -216,6 +251,13 @@ export class UsersService {
         user.getId(),
         user.set('password', '').set('passwordUpdate', new Date()),
       )
+
+      this.event.emit(AppEvents.USERS_UPDATE_PASSWORD, {
+        userId: id,
+        payload: {
+          data: updatedUser,
+        },
+      })
 
       return updatedUser
     }
@@ -254,6 +296,13 @@ export class UsersService {
         .set('hash', Auth.DEFAULT_ALGO)
         .set('hashOptions', Auth.DEFAULT_ALGO_OPTIONS),
     )
+
+    this.event.emit(AppEvents.USERS_UPDATE_PASSWORD, {
+      userId: id,
+      payload: {
+        data: updatedUser,
+      },
+    })
 
     return updatedUser
   }
@@ -332,6 +381,14 @@ export class UsersService {
       }
 
       await this.db.purgeCachedDocument('users', user.getId())
+
+      this.event.emit(AppEvents.USERS_UPDATE_EMAIL, {
+        userId: id,
+        payload: {
+          data: updatedUser,
+        },
+      })
+
       return updatedUser
     } catch (error) {
       if (error instanceof DuplicateException) {
@@ -403,6 +460,14 @@ export class UsersService {
         updatedUser.set('targets', [...updatedUser.get('targets', []), target])
       }
       await this.db.purgeCachedDocument('users', user.getId())
+
+      this.event.emit(AppEvents.USERS_UPDATE_PHONE, {
+        userId: id,
+        payload: {
+          data: updatedUser,
+        },
+      })
+
       return updatedUser
     } catch (error) {
       if (error instanceof DuplicateException) {
@@ -431,6 +496,13 @@ export class UsersService {
       user.set('emailVerification', input.emailVerification),
     )
 
+    this.event.emit(AppEvents.USERS_UPDATE_VERIFICATION_EMAIL, {
+      userId: id,
+      payload: {
+        data: updatedUser,
+      },
+    })
+
     return updatedUser
   }
 
@@ -452,6 +524,13 @@ export class UsersService {
       user.getId(),
       user.set('phoneVerification', input.phoneVerification),
     )
+
+    this.event.emit(AppEvents.USERS_UPDATE_VERIFICATION_PHONE, {
+      userId: id,
+      payload: {
+        data: updatedUser,
+      },
+    })
 
     return updatedUser
   }
@@ -837,6 +916,10 @@ export class UsersService {
     await this.deletesQueue.add(DeleteType.DOCUMENT, {
       document: clone,
     })
+
+    this.event.emit(AppEvents.USERS_DELETE, {
+      userId,
+    })
   }
 
   /**
@@ -1000,7 +1083,12 @@ export class UsersService {
       }
 
       await this.db.purgeCachedDocument('users', createdUser.getId())
-      this.event.emit(`user.${createdUser.getId()}.create`, createdUser)
+      this.event.emit(AppEvents.USERS_CREATE, {
+        userId: createdUser.getId(),
+        payload: {
+          data: createdUser,
+        },
+      })
 
       return createdUser
     } catch (error) {

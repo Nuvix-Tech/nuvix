@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { usageConfig } from '@nuvix/core/config'
 import { Exception } from '@nuvix/core/extend/exception'
 import type { DeletesJobData } from '@nuvix/core/resolvers'
@@ -14,6 +15,7 @@ import {
   Query,
 } from '@nuvix/db'
 import {
+  AppEvents,
   configuration,
   DeleteType,
   MetricFor,
@@ -30,6 +32,7 @@ export class StorageService {
   private readonly db: Database
   constructor(
     private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
     @InjectQueue(QueueFor.DELETES)
     private readonly deletesQueue: Queue<DeletesJobData, unknown, DeleteType>,
   ) {
@@ -111,6 +114,13 @@ export class StorageService {
         documentSecurity: data.fileSecurity,
       })
 
+      this.eventEmitter.emit(AppEvents.BUCKETS_CREATE, {
+        bucketId: bucket.getId(),
+        payload: {
+          data: bucket,
+        },
+      })
+
       return bucket
     } catch (error) {
       if (error instanceof DuplicateException) {
@@ -179,6 +189,13 @@ export class StorageService {
       documentSecurity: input.fileSecurity ?? bucket.get('fileSecurity', false),
     })
 
+    this.eventEmitter.emit(AppEvents.BUCKETS_UPDATE, {
+      bucketId: updatedBucket.getId(),
+      payload: {
+        data: updatedBucket,
+      },
+    })
+
     return updatedBucket
   }
 
@@ -201,6 +218,10 @@ export class StorageService {
 
     await this.deletesQueue.add(DeleteType.DOCUMENT, {
       document: bucket.clone(),
+    })
+
+    this.eventEmitter.emit(AppEvents.BUCKETS_DELETE, {
+      bucketId: id,
     })
 
     return

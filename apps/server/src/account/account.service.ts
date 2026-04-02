@@ -31,6 +31,7 @@ import {
   Role,
 } from '@nuvix/db'
 import {
+  AppEvents,
   configuration,
   DeleteType,
   type HashAlgorithm,
@@ -52,7 +53,7 @@ export class AccountService {
   private readonly db: Database
   private readonly emailHelper = new EmailHelper()
   constructor(
-    _eventEmitter: EventEmitter2,
+    private readonly eventEmitter: EventEmitter2,
     @InjectQueue(QueueFor.MAILS)
     private readonly mailsQueue: Queue<MailQueueOptions>,
     @InjectQueue(QueueFor.DELETES)
@@ -197,7 +198,16 @@ export class AccountService {
     Authorization.setRole(Role.user(user.getId()).toString())
     Authorization.setRole(Role.users().toString())
 
-    return this.db.getDocument('users', user.getId())
+    const createdUser = await this.db.getDocument('users', user.getId())
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_CREATE, {
+      userId: createdUser.getId(),
+      payload: {
+        data: createdUser,
+      },
+    })
+
+    return createdUser
   }
 
   async updatePrefs(
@@ -207,6 +217,13 @@ export class AccountService {
     user.set('prefs', prefs)
 
     user = await this.db.updateDocument('users', user.getId(), user)
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_UPDATE_PREFS, {
+      userId: user.getId(),
+      payload: {
+        data: user,
+      },
+    })
 
     return user.get('prefs', {})
   }
@@ -220,10 +237,16 @@ export class AccountService {
       throw new Exception(Exception.USER_BLOCKED)
     }
 
-    await this.db.deleteDocument('users', user.getId())
+    const userId = user.getId()
+
+    await this.db.deleteDocument('users', userId)
 
     await this.deletesQueue.add(DeleteType.DOCUMENT, {
       document: user.clone(),
+    })
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_DELETE, {
+      userId,
     })
   }
 
@@ -299,6 +322,13 @@ export class AccountService {
       }
       await this.db.purgeCachedDocument('users', user.getId())
 
+      this.eventEmitter.emit(AppEvents.ACCOUNT_UPDATE_EMAIL, {
+        userId: user.getId(),
+        payload: {
+          data: user,
+        },
+      })
+
       return user
     } catch (error) {
       if (error instanceof DuplicateException) {
@@ -315,6 +345,13 @@ export class AccountService {
     user.set('name', name)
 
     user = await this.db.updateDocument('users', user.getId(), user)
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_UPDATE_NAME, {
+      userId: user.getId(),
+      payload: {
+        data: user,
+      },
+    })
 
     return user
   }
@@ -390,6 +427,13 @@ export class AccountService {
       .set('hashOptions', Auth.DEFAULT_ALGO_OPTIONS)
 
     user = await this.db.updateDocument('users', user.getId(), user)
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_UPDATE_PASSWORD, {
+      userId: user.getId(),
+      payload: {
+        data: user,
+      },
+    })
 
     return user
   }
@@ -474,6 +518,13 @@ export class AccountService {
       throw error
     }
 
+    this.eventEmitter.emit(AppEvents.ACCOUNT_UPDATE_PHONE, {
+      userId: user.getId(),
+      payload: {
+        data: user,
+      },
+    })
+
     return user
   }
 
@@ -505,6 +556,13 @@ export class AccountService {
       secure: protocol === 'https',
       httpOnly: true,
       sameSite: request.context.cookieSameSite,
+    })
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_UPDATE_STATUS, {
+      userId: user.getId(),
+      payload: {
+        data: user,
+      },
     })
 
     return user
@@ -600,6 +658,13 @@ export class AccountService {
 
     createdVerification.set('secret', verificationSecret)
 
+    this.eventEmitter.emit(AppEvents.ACCOUNT_VERIFICATION_CREATE, {
+      userId: user.getId(),
+      payload: {
+        data: createdVerification,
+      },
+    })
+
     return createdVerification
   }
 
@@ -651,6 +716,13 @@ export class AccountService {
      */
     await this.db.deleteDocument('tokens', verifiedToken.getId())
     await this.db.purgeCachedDocument('users', profile.getId())
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_VERIFICATION_UPDATE, {
+      userId: profile.getId(),
+      payload: {
+        data: verification,
+      },
+    })
 
     return verification
   }
@@ -735,6 +807,13 @@ export class AccountService {
 
     createdVerification.set('secret', secret)
 
+    this.eventEmitter.emit(AppEvents.ACCOUNT_VERIFICATION_CREATE, {
+      userId: user.getId(),
+      payload: {
+        data: createdVerification,
+      },
+    })
+
     return createdVerification
   }
 
@@ -781,6 +860,13 @@ export class AccountService {
      */
     await this.db.deleteDocument('tokens', verifiedToken.getId())
     await this.db.purgeCachedDocument('users', profile.getId())
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_VERIFICATION_UPDATE, {
+      userId: profile.getId(),
+      payload: {
+        data: verificationDocument,
+      },
+    })
 
     return verificationDocument
   }

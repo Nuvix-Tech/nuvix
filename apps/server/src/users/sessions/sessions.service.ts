@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { CoreService } from '@nuvix/core'
 import { Exception } from '@nuvix/core/extend/exception'
 import type { LocaleTranslator, RequestContext } from '@nuvix/core/helpers'
 import { Auth, Detector, ID } from '@nuvix/core/helpers'
 import { Database, Doc, Permission, Role } from '@nuvix/db'
-import { SessionProvider } from '@nuvix/utils'
+import { AppEvents, SessionProvider } from '@nuvix/utils'
 import type { Sessions, SessionsDoc } from '@nuvix/utils/types'
 import { CountryResponse, Reader } from 'maxmind'
 
@@ -13,7 +14,10 @@ export class SessionsService {
   private readonly geoDb: Reader<CountryResponse>
   private readonly db: Database
 
-  constructor(private readonly coreService: CoreService) {
+  constructor(
+    private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     this.geoDb = this.coreService.getGeoDb()
     this.db = this.coreService.getDatabase()
   }
@@ -121,6 +125,11 @@ export class SessionsService {
 
     await this.db.deleteDocument('sessions', session.getId())
     await this.db.purgeCachedDocument('users', user.getId())
+
+    this.eventEmitter.emit(AppEvents.USERS_SESSIONS_DELETE, {
+      userId,
+      sessionId,
+    })
   }
 
   /**
@@ -140,5 +149,9 @@ export class SessionsService {
     }
 
     await this.db.purgeCachedDocument('users', user.getId())
+
+    this.eventEmitter.emit(AppEvents.USERS_SESSIONS_DELETE, {
+      userId,
+    })
   }
 }

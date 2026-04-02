@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { CoreService } from '@nuvix/core'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Auth, emailHelper, ID, RequestContext } from '@nuvix/core/helpers'
@@ -15,7 +16,7 @@ import {
   Query,
   Role,
 } from '@nuvix/db'
-import { configuration, QueueFor, SessionProvider } from '@nuvix/utils'
+import { AppEvents, configuration, QueueFor, SessionProvider } from '@nuvix/utils'
 import type { Memberships, UsersDoc } from '@nuvix/utils/types'
 import type { Queue } from 'bullmq'
 import {
@@ -29,6 +30,7 @@ export class MembershipsService {
   private readonly db: Database
   constructor(
     private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
     @InjectQueue(QueueFor.MAILS)
     private readonly mailsQueue: Queue<MailQueueOptions, any, MailJob>,
   ) {
@@ -293,6 +295,14 @@ export class MembershipsService {
       .set('userName', invitee.get('name'))
       .set('userEmail', invitee.get('email'))
 
+    this.eventEmitter.emit(AppEvents.MEMBERSHIPS_CREATE, {
+      teamId: team.getId(),
+      membershipId: membership.getId(),
+      payload: {
+        data: membership,
+      },
+    })
+
     return membership
   }
 
@@ -433,6 +443,14 @@ export class MembershipsService {
       .set('teamName', team.get('name'))
       .set('userName', user.get('name'))
       .set('userEmail', user.get('email'))
+
+    this.eventEmitter.emit(AppEvents.MEMBERSHIPS_UPDATE, {
+      teamId: team.getId(),
+      membershipId: updatedMembership.getId(),
+      payload: {
+        data: updatedMembership,
+      },
+    })
 
     return updatedMembership
   }
@@ -578,10 +596,20 @@ export class MembershipsService {
       this.db.increaseDocumentAttribute('teams', team.getId(), 'total', 1),
     )
 
-    return updatedMembership
+    const result = updatedMembership
       .set('teamName', team.get('name'))
       .set('userName', user.get('name'))
       .set('userEmail', user.get('email')) as Doc<Memberships>
+
+    this.eventEmitter.emit(AppEvents.MEMBERSHIPS_UPDATE_STATUS, {
+      teamId: team.getId(),
+      membershipId: updatedMembership.getId(),
+      payload: {
+        data: result,
+      },
+    })
+
+    return result
   }
 
   /**
@@ -630,5 +658,10 @@ export class MembershipsService {
         0,
       )
     }
+
+    this.eventEmitter.emit(AppEvents.MEMBERSHIPS_DELETE, {
+      teamId: team.getId(),
+      membershipId: membership.getId(),
+    })
   }
 }

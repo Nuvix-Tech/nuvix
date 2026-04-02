@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Hooks } from '@nuvix/core/extend/hooks'
 import { Auth, EmailHelper, RequestContext } from '@nuvix/core/helpers'
@@ -15,6 +16,7 @@ import {
   Role,
 } from '@nuvix/db'
 import {
+  AppEvents,
   configuration,
   type HashAlgorithm,
   QueueFor,
@@ -32,6 +34,7 @@ export class RecoveryService {
 
   constructor(
     private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
     @InjectQueue(QueueFor.MAILS)
     private readonly mailsQueue: Queue<MailQueueOptions>,
   ) {
@@ -139,6 +142,13 @@ export class RecoveryService {
 
     createdRecovery.set('secret', secret)
 
+    this.eventEmitter.emit(AppEvents.ACCOUNT_RECOVERY_CREATE, {
+      userId: profile.getId(),
+      payload: {
+        data: createdRecovery,
+      },
+    })
+
     return createdRecovery
   }
 
@@ -221,6 +231,13 @@ export class RecoveryService {
      */
     await this.db.deleteDocument('tokens', verifiedToken.getId())
     await this.db.purgeCachedDocument('users', profile.getId())
+
+    this.eventEmitter.emit(AppEvents.ACCOUNT_RECOVERY_UPDATE, {
+      userId: profile.getId(),
+      payload: {
+        data: recoveryDocument,
+      },
+    })
 
     return recoveryDocument
   }
