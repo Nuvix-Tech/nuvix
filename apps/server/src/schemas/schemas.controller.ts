@@ -95,7 +95,12 @@ export class SchemasController {
     return this.schemasService.select({
       table,
       schema,
-      query: this.parseQuery({ ...query, filter: combinedFilter, limit: 1, table }),
+      query: this.parseQuery({
+        ...query,
+        filter: combinedFilter,
+        limit: 1,
+        table,
+      }),
       context: this.buildContext(request),
     })
   }
@@ -110,10 +115,18 @@ export class SchemasController {
     @Req() request: NuvixRequest,
     @Param() { schemaId: schema = 'public', tableId: table }: TableParamsDTO,
     @Body() input: Record<string, any> | Record<string, any>[],
-    @Query() { columns, select, on_conflict, ignore_duplicates }: InsertQueryDTO,
+    @Query() {
+      columns,
+      select,
+      on_conflict,
+      ignore_duplicates,
+    }: InsertQueryDTO,
   ) {
     const onConflict = on_conflict
-      ? on_conflict.split(',').map(c => c.trim()).filter(Boolean)
+      ? on_conflict
+          .split(',')
+          .map(c => c.trim())
+          .filter(Boolean)
       : undefined
     return this.schemasService.insert({
       schema,
@@ -142,7 +155,10 @@ export class SchemasController {
     @Query() { columns, select, on_conflict }: UpsertQueryDTO,
   ) {
     const onConflict = on_conflict
-      ? on_conflict.split(',').map(c => c.trim()).filter(Boolean)
+      ? on_conflict
+          .split(',')
+          .map(c => c.trim())
+          .filter(Boolean)
       : undefined
     return this.schemasService.upsert({
       schema,
@@ -180,7 +196,8 @@ export class SchemasController {
 
   @Patch(['tables/:tableId/:rowId'], {
     summary: 'Update a single row',
-    description: 'Update a single row in a table identified by its primary key (_id)',
+    description:
+      'Update a single row in a table identified by its primary key (_id)',
     scopes: 'schemas.tables.write',
   })
   async updateRow(
@@ -228,7 +245,8 @@ export class SchemasController {
 
   @Delete(['tables/:tableId/:rowId'], {
     summary: 'Delete a single row',
-    description: 'Delete a single row from a table identified by its primary key (_id)',
+    description:
+      'Delete a single row from a table identified by its primary key (_id)',
     scopes: 'schemas.tables.write',
   })
   async deleteRow(

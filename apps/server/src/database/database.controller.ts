@@ -86,7 +86,8 @@ export class DatabaseController {
 
   @Delete('schemas/:schemaId', {
     summary: 'Delete schema',
-    description: 'Permanently delete a schema and all its tables from the database',
+    description:
+      'Permanently delete a schema and all its tables from the database',
     scopes: 'schemas.write',
     sdk: {
       name: 'deleteSchema',

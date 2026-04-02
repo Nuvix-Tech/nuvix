@@ -16,7 +16,12 @@ import {
   Query,
   Role,
 } from '@nuvix/db'
-import { AppEvents, configuration, QueueFor, SessionProvider } from '@nuvix/utils'
+import {
+  AppEvents,
+  configuration,
+  QueueFor,
+  SessionProvider,
+} from '@nuvix/utils'
 import type { Memberships, UsersDoc } from '@nuvix/utils/types'
 import type { Queue } from 'bullmq'
 import {

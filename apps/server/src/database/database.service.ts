@@ -205,11 +205,10 @@ export class DatabaseService {
       throw new Exception(Exception.SCHEMA_NOT_FOUND)
     }
 
+    // we don't need to delete the schema from the schemas table
+    // because of `system.cleanup_schema` function that will be called by postgreSQL ddl trigger
     await this.dataSource.transaction(tx =>
-      tx.query(
-        tx.$client,
-        tx.raw('select system.drop_schema(?)', [name]).toSQL(),
-      ),
+      tx.query(tx.$client, tx.raw('drop schema if exists ?', [name]).toSQL()),
     )
   }
 }

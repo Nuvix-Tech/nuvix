@@ -184,7 +184,11 @@ export class UsersService {
 
     user.set('labels', Array.from(new Set(labels)))
 
-    const updatedUser = await this.db.updateDocument('users', user.getId(), user)
+    const updatedUser = await this.db.updateDocument(
+      'users',
+      user.getId(),
+      user,
+    )
 
     this.event.emit(AppEvents.USERS_UPDATE_LABELS, {
       userId: id,
@@ -207,7 +211,11 @@ export class UsersService {
     }
 
     user.set('name', name)
-    const updatedUser = await this.db.updateDocument('users', user.getId(), user)
+    const updatedUser = await this.db.updateDocument(
+      'users',
+      user.getId(),
+      user,
+    )
 
     this.event.emit(AppEvents.USERS_UPDATE_NAME, {
       userId: id,

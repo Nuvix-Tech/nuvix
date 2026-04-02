@@ -111,9 +111,9 @@ export class SchemasService {
 
     if (onConflict?.length) {
       if (ignoreDuplicates) {
-        ;(qb as any).onConflict(onConflict).ignore()
+        qb.onConflict(onConflict).ignore()
       } else {
-        ;(qb as any).onConflict(onConflict).merge()
+        qb.onConflict(onConflict).merge()
       }
     }
 
@@ -164,9 +164,9 @@ export class SchemasService {
     qb.insert(data)
 
     if (onConflict?.length) {
-      ;(qb as any).onConflict(onConflict).merge()
+      qb.onConflict(onConflict).merge()
     } else {
-      ;(qb as any).onConflict().ignore()
+      qb.onConflict().ignore()
     }
 
     return this.handleQuery(context, qb)

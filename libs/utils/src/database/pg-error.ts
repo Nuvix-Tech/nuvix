@@ -27,15 +27,17 @@ interface PgTransformedError {
   }
 }
 
-const SQL_PREFIX_REGEX =
-  /^(select|insert|update|delete|create|drop|alter|truncate|with|explain)\s.+?\s-\s/i
-
 function safeMessage(defaultMessage: string, detail?: string): string {
   return detail || defaultMessage
 }
 
 function stripSqlFromMessage(message: string): string {
-  return message.replace(SQL_PREFIX_REGEX, '')
+  // Match SQL statements followed by a dash separator and extract the error message part
+  // Handles multiline queries and complex nested statements
+  const match = message.match(
+    /^(select|insert|update|delete|create|drop|alter|truncate|with|explain)\s[\s\S]*?\s-\s(.+)$/im,
+  )
+  return match ? (match[2] as string) : message
 }
 
 type ErrorMapEntry =
