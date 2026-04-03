@@ -22,7 +22,7 @@ import {
   QueueFor,
   SessionProvider,
 } from '@nuvix/utils'
-import type { Memberships, UsersDoc } from '@nuvix/utils/types'
+import type { Memberships, Sessions, UsersDoc } from '@nuvix/utils/types'
 import type { Queue } from 'bullmq'
 import {
   CreateMembershipDTO,
@@ -541,7 +541,7 @@ export class MembershipsService {
       const expire = new Date(Date.now() + authDuration * 1000)
       const sessionSecret = Auth.tokenGenerator()
 
-      const sessionDoc = new Doc({
+      const sessionDoc = Doc.from<Sessions>({
         $id: ID.unique(),
         $permissions: [
           Permission.read(Role.user(user.getId())),

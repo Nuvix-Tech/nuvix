@@ -17,6 +17,7 @@ import {
   TOTPChallenge,
 } from '@nuvix/utils/auth'
 import type {
+  Authenticators,
   AuthenticatorsDoc,
   ChallengesDoc,
   SessionsDoc,
@@ -145,15 +146,15 @@ export class MfaService {
       await this.db.deleteDocument('authenticators', authenticator.getId())
     }
 
-    const newAuthenticator = new Doc({
+    const newAuthenticator = Doc.from<Authenticators>({
       $id: ID.unique(),
       userId: user.getId(),
       userInternalId: user.getSequence(),
       type: MfaType.TOTP,
       verified: false,
-      data: {
+      data: JSON.stringify({
         secret: otp.getSecret(),
-      },
+      }),
       $permissions: [
         Permission.read(Role.user(user.getId())),
         Permission.update(Role.user(user.getId())),

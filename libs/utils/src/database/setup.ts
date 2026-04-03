@@ -98,7 +98,10 @@ async function createSchemaIfNotExists(
  */
 async function setupCollections(
   db: Database,
-  collectionEntries: [string, Collection][],
+  collectionEntries: [
+    string,
+    Omit<Collection, 'documentSecurity' | 'enabled'>,
+  ][],
   projectId: string,
 ): Promise<number> {
   const MAX_RETRIES = 3

@@ -8,7 +8,10 @@ import {
 } from '@nuvix/db'
 import { authCollections, commonCollections } from './common'
 
-export const internalCollections: Record<string, Collection> = {
+export const internalCollections: Record<
+  string,
+  Omit<Collection, 'documentSecurity' | 'enabled'>
+> = {
   ...authCollections,
 
   projects: {

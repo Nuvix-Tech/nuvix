@@ -164,6 +164,7 @@ export class MessagingService {
           resourceUpdatedAt: new Date().toISOString(),
           schedule: scheduledAt,
           active: true,
+          region: configuration.app.region,
         })
 
         const createdSchedule = await this.internalDb.createDocument(
@@ -267,14 +268,14 @@ export class MessagingService {
         })
         break
       case MessageStatus.SCHEDULED: {
-        const schedule = new Doc<Schedules>({
+        const schedule = Doc.from<Schedules>({
           resourceType: ScheduleResourceType.MESSAGE,
           resourceId: createdMessage.getId(),
           resourceInternalId: createdMessage.getSequence(),
           resourceUpdatedAt: new Date().toISOString(),
-
-          schedule: scheduledAt,
+          schedule: scheduledAt ?? undefined,
           active: true,
+          region: configuration.app.region,
         })
 
         const createdSchedule = await this.internalDb.createDocument(
@@ -486,13 +487,13 @@ export class MessagingService {
         })
         break
       case MessageStatus.SCHEDULED: {
-        const schedule = new Doc({
+        const schedule = Doc.from<Schedules>({
           resourceType: ScheduleResourceType.MESSAGE,
           resourceId: createdMessage.getId(),
           resourceInternalId: createdMessage.getSequence(),
           resourceUpdatedAt: new Date().toISOString(),
-
-          schedule: scheduledAt,
+          region: configuration.app.region,
+          schedule: scheduledAt ?? undefined,
           active: true,
         })
 
@@ -641,12 +642,12 @@ export class MessagingService {
     }
 
     if (!currentScheduledAt && input.scheduledAt) {
-      const schedule = new Doc<Schedules>({
+      const schedule = Doc.from<Schedules>({
         resourceType: 'message',
         resourceId: message.getId(),
         resourceInternalId: message.getSequence(),
         resourceUpdatedAt: new Date().toISOString(),
-
+        region: configuration.app.region,
         schedule: input.scheduledAt,
         active: status === MessageStatus.SCHEDULED,
       })
@@ -834,12 +835,12 @@ export class MessagingService {
     }
 
     if (!currentScheduledAt && input.scheduledAt) {
-      const schedule = new Doc<Schedules>({
-        resourceType: 'message',
+      const schedule = Doc.from<Schedules>({
+        resourceType: ScheduleResourceType.MESSAGE,
         resourceId: message.getId(),
         resourceInternalId: message.getSequence(),
         resourceUpdatedAt: new Date().toISOString(),
-
+        region: configuration.app.region,
         schedule: input.scheduledAt,
         active: status === MessageStatus.SCHEDULED,
       })
@@ -986,12 +987,12 @@ export class MessagingService {
     }
 
     if (!currentScheduledAt && input.scheduledAt) {
-      const schedule = new Doc<Schedules>({
-        resourceType: 'message',
+      const schedule = Doc.from<Schedules>({
+        resourceType: ScheduleResourceType.MESSAGE,
         resourceId: message.getId(),
         resourceInternalId: message.getSequence(),
         resourceUpdatedAt: new Date().toISOString(),
-
+        region: configuration.app.region,
         schedule: input.scheduledAt,
         active: status === MessageStatus.SCHEDULED,
       })

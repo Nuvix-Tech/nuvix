@@ -437,7 +437,7 @@ export class ProvidersService {
     provider.set('credentials', credentials)
 
     // Update options
-    const options = provider.get('options') || {}
+    const options = (provider.get('options', {}) || {}) as Record<string, any>
     Object.entries(optionFields).forEach(([key, inputKey]) => {
       if (
         updatedFields[inputKey] !== undefined &&

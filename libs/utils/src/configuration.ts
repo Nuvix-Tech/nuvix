@@ -91,6 +91,7 @@ const createConfig = () => {
       color: '#ff751f',
       userAgent: 'Nuvix-Server v%s. Please report abuse at %s',
       projectId: env.get('NUVIX_PROJECT_ID', 'default'),
+      region: env.get('NUVIX_REGION', 'local'),
 
       // URLs & Hosts
       host: env.get('NUVIX_HOST', 'localhost'),

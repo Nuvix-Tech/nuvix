@@ -8,7 +8,7 @@ import {
   SessionProvider,
   TokenType,
 } from '@nuvix/utils'
-import {
+import type {
   MembershipsDoc,
   SessionsDoc,
   TokensDoc,

@@ -527,9 +527,9 @@ export class FilesService {
 
       // Create or update file document
       if (fileDocument.empty()) {
-        fileDocument = await this.db.createDocument<Files>(
+        fileDocument = (await this.db.createDocument<Files, string>(
           this.getCollectionName(bucket.getSequence()),
-          new Doc({
+          Doc.from<Files>({
             $id: fileId,
             $permissions: permissions,
             bucketId: bucket.getId(),
@@ -545,7 +545,7 @@ export class FilesService {
             search: [fileId, fileName].join(' '),
             metadata: finalMetadata,
           }),
-        )
+        )) as FilesDoc
 
         this.eventEmitter.emit(AppEvents.FILES_CREATE, {
           bucketId: bucket.getId(),
@@ -568,7 +568,7 @@ export class FilesService {
           throw new Exception(Exception.USER_UNAUTHORIZED)
         }
 
-        fileDocument = await this.db.updateDocument(
+        fileDocument = await this.db.updateDocument<FilesDoc>(
           this.getCollectionName(bucket.getSequence()),
           fileId,
           fileDocument,
@@ -584,9 +584,9 @@ export class FilesService {
       }
     } else if (fileDocument.empty()) {
       // === First chunk of a new chunked upload ===
-      fileDocument = await this.db.createDocument<Files>(
+      fileDocument = await this.db.createDocument<Files, string>(
         this.getCollectionName(bucket.getSequence()),
-        new Doc({
+        Doc.from<Files>({
           $id: fileId,
           $permissions: permissions,
           bucketId: bucket.getId(),
@@ -605,7 +605,7 @@ export class FilesService {
       )
     } else {
       // === Intermediate chunk of an existing chunked upload ===
-      fileDocument = await this.db.updateDocument(
+      fileDocument = await this.db.updateDocument<FilesDoc>(
         this.getCollectionName(bucket.getSequence()),
         fileId,
         fileDocument
@@ -1267,7 +1267,7 @@ export class FilesService {
     }
 
     if (fileSecurity && !valid) {
-      const updatedFile = await this.db.updateDocument(
+      const updatedFile = await this.db.updateDocument<FilesDoc>(
         this.getCollectionName(bucket.getSequence()),
         fileId,
         file,
@@ -1282,7 +1282,7 @@ export class FilesService {
       return updatedFile
     }
     const updatedFileSkipped = await Authorization.skip(() =>
-      this.db.updateDocument(
+      this.db.updateDocument<FilesDoc>(
         this.getCollectionName(bucket.getSequence()),
         fileId,
         file,

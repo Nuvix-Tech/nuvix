@@ -8,7 +8,10 @@ import {
 } from '@nuvix/db'
 import { SchemaMeta } from '../constants'
 
-export const bucketCollections: Record<string, Collection> = {
+export const bucketCollections: Record<
+  string,
+  Omit<Collection, 'documentSecurity' | 'enabled'>
+> = {
   files: {
     $collection: ID.custom('buckets'),
     $id: ID.custom('files'),
@@ -174,7 +177,10 @@ export const bucketCollections: Record<string, Collection> = {
   },
 }
 
-export const dbCollections: Record<string, Collection> = {
+export const dbCollections: Record<
+  string,
+  Omit<Collection, 'documentSecurity' | 'enabled'>
+> = {
   collections: {
     $collection: ID.custom(Database.METADATA),
     $id: ID.custom(SchemaMeta.collections),
