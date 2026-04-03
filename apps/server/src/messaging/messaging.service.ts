@@ -172,6 +172,7 @@ export class MessagingService {
           schedule,
         )
         createdMessage.set('scheduleId', createdSchedule.getId())
+        createdMessage.set('scheduleInternalId', createdSchedule.getSequence())
         await this.db.updateDocument(
           'messages',
           createdMessage.getId(),
@@ -283,6 +284,7 @@ export class MessagingService {
           schedule,
         )
         createdMessage.set('scheduleId', createdSchedule.getId())
+        createdMessage.set('scheduleInternalId', createdSchedule.getSequence())
         await this.db.updateDocument(
           'messages',
           createdMessage.getId(),
@@ -502,6 +504,7 @@ export class MessagingService {
           schedule,
         )
         createdMessage.set('scheduleId', createdSchedule.getId())
+        createdMessage.set('scheduleInternalId', createdSchedule.getSequence())
         await this.db.updateDocument(
           'messages',
           createdMessage.getId(),
@@ -657,6 +660,7 @@ export class MessagingService {
         schedule,
       )
       message.set('scheduleId', createdSchedule.getId())
+      message.set('scheduleInternalId', createdSchedule.getSequence())
     }
 
     if (currentScheduledAt) {
@@ -850,6 +854,7 @@ export class MessagingService {
         schedule,
       )
       message.set('scheduleId', createdSchedule.getId())
+      message.set('scheduleInternalId', createdSchedule.getSequence())
     }
 
     if (currentScheduledAt) {
@@ -1002,6 +1007,7 @@ export class MessagingService {
         schedule,
       )
       message.set('scheduleId', createdSchedule.getId())
+      message.set('scheduleInternalId', createdSchedule.getSequence())
     }
 
     // Handle schedule updates

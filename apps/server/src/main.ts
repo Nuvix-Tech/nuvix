@@ -21,6 +21,7 @@ configurePgTypeParsers()
 configureDbFiltersAndFormats()
 validateConfig()
 configureHandlebarsHelpers()
+Authorization.setDefaultStatus(false)
 Authorization.enableAsyncLocalStorage()
 
 async function bootstrap() {

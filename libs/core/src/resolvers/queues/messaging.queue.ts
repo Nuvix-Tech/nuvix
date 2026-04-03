@@ -613,12 +613,19 @@ export class MessagingQueue extends Queue {
       deliveryErrors.push('Unknown error')
     }
 
-    if (message.get('deliveryErrors').length > 0) {
+    if (
+      message.get('deliveryErrors', []).length > 0 ||
+      (deliveryErrors.length > 0 && deliveredTotal === 0)
+    ) {
       message.set('status', MessageStatus.FAILED)
     } else {
       message.set('status', MessageStatus.SENT)
     }
 
+    message.set('deliveryErrors', [
+      ...message.get('deliveryErrors', []),
+      ...deliveryErrors,
+    ])
     message.delete<any>('to') // Remove 'to' field as it is not needed anymore
 
     for (const provider of Object.values(providers)) {

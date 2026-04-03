@@ -88,7 +88,7 @@ export class CoreService implements OnModuleDestroy {
 
   private dbLogger(): DbLogger {
     return new DbLogger({
-      level: 'error',
+      level: configuration.app.isProduction ? 'error' : undefined,
       enabled: configuration.logLevels.includes('error'),
     })
   }
