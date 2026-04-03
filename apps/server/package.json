@@ -8,8 +8,8 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch 'src/**' --watch '../../libs/**/*.ts'",
+    "build": "bun ../../scripts/bun-build.ts",
+    "dev": "bun ../../scripts/bun-build.ts --watch",
     "start": "bun build/main.js",
     "prebuild": "../../scripts/merge-pkg.js server",
     "lint": "eslint \"src/**/*.ts\" --fix",

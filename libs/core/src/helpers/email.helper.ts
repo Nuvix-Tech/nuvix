@@ -97,11 +97,8 @@ type EmailState = {
 
 type RequiredKeys = 'email' | 'templateFile' | 'templateKey' | 'subject'
 
-type AllRequired<S extends EmailState> = S extends Required<
-  Pick<EmailState, RequiredKeys>
->
-  ? true
-  : false
+type AllRequired<S extends EmailState> =
+  S extends Required<Pick<EmailState, RequiredKeys>> ? true : false
 
 export class EmailBuilder<S extends EmailState = {}> {
   private constructor(

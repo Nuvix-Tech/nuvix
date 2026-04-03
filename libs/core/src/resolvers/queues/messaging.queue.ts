@@ -12,6 +12,7 @@ import {
   Priority,
   Push,
   PushAdapter,
+  Response,
   Sendgrid,
   SMS,
   SMSAdapter,
@@ -21,7 +22,6 @@ import {
   Twilio,
   Vonage,
 } from '@nuvix/messaging'
-import { Device } from '@nuvix/storage'
 import {
   configuration,
   MessageProvider,
@@ -555,7 +555,7 @@ export class MessagingQueue extends Queue {
           const response = await adapter.send(data)
           deliveredTotal += response.deliveredTo as number
 
-          for (const result of response.results as any[]) {
+          for (const result of response.results as ResultObject[]) {
             if (result.status === 'failure') {
               deliveryErrors.push(
                 `Failed sending to target ${result.recipient} with error: ${result.error}`,
@@ -605,11 +605,13 @@ export class MessagingQueue extends Queue {
       deliveryErrors = [...deliveryErrors, ...result.deliveryErrors]
     }
 
-    if (deliveryErrors.length === 0 && deliveredTotal === 0) {
+    if (
+      results.length > 0 &&
+      deliveryErrors.length === 0 &&
+      deliveredTotal === 0
+    ) {
       deliveryErrors.push('Unknown error')
     }
-
-    message.set('deliveryErrors', deliveryErrors)
 
     if (message.get('deliveryErrors').length > 0) {
       message.set('status', MessageStatus.FAILED)
@@ -626,8 +628,9 @@ export class MessagingQueue extends Queue {
       )
     }
 
-    message.set('deliveredTotal', deliveredTotal)
-    message.set('deliveredAt', new Date().toISOString())
+    message
+      .set('deliveredTotal', deliveredTotal)
+      .set('deliveredAt', new Date().toISOString())
 
     await this.db.updateDocument('messages', message.getId(), message)
   }
@@ -691,4 +694,10 @@ export interface MessagingJobInternalData {
       content: string
     }
   }
+}
+
+type ResultObject = {
+  recipient: string
+  status: 'success' | 'failure'
+  error: string
 }

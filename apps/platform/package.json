@@ -8,9 +8,9 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "bun ../../scripts/bun-build.ts",
     "start": "bun build/main.js",
-    "dev": "tsup --watch 'src/**' --watch '../../libs/**/*.ts'",
+    "dev": "bun ../../scripts/bun-build.ts --watch",
     "prebuild": "../../scripts/merge-pkg.js platform",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",

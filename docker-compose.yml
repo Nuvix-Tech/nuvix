@@ -129,6 +129,18 @@ services:
       options:
         max-size: '10m'
         max-file: '5'
+        
+  console:
+    image: nuvix/console:latest
+
+    ports:
+      - "${NUVIX_CONSOLE_PORT:-3000}:3000"
+    env_file:
+    - .env
+
+    networks:
+      - nuvix
+    restart: unless-stopped
 
 volumes:
   postgres_data:
