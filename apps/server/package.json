@@ -11,7 +11,6 @@
     "build": "bun ../../scripts/bun-build.ts",
     "dev": "bun ../../scripts/bun-build.ts --watch",
     "start": "bun build/main.js",
-    "prebuild": "../../scripts/merge-pkg.js server",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
