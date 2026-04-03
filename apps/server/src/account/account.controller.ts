@@ -10,6 +10,7 @@ import { Delete, Get, Patch, Post, Put } from '@nuvix/core'
 import {
   AllowSessionType,
   AuthType,
+  Ctx,
   Locale,
   Namespace,
   User,
@@ -17,7 +18,7 @@ import {
 import { Exception } from '@nuvix/core/extend/exception'
 import { LocaleTranslator, Models, RequestContext } from '@nuvix/core/helpers'
 import { ApiInterceptor, ResponseInterceptor } from '@nuvix/core/resolvers'
-import { SessionType, type IResponse } from '@nuvix/utils'
+import { type IResponse, SessionType } from '@nuvix/utils'
 import type { TokensDoc, UsersDoc } from '@nuvix/utils/types'
 import { AccountService } from './account.service'
 import {
@@ -33,7 +34,6 @@ import {
   UpdateEmailVerificationDTO,
   UpdatePhoneVerificationDTO,
 } from './DTO/verification.dto'
-import { Ctx } from '@nuvix/core/decorators'
 
 @Controller({ version: ['1'], path: 'account' })
 @Namespace('account')

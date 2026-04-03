@@ -3,13 +3,13 @@ import cookieParser from '@fastify/cookie'
 import fastifyMultipart from '@fastify/multipart'
 import { ValidationPipe } from '@nestjs/common'
 import { NestFastifyApplication } from '@nestjs/platform-fastify'
-import { ErrorFilter } from '@nuvix/core/filters'
-import { Authorization, Role, storage } from '@nuvix/db'
-import handlebars from 'handlebars'
-import { AppMode, configuration } from '@nuvix/utils'
 import { CoreService } from '@nuvix/core/core.service'
-import { RequestContext } from '@nuvix/core/helpers'
 import { Exception } from '@nuvix/core/extend/exception'
+import { ErrorFilter } from '@nuvix/core/filters'
+import { RequestContext } from '@nuvix/core/helpers'
+import { Authorization, Role, storage } from '@nuvix/db'
+import { AppMode, configuration } from '@nuvix/utils'
+import handlebars from 'handlebars'
 
 /**
  * Applies common app configuration to the given NestFastifyApplication instance.

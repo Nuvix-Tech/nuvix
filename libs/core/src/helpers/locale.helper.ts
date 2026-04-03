@@ -1,9 +1,9 @@
 import * as fs from 'node:fs'
 import { configuration } from '@nuvix/utils'
 import type {
-  TranslationKey,
   ParamsFor,
   RequiresParams,
+  TranslationKey,
 } from '../i18n/translation-keys.generated'
 
 type TranslationFile = Record<string, string | { _: string; params?: any }>

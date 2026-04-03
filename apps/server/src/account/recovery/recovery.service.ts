@@ -1,6 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Hooks } from '@nuvix/core/extend/hooks'
 import { Auth, EmailHelper, RequestContext } from '@nuvix/core/helpers'
@@ -25,7 +26,6 @@ import {
 import type { Tokens, TokensDoc, UsersDoc } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import { CreateRecoveryDTO, UpdateRecoveryDTO } from './DTO/recovery.dto'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class RecoveryService {

@@ -1,7 +1,10 @@
+import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import { ID } from '@nuvix/core/helpers'
+import { DeletesJobData } from '@nuvix/core/resolvers'
 import { EmailValidator, PhoneValidator } from '@nuvix/core/validators'
 import {
   Database,
@@ -20,11 +23,8 @@ import {
   Schemas,
 } from '@nuvix/utils'
 import type { ProvidersDoc } from '@nuvix/utils/types'
-import { CreateTargetDTO, UpdateTargetDTO } from './DTO/target.dto'
-import { CoreService } from '@nuvix/core/core.service'
-import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
-import { DeletesJobData } from '@nuvix/core/resolvers'
+import { CreateTargetDTO, UpdateTargetDTO } from './DTO/target.dto'
 
 @Injectable()
 export class TargetsService {

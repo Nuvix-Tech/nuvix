@@ -1,6 +1,7 @@
 import * as path from 'node:path'
 import { Logger } from '@nestjs/common'
 import { PROJECT_ROOT } from './constants'
+
 type CookieSameSite = 'none' | 'lax' | 'strict'
 
 const BYTES = {
@@ -475,7 +476,7 @@ const validateConfig = (
     if (!result.valid) {
       Logger.error(
         `\n Configuration validation failed with ${result.errors.length} error(s).\n` +
-          `   Fix the above issues and restart.\n`,
+          '   Fix the above issues and restart.\n',
       )
     } else if (result.warnings.length > 0) {
       Logger.warn(
@@ -495,5 +496,4 @@ const validateConfig = (
 
 export type NuvixConfig = ReturnType<typeof createConfig>
 export const configuration = createConfig()
-export { createConfig as nxconfig }
-export { validateConfig, ValidationResult }
+export { createConfig as nxconfig, type ValidationResult, validateConfig }

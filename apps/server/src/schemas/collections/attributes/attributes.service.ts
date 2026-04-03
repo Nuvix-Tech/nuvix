@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { Exception } from '@nuvix/core/extend/exception'
+import { CollectionsHelper } from '@nuvix/core/helpers'
 import {
   AttributeType,
   Database,
@@ -51,7 +52,6 @@ import type {
   UpdateStringAttributeDTO,
   UpdateURLAttributeDTO,
 } from './DTO/attributes.dto'
-import { CollectionsHelper } from '@nuvix/core/helpers'
 
 @Injectable()
 export class AttributesService {

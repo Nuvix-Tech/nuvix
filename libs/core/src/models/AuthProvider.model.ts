@@ -1,6 +1,6 @@
 import { Exclude, Expose, Transform } from 'class-transformer'
-import { BaseModel } from './base.model'
 import { Auth } from '../helpers'
+import { BaseModel } from './base.model'
 
 @Exclude()
 export class AuthProviderModel extends BaseModel {

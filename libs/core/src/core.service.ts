@@ -26,11 +26,11 @@ export class CoreService implements OnModuleDestroy {
   private static _isConsole = false
 
   public static setIsConsole(isConsole: boolean) {
-    this._isConsole = isConsole
+    CoreService._isConsole = isConsole
   }
 
   public static isConsole() {
-    return this._isConsole
+    return CoreService._isConsole
   }
 
   public isConsole() {

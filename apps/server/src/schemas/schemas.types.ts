@@ -1,11 +1,11 @@
+import type { RequestContext } from '@nuvix/core/helpers'
 import type {
   Expression,
+  ParsedOrdering,
   ParserResult,
   SelectNode,
-  ParsedOrdering,
 } from '@nuvix/utils/query'
 import type { SelectQueryDTO } from './DTO/table.dto'
-import type { RequestContext } from '@nuvix/core/helpers'
 
 export interface SelectQuery
   extends Omit<SelectQueryDTO, 'select' | 'filter' | 'order'> {

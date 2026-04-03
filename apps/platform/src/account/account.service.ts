@@ -43,9 +43,9 @@ import type {
 } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import { CountryResponse, Reader } from 'maxmind'
+import { platform } from '../platform'
 import { UpdateEmailDTO, UpdatePasswordDTO } from './DTO/account.dto'
 import { CreateEmailSessionDTO } from './DTO/session.dto'
-import { platform } from '../platform'
 
 @Injectable()
 @UseInterceptors(ResponseInterceptor)

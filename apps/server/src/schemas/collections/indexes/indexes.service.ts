@@ -1,4 +1,5 @@
 import { Exception } from '@nuvix/core/extend/exception'
+import { CollectionsHelper } from '@nuvix/core/helpers'
 import {
   AttributeType,
   Database,
@@ -16,7 +17,6 @@ import type {
   IndexesDoc,
 } from '@nuvix/utils/types'
 import type { CreateIndexDTO } from './DTO/indexes.dto'
-import { CollectionsHelper } from '@nuvix/core/helpers'
 
 export class IndexesService {
   /**

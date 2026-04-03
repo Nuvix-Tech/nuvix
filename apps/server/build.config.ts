@@ -54,7 +54,7 @@ export default defineConfig(options => {
 
   return {
     entry: ['src/main.ts'],
-    format: isDev ? ['esm'] : ['cjs', 'esm'],
+    format: ['esm'],
     dts: false,
     sourcemap: isDev,
     clean: !isDev,

@@ -1,9 +1,9 @@
-import fs from 'fs/promises'
-import path from 'path'
-import Handlebars from 'handlebars'
-import type { SmtpConfig } from '../config'
 import { configuration } from '@nuvix/utils'
 import { ProjectsDoc } from '@nuvix/utils/types'
+import fs from 'fs/promises'
+import Handlebars from 'handlebars'
+import path from 'path'
+import type { SmtpConfig } from '../config'
 
 export interface BuiltEmail {
   email: string

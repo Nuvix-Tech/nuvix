@@ -1,12 +1,12 @@
 import fs from 'node:fs/promises'
 import { default as path } from 'node:path'
 import { Injectable, Logger, StreamableFile } from '@nestjs/common'
-import { PROJECT_ROOT } from '@nuvix/utils'
-import { Resvg } from '@resvg/resvg-wasm'
 import { browserCodes, creditCards, flags } from '@nuvix/core/config'
 import { Exception } from '@nuvix/core/extend/exception'
-import { CodesQuerDTO, InitialsQueryDTO, QrQueryDTO } from './DTO/misc.dto'
+import { PROJECT_ROOT } from '@nuvix/utils'
+import { Resvg } from '@resvg/resvg-wasm'
 import QRCode from 'qrcode'
+import { CodesQuerDTO, InitialsQueryDTO, QrQueryDTO } from './DTO/misc.dto'
 
 @Injectable()
 export class AvatarsService {
@@ -219,7 +219,8 @@ export class AvatarsService {
           Exception.AVATAR_REMOTE_URL_FAILED,
           'Favicon fetch timeout',
         )
-      } else if (error instanceof Exception) {
+      }
+      if (error instanceof Exception) {
         throw error
       }
       throw new Exception(

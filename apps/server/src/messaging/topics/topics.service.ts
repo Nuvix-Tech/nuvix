@@ -1,6 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import type { DeletesJobData } from '@nuvix/core/resolvers'
 import { Database, Doc, DuplicateException, ID, Query } from '@nuvix/db'
@@ -8,7 +9,6 @@ import { AppEvents, DeleteType, QueueFor } from '@nuvix/utils'
 import type { Topics } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import type { CreateTopic, ListTopics, UpdateTopic } from './topics.types'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class TopicsService {

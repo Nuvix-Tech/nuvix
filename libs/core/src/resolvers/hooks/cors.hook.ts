@@ -1,12 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { CoreService } from '@nuvix/core/core.service'
+import { AppMode, configuration } from '@nuvix/utils'
 import {
   addAccessControlRequestHeadersToVaryHeader,
   addOriginToVaryHeader,
 } from '../../helpers/vary.helper'
 import { Hook } from '../../server/hooks/interface'
 import { Origin } from '../../validators/network/origin'
-import { AppMode, configuration } from '@nuvix/utils'
-import { CoreService } from '@nuvix/core/core.service'
 
 type OriginMatcher = (origin: string, hostname: string) => boolean
 

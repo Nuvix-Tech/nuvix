@@ -11,6 +11,7 @@ import { Delete, Get, Patch, Post, Put } from '@nuvix/core'
 import { AuthType, CurrentSchemaType, Namespace } from '@nuvix/core/decorators'
 import { ApiInterceptor, SchemaGuard } from '@nuvix/core/resolvers'
 import { SchemaType } from '@nuvix/utils'
+import { OrderParser, Parser, SelectParser } from '@nuvix/utils/query'
 import { PermissionsDTO } from './DTO/permissions.dto'
 import {
   CallFunctionQueryDTO,
@@ -26,7 +27,6 @@ import {
 } from './DTO/table.dto'
 import { SchemasService } from './schemas.service'
 import { RestContext, SelectQuery } from './schemas.types'
-import { OrderParser, Parser, SelectParser } from '@nuvix/utils/query'
 
 // Note: The `schemaId` parameter is used in hooks and must be included in all relevant routes.
 @Controller({ version: ['1'], path: ['schemas/:schemaId', 'public'] })
@@ -365,7 +365,7 @@ export class SchemasController {
     query: SelectQueryDTO & { table: string } & T,
   ): SelectQuery & T {
     const { filter, select, order, table: tableName, ...rest } = query
-    let parsed: SelectQuery = { ...rest }
+    const parsed: SelectQuery = { ...rest }
 
     if (filter) {
       parsed.filter = Parser.create({ tableName }).parse(filter)

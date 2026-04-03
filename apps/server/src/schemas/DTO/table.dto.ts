@@ -1,8 +1,8 @@
 import { PickType } from '@nestjs/swagger'
 import {
   ArrayToLastElement,
-  TrySplitStringToArray,
   TransformStringToBoolean,
+  TrySplitStringToArray,
   TryTransformTo,
 } from '@nuvix/core/validators'
 import { Type } from 'class-transformer'

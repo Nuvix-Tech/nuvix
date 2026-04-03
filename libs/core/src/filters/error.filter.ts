@@ -19,8 +19,8 @@ import {
   TimeoutException,
   TruncateException,
 } from '@nuvix/db'
-import { Exception, errorCodes } from '../extend/exception'
 import { APP_VERSION, configuration } from '@nuvix/utils'
+import { Exception, errorCodes } from '../extend/exception'
 
 @Catch()
 export class ErrorFilter implements ExceptionFilter {

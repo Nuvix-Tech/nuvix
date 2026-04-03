@@ -44,6 +44,65 @@ interface BuildOptions {
   config?: string
 }
 
+class DevRunner {
+  private process: ReturnType<typeof spawn> | null = null
+  private isRunning = false
+
+  async start(entryPath: string, appDir: string) {
+    // Kill existing process if running
+    if (this.process) {
+      await this.kill()
+    }
+
+    this.isRunning = true
+    console.log('🚀 Starting dev server...')
+    const envFiles = ['../../.env', '../../.env.local']
+
+    try {
+      this.process = spawn(
+        [
+          'bun',
+          ...envFiles.map(f => `--env-file=${path.resolve(appDir, f)}`),
+          entryPath,
+        ],
+        {
+          cwd: appDir,
+          stdio: ['inherit', 'inherit', 'inherit'],
+        },
+      )
+
+      // Non-blocking: don't wait for process
+      this.process.exited.then(() => {
+        this.isRunning = false
+        console.log('🛑 Dev server stopped')
+      })
+    } catch (err) {
+      this.isRunning = false
+      console.error('❌ Failed to start dev server:', err)
+    }
+  }
+
+  async kill() {
+    if (this.process) {
+      try {
+        this.process.kill()
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional
+        await this.process.exited.catch(() => {
+          // process exit handled
+        })
+      } catch (err) {
+        console.error('Error killing dev process:', err)
+      }
+      this.process = null
+    }
+    this.isRunning = false
+  }
+
+  isActive() {
+    return this.isRunning
+  }
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 async function cleanDir(dir: string) {
@@ -104,7 +163,7 @@ async function copyAssets(
 async function buildWithBun(
   config: BuildConfig,
   options: { watch?: boolean; appDir: string },
-) {
+): Promise<boolean> {
   const isDev = options.watch ?? false
   const appDir = options.appDir
 
@@ -118,6 +177,8 @@ async function buildWithBun(
     await cleanDir(config.outDir)
   }
 
+  let buildSucceed = true
+
   // Build for each format
   for (const format of config.format) {
     for (const entryFile of config.entry) {
@@ -126,7 +187,7 @@ async function buildWithBun(
       // Get banner
       const bannerFn = config.banner
       const bannerText = bannerFn?.({ format })
-
+      const suffix = format === 'cjs' ? '.cjs' : ''
       try {
         const result = await build({
           entrypoints: [entryPath],
@@ -134,6 +195,9 @@ async function buildWithBun(
           minify: isDev
             ? false
             : {
+                whitespace: true,
+                syntax: true,
+                identifiers: false,
                 keepNames: true,
               },
           sourcemap: isDev
@@ -146,9 +210,9 @@ async function buildWithBun(
           format: format === 'cjs' ? 'cjs' : 'esm',
           splitting: config.splitting ?? false,
           naming: {
-            entry: '[dir]/[name].js',
-            chunk: '[dir]/[name]-[hash].js',
-            asset: '[dir]/[name]-[hash][ext]',
+            entry: `[dir]/[name]${suffix}.js`,
+            chunk: `[dir]/[name]-[hash]${suffix}.js`,
+            asset: `[dir]/[name]-[hash]${suffix}[ext]`,
           },
         })
 
@@ -157,14 +221,18 @@ async function buildWithBun(
           for (const msg of result.logs) {
             console.error(msg)
           }
-          process.exit(1)
+          buildSucceed = false
+          if (!isDev) {
+            process.exit(1)
+          }
+          continue // Skip to next entry in watch mode
         }
 
         // Add banner to output files
         if (bannerText?.js) {
           const outFile = path.resolve(
             config.outDir,
-            `${path.basename(entryFile, '.ts')}.js`,
+            `${path.basename(entryFile, '.ts')}${suffix}.js`,
           )
           try {
             const f = file(outFile)
@@ -179,16 +247,27 @@ async function buildWithBun(
           console.log(`✓ Built ${format.toUpperCase()} to ${config.outDir}`)
         }
       } catch (err) {
-        console.error('❌ Build failed:', err)
-        process.exit(1)
+        console.error('❌ Build error:', err)
+        buildSucceed = false
+        if (!isDev) {
+          process.exit(1)
+        }
       }
     }
   }
 
   // Copy assets in non-dev mode (relative to outDir, not appDir)
   if (!isDev && config.copy?.length) {
-    await copyAssets(config.copy, appDir, config.outDir)
-    console.log('✓ Assets copied')
+    try {
+      await copyAssets(config.copy, appDir, config.outDir)
+      console.log('✓ Assets copied')
+    } catch (err) {
+      console.error('❌ Error copying assets:', err)
+      if (!isDev) {
+        process.exit(1)
+      }
+      buildSucceed = false
+    }
   }
 
   // Run onSuccess hook
@@ -203,15 +282,20 @@ async function buildWithBun(
     }
   }
 
-  if (!isDev) {
+  if (!isDev && buildSucceed) {
     console.log('✅ Build complete!')
+  } else if (isDev && buildSucceed) {
+    console.log('✓ Build successful')
   }
+
+  return buildSucceed
 }
 
 async function setupWatcher(
   _config: BuildConfig,
   appDir: string,
   onBuild: () => Promise<void>,
+  onBuildSuccess: (() => Promise<void>) | undefined,
 ) {
   const watchDirs = [
     path.resolve(appDir, 'src'),
@@ -222,16 +306,31 @@ async function setupWatcher(
 
   const watchers: ReturnType<typeof watchFs>[] = []
   let buildInProgress = false
+  let fileChanged = false
 
   const triggerBuild = async () => {
     if (buildInProgress) {
+      fileChanged = true
       return
     }
     buildInProgress = true
+    fileChanged = false
+
     try {
       await onBuild()
+      // If build succeeded and callback provided, run it
+      if (onBuildSuccess) {
+        await onBuildSuccess()
+      }
+    } catch (err) {
+      // Error already logged in onBuild, just continue watching
+      console.error('Watch rebuild failed:', err)
     } finally {
       buildInProgress = false
+      // If files changed while building, rebuild again
+      if (fileChanged) {
+        await triggerBuild()
+      }
     }
   }
 
@@ -242,7 +341,8 @@ async function setupWatcher(
         { recursive: true, persistent: true },
         (_eventType, filename) => {
           if (filename?.endsWith('.ts') || filename?.endsWith('.tsx')) {
-            // debounce
+            fileChanged = true
+            // debounce: trigger after small delay
             triggerBuild()
           }
         },
@@ -253,13 +353,22 @@ async function setupWatcher(
     }
   }
 
-  // Keep process alive
+  // Keep process alive and gracefully handle shutdown
   return new Promise<void>(resolve => {
-    process.on('SIGINT', () => {
+    const cleanup = async () => {
+      console.log('\n⏹️  Stopping watcher...')
       watchers.forEach(w => {
         w.close()
       })
       resolve()
+    }
+
+    process.on('SIGINT', () => {
+      cleanup()
+    })
+
+    process.on('SIGTERM', () => {
+      cleanup()
     })
   })
 }
@@ -305,16 +414,57 @@ async function main() {
   const appDir = path.dirname(fullConfigPath)
 
   if (options.watch) {
-    // Dev mode with watcher
-    await buildWithBun(config, { watch: true, appDir })
+    // Dev mode with watcher and runner
+    const runner = new DevRunner()
 
-    // Setup file watcher
-    await setupWatcher(config, appDir, async () => {
-      await buildWithBun(config, { watch: true, appDir })
+    // Initial build
+    const success = await buildWithBun(config, { watch: true, appDir })
+
+    // After successful first build, start the dev server
+    if (success && config.entry && config.entry.length > 0) {
+      const entryFile = config.entry[0]
+      if (entryFile) {
+        const builtFile = path.resolve(
+          config.outDir,
+          `${path.basename(entryFile, '.ts')}.js`,
+        )
+        await runner.start(builtFile, appDir)
+      }
+    }
+
+    // Setup file watcher with dev server restart on successful rebuild
+    await setupWatcher(
+      config,
+      appDir,
+      async () => {
+        // Build on file change
+        await buildWithBun(config, { watch: true, appDir })
+      },
+      async () => {
+        // After successful build, restart dev server
+        if (config.entry && config.entry.length > 0) {
+          const entryFile = config.entry[0]
+          if (entryFile) {
+            const builtFile = path.resolve(
+              config.outDir,
+              `${path.basename(entryFile, '.ts')}.js`,
+            )
+            await runner.start(builtFile, appDir)
+          }
+        }
+      },
+    )
+
+    // Cleanup on exit
+    process.on('exit', async () => {
+      await runner.kill()
     })
   } else {
     // Single build
-    await buildWithBun(config, { watch: false, appDir })
+    const success = await buildWithBun(config, { watch: false, appDir })
+    if (!success) {
+      process.exit(1)
+    }
   }
 }
 

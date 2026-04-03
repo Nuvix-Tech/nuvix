@@ -1,11 +1,15 @@
 import { BullModule, InjectQueue } from '@nestjs/bullmq'
 import { Logger, Module } from '@nestjs/common'
+import { CoreService } from '@nuvix/core'
 import {
   MessagingJob,
   MessagingJobData,
   MessagingQueue,
 } from '@nuvix/core/resolvers'
+import { Events } from '@nuvix/db'
 import { QueueFor, ScheduleResourceType } from '@nuvix/utils'
+import { SchedulesDoc } from '@nuvix/utils/types'
+import type { Queue } from 'bullmq'
 import { MessagingController } from './messaging.controller'
 import { MessagingService } from './messaging.service'
 import { ProvidersController } from './providers/providers.controller'
@@ -14,10 +18,6 @@ import { SubscribersController } from './topics/subscribers/subscribers.controll
 import { SubscribersService } from './topics/subscribers/subscribers.service'
 import { TopicsController } from './topics/topics.controller'
 import { TopicsService } from './topics/topics.service'
-import { CoreService } from '@nuvix/core'
-import { Events } from '@nuvix/db'
-import { SchedulesDoc } from '@nuvix/utils/types'
-import type { Queue } from 'bullmq'
 
 @Module({
   imports: [

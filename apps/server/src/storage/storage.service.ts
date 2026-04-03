@@ -2,6 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { usageConfig } from '@nuvix/core/config'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import type { DeletesJobData } from '@nuvix/core/resolvers'
 import { StatsQueue } from '@nuvix/core/resolvers'
@@ -25,7 +26,6 @@ import {
 import collections from '@nuvix/utils/collections'
 import { Queue } from 'bullmq'
 import { CreateBucketDTO, UpdateBucketDTO } from './DTO/bucket.dto'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class StorageService {

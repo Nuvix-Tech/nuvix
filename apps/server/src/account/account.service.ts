@@ -1,7 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
-
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Hooks } from '@nuvix/core/extend/hooks'
 import {
@@ -12,10 +12,11 @@ import {
 } from '@nuvix/core/helpers'
 import {
   DeletesJobData,
+  MailJob,
+  MailQueueOptions,
   MessagingJob,
   MessagingJobInternalData,
 } from '@nuvix/core/resolvers'
-import { MailJob, MailQueueOptions } from '@nuvix/core/resolvers'
 import {
   PasswordHistoryValidator,
   PersonalDataValidator,
@@ -46,7 +47,6 @@ import type {
 } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import { UpdateEmailDTO } from './DTO/account.dto'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class AccountService {
@@ -791,7 +791,7 @@ export class AccountService {
     await this.db.purgeCachedDocument('users', user.getId())
 
     if (sendSMS) {
-      let message = locale.get('sms.verification.body', {
+      const message = locale.get('sms.verification.body', {
         secret: secret,
       })
 

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import {
   Authorization,
@@ -14,7 +15,6 @@ import {
 import { AppEvents, MessageType } from '@nuvix/utils'
 import type { Subscribers, SubscribersDoc } from '@nuvix/utils/types'
 import type { CreateSubscriber, ListSubscribers } from './subscribers.types'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class SubscribersService {

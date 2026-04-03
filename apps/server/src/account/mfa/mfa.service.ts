@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Auth, EmailHelper, RequestContext } from '@nuvix/core/helpers'
 import {
@@ -25,7 +26,6 @@ import type {
 } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import { CreateMfaChallengeDTO, VerifyMfaChallengeDTO } from './DTO/mfa.dto'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class MfaService {

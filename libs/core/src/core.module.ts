@@ -4,13 +4,13 @@ import { EventEmitterModule } from '@nestjs/event-emitter'
 import { Database, StructureValidator } from '@nuvix/db'
 import { configuration } from '@nuvix/utils'
 import { filters, formats } from '@nuvix/utils/database'
+import handlebars from 'handlebars'
 import pg from 'pg'
 import { parse as parseArray } from 'postgres-array'
 import { CoreService } from './core.service.js'
-import { RatelimitService } from './rate-limit.service.js'
-import { QueueModule } from './queue.module.js'
-import handlebars from 'handlebars'
 import { StatsHelper } from './helpers/stats.helper.js'
+import { QueueModule } from './queue.module.js'
+import { RatelimitService } from './rate-limit.service.js'
 
 @Global()
 @Module({

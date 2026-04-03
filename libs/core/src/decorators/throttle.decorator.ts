@@ -1,7 +1,7 @@
 import { applyDecorators, UseGuards } from '@nestjs/common'
+import { Reflector } from '@nestjs/core'
 import { type ThrottleOptions } from '@nuvix/utils'
 import { ThrottlerGuard } from '../resolvers/guards'
-import { Reflector } from '@nestjs/core'
 
 const _Throttle = Reflector.createDecorator<ThrottleOptions>({
   key: Throttle.name,

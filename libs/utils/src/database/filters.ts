@@ -1,3 +1,4 @@
+import { Auth } from '@nuvix/core/helpers'
 import {
   AttributeType,
   Authorization,
@@ -8,7 +9,6 @@ import {
 } from '@nuvix/db'
 import { configuration } from '../configuration'
 import { SchemaMeta } from '../constants'
-import { Auth } from '@nuvix/core/helpers'
 
 export const filters: Record<
   string,

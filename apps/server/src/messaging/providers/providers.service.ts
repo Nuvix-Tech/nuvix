@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Database, Doc, DuplicateException, ID, Query } from '@nuvix/db'
 import { AppEvents, MessageType } from '@nuvix/utils'
@@ -28,7 +29,6 @@ import type {
   UpdateTwilioProvider,
   UpdateVonageProvider,
 } from './providers.types'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class ProvidersService {

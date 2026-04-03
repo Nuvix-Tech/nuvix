@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
+import { Database, Doc, DuplicateException } from '@nuvix/db'
 import { DataSource } from '@nuvix/pg'
 import { Schema, Schemas, SchemaType } from '@nuvix/utils'
-import { CreateSchemaDTO } from './DTO/create-schema.dto'
-import { CoreService } from '@nuvix/core/core.service'
-import { Database, Doc, DuplicateException } from '@nuvix/db'
 import collections from '@nuvix/utils/collections'
+import { CreateSchemaDTO } from './DTO/create-schema.dto'
 
 @Injectable()
 export class DatabaseService {
