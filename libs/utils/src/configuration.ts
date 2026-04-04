@@ -1,6 +1,7 @@
 import * as path from 'node:path'
 import { Logger } from '@nestjs/common'
 import { PROJECT_ROOT } from './constants'
+import { env } from './helpers'
 
 type CookieSameSite = 'none' | 'lax' | 'strict'
 
@@ -40,38 +41,6 @@ const DEFAULT_HEADERS = [
   'x-sdk-version',
   'x-fallback-cookies',
 ] as const
-
-const env = {
-  get: (key: string, fallback = ''): string => process.env[key] ?? fallback,
-
-  getRequired: (key: string): string | undefined => process.env[key],
-
-  bool: (key: string, fallback = false): boolean => {
-    const val = process.env[key]?.toLowerCase()
-    if (val === undefined) return fallback
-    return val === 'true' || val === '1' || val === 'yes'
-  },
-
-  int: (key: string, fallback: number): number => {
-    const val = process.env[key]
-    if (!val) return fallback
-    const parsed = Number.parseInt(val, 10)
-    return Number.isNaN(parsed) ? fallback : parsed
-  },
-
-  list: (key: string, fallback: string[] = []): string[] => {
-    const val = process.env[key]
-    if (!val) return fallback
-    return val
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
-  },
-
-  is: (key: string, value: string): boolean => process.env[key] === value,
-
-  isNot: (key: string, value: string): boolean => process.env[key] !== value,
-}
 
 const paths = {
   root: PROJECT_ROOT,

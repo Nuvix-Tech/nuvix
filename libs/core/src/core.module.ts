@@ -1,5 +1,11 @@
 import { BullModule } from '@nestjs/bullmq'
-import { Global, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import {
+  Global,
+  Logger,
+  Module,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { Database, StructureValidator } from '@nuvix/db'
 import { configuration } from '@nuvix/utils'
@@ -11,24 +17,36 @@ import { CoreService } from './core.service.js'
 import { StatsHelper } from './helpers/stats.helper.js'
 import { QueueModule } from './queue.module.js'
 import { RatelimitService } from './rate-limit.service.js'
+import { Redis as IORedis } from 'ioredis'
 
 @Global()
 @Module({
   imports: [
     BullModule.forRootAsync({
-      useFactory() {
-        const { secure, ...redisConfig } = configuration.redis
+      async useFactory() {
+        const { secure, user, ...redisConfig } = configuration.redis
+        const connection = new IORedis({
+          connectionName: 'nuvix-core',
+          ...redisConfig,
+          username: user,
+          tls: secure ? { rejectUnauthorized: false } : undefined,
+          maxRetriesPerRequest: null,
+        })
+
+        connection.on('error', e => {
+          if (
+            'code' in e &&
+            e.code === 'ECONNREFUSED' &&
+            'syscall' in e &&
+            e.syscall === 'connect'
+          ) {
+            Logger.error(`Redis connection failed: ${e.code}`)
+            process.exit(1)
+          } else Logger.error(e, 'BullModule')
+        })
+
         return {
-          connection: {
-            ...redisConfig,
-            tls: secure
-              ? {
-                  rejectUnauthorized: false,
-                }
-              : undefined,
-            enableOfflineQueue: true,
-            enableReadyCheck: true,
-          },
+          connection,
           defaultJobOptions: {
             attempts: 2,
             backoff: { type: 'exponential', delay: 5000 },

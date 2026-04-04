@@ -14,7 +14,7 @@ async function genPkg(appName: string) {
     main: appPkg.main,
     module: appPkg.module,
     scripts: {
-      start: `bun build/main.js`,
+      start: 'bun build/main.js',
     },
   }
 

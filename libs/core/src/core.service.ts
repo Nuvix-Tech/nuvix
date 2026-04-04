@@ -333,6 +333,18 @@ export class CoreService implements OnModuleDestroy {
       maxRetriesPerRequest: 10,
     })
 
+    connection.on('error', e => {
+      if (
+        'code' in e &&
+        e.code === 'ECONNREFUSED' &&
+        'syscall' in e &&
+        e.syscall === 'connect'
+      ) {
+        this.logger.error(`Redis connection failed: ${e.code}`)
+        process.exit(1)
+      } else this.logger.error(e)
+    })
+
     return connection
   }
 

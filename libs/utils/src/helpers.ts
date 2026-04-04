@@ -3,6 +3,38 @@ import * as fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+export const env = {
+  get: (key: string, fallback = ''): string => process.env[key] ?? fallback,
+
+  getRequired: (key: string): string | undefined => process.env[key],
+
+  bool: (key: string, fallback = false): boolean => {
+    const val = process.env[key]?.toLowerCase()
+    if (val === undefined) return fallback
+    return val === 'true' || val === '1' || val === 'yes'
+  },
+
+  int: (key: string, fallback: number): number => {
+    const val = process.env[key]
+    if (!val) return fallback
+    const parsed = Number.parseInt(val, 10)
+    return Number.isNaN(parsed) ? fallback : parsed
+  },
+
+  list: (key: string, fallback: string[] = []): string[] => {
+    const val = process.env[key]
+    if (!val) return fallback
+    return val
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+  },
+
+  is: (key: string, value: string): boolean => process.env[key] === value,
+
+  isNot: (key: string, value: string): boolean => process.env[key] !== value,
+}
+
 /**
  *  Generates a MD5 hash of the given input string
  *  @param input - The input string to hash
@@ -35,7 +67,7 @@ export function fnv1a128(str: string): string {
  * @throws Error if project root directory cannot be found
  */
 export function findProjectRoot(): string {
-  if (process.env.NODE_ENV !== 'production') {
+  if (env.isNot('NODE_ENV', 'production')) {
     return path.join(process.cwd(), '../../')
   }
   try {
