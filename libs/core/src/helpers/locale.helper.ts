@@ -237,7 +237,9 @@ export class LocaleTranslator {
       return translations
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new Error(`Translation file not found: ${locale}.json`)
+        throw new Error(
+          `Translation file not found: ${locale}.json (${filePath})`,
+        )
       }
       throw new Error(`Failed to load translations for "${locale}": ${err}`)
     }

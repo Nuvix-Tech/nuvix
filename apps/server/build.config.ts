@@ -72,7 +72,6 @@ export default defineConfig(options => {
     bundle: true,
     shims: false,
     tsconfig: './tsconfig.app.json',
-    onSuccess: !isDev ? undefined : 'sleep 1 && bun --watch dist/main.js',
     copy: !isDev
       ? [
           {

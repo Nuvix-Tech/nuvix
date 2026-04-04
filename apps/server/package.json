@@ -10,6 +10,7 @@
   "scripts": {
     "build": "bun ../../scripts/bun-build.ts",
     "dev": "bun ../../scripts/bun-build.ts --watch",
+    "postbuild": "bun ../../scripts/gen-pkg.ts server",
     "start": "bun build/main.js",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",
