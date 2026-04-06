@@ -68,6 +68,8 @@ export default defineConfig(options => {
       '@nestjs/platform-express',
       'class-transformer/storage',
       '@nestjs/microservices',
+      'sharp',
+      '@resvg/resvg-js',
     ],
     bundle: true,
     shims: false,
@@ -93,10 +95,6 @@ export default defineConfig(options => {
           {
             from: ['../../README.md'],
             to: ['../README.md'],
-          },
-          {
-            from: ['../../node_modules/@resvg/resvg-wasm/index_bg.wasm'],
-            to: ['../vendor/@resvg/resvg-wasm/index_bg.wasm'],
           },
         ]
       : undefined,

@@ -10,7 +10,7 @@
   "scripts": {
     "build": "bun ../../scripts/bun-build.ts",
     "dev": "bun ../../scripts/bun-build.ts --watch",
-    "postbuild": "bun ../../scripts/gen-pkg.ts server",
+    "postbuild": "bun ../../scripts/gen-pkg.ts server --deps sharp@^0.34.2 --deps @resvg/resvg-js@^2.6.2",
     "start": "bun build/main.js",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",
@@ -23,7 +23,8 @@
     "gen:metadata": "bun src/generate-metadata.ts"
   },
   "dependencies": {
-    "sharp": "^0.34.2"
+    "sharp": "^0.34.2",
+    "@resvg/resvg-js": "^2.6.2"
   },
   "devDependencies": {
     "@nuvix/core": "workspace:*",

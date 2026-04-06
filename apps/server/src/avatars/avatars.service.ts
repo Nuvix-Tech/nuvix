@@ -4,7 +4,7 @@ import { Injectable, Logger, StreamableFile } from '@nestjs/common'
 import { browserCodes, creditCards, flags } from '@nuvix/core/config'
 import { Exception } from '@nuvix/core/extend/exception'
 import { configuration } from '@nuvix/utils'
-import { Resvg } from '@resvg/resvg-wasm'
+import { Resvg } from '@resvg/resvg-js'
 import QRCode from 'qrcode'
 import { CodesQuerDTO, InitialsQueryDTO, QrQueryDTO } from './DTO/misc.dto'
 
