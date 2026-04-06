@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreatePushTargetDTO } from 'apps/server/src/account/targets/DTO/target.dto'
+import { CreatePushTargetDTO } from '@/server/account/targets/DTO/target.dto'
 
 export function buildCreatePushTargetDTO(
   overrides: Partial<CreatePushTargetDTO> = {},

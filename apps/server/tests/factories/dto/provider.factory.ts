@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker'
-import { CreateFcmProviderDTO } from 'apps/server/src/messaging/providers/DTO/fcm.dto'
-import { CreateSMTPProviderDTO } from 'apps/server/src/messaging/providers/DTO/smtp.dto'
+import { CreateFcmProviderDTO } from '@/server/messaging/providers/DTO/fcm.dto'
+import { CreateSMTPProviderDTO } from '@/server/messaging/providers/DTO/smtp.dto'
 
 export function buildCreateSmtpProviderDTO(
   overrides: Partial<CreateSMTPProviderDTO> = {},

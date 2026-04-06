@@ -42,7 +42,7 @@ const DEFAULT_HEADERS = [
   'x-fallback-cookies',
 ] as const
 
-const paths = {
+export const paths = {
   root: PROJECT_ROOT,
 
   fromRoot: (...segments: string[]) => path.join(PROJECT_ROOT, ...segments),

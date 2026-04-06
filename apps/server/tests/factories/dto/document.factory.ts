@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreateDocumentDTO } from 'apps/server/src/schemas/collections/documents/DTO/document.dto'
+import { CreateDocumentDTO } from '@/server/schemas/collections/documents/DTO/document.dto'
 
 export function buildCreateDocumentDTO(
   overrides: Partial<CreateDocumentDTO> = {},

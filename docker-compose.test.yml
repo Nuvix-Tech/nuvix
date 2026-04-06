@@ -9,25 +9,13 @@ services:
       - .env.test
     environment:
       POSTGRES_PASSWORD: test_admin
-      POSTGRES_USER: nuvix_admin
-      POSTGRES_DB: postgres
-      PGDATA: /var/lib/postgresql/data/pgdata
     networks:
       - nuvix-test
     ports:
       - "${TEST_DB_PORT:-54321}:5432"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "PGPASSWORD=test_admin pg_isready -U nuvix_admin -d postgres -h localhost"
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   redis:
-    image: redis:7.2
+    image: redis:latest
     container_name: nuvix-test-redis
     command: ['redis-server', '/usr/local/etc/redis/redis.conf']
     volumes:

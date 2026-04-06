@@ -1,6 +1,6 @@
 import { OnWorkerEvent, Processor } from '@nestjs/bullmq'
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common'
-import { Database, Doc, Query } from '@nuvix/db'
+import { Authorization, Database, Doc, Query } from '@nuvix/db'
 import {
   APNS,
   Attachment,
@@ -67,9 +67,8 @@ export class MessagingQueue extends Queue {
 
           // Load message safely
           if (typeof data.message === 'string') {
-            const messageDoc = await this.db.getDocument(
-              'messages',
-              data.message,
+            const messageDoc = await Authorization.skip(() =>
+              this.db.getDocument('messages', data.message as string),
             )
 
             if (messageDoc.empty()) {
@@ -252,20 +251,24 @@ export class MessagingQueue extends Queue {
     const attachments = data.attachments || []
 
     if (ccTargets.length > 0) {
-      const ccTargetDocs = await this.db.find('targets', [
-        Query.equal('$id', ccTargets),
-        Query.limit(ccTargets.length),
-      ])
+      const ccTargetDocs = await Authorization.skip(() =>
+        this.db.find('targets', [
+          Query.equal('$id', ccTargets),
+          Query.limit(ccTargets.length),
+        ]),
+      )
       for (const ccTarget of ccTargetDocs) {
         cc.push({ email: ccTarget.get('identifier') })
       }
     }
 
     if (bccTargets.length > 0) {
-      const bccTargetDocs = await this.db.find('targets', [
-        Query.equal('$id', bccTargets),
-        Query.limit(bccTargets.length),
-      ])
+      const bccTargetDocs = await Authorization.skip(() =>
+        this.db.find('targets', [
+          Query.equal('$id', bccTargets),
+          Query.limit(bccTargets.length),
+        ]),
+      )
       for (const bccTarget of bccTargetDocs) {
         bcc.push({ email: bccTarget.get('identifier') })
       }
@@ -277,16 +280,17 @@ export class MessagingQueue extends Queue {
         const bucketId = attachment.bucketId
         const fileId = attachment.fileId
 
-        const bucket = await this.db.getDocument('buckets', bucketId)
+        const bucket = await Authorization.skip(() =>
+          this.db.getDocument('buckets', bucketId),
+        )
         if (bucket.empty()) {
           throw new Error(
             'Storage bucket with the requested ID could not be found',
           )
         }
 
-        const file = await this.db.getDocument<Files>(
-          `bucket_${bucket.getSequence()}`,
-          fileId,
+        const file = await Authorization.skip(() =>
+          this.db.getDocument<Files>(`bucket_${bucket.getSequence()}`, fileId),
         )
         if (file.empty()) {
           throw new Error(
@@ -404,10 +408,12 @@ export class MessagingQueue extends Queue {
     const allTargets: TargetsDoc[] = []
 
     if (topicIds.length > 0) {
-      const topics = await this.db.find('topics', [
-        Query.equal('$id', topicIds),
-        Query.limit(topicIds.length),
-      ])
+      const topics = await Authorization.skip(() =>
+        this.db.find('topics', [
+          Query.equal('$id', topicIds),
+          Query.limit(topicIds.length),
+        ]),
+      )
       for (const topic of topics) {
         const targets = (topic.get('targets') as TargetsDoc[]).filter(
           target => target.get('providerType') === providerType,
@@ -417,10 +423,12 @@ export class MessagingQueue extends Queue {
     }
 
     if (userIds.length > 0) {
-      const users = await this.db.find('users', [
-        Query.equal('$id', userIds),
-        Query.limit(userIds.length),
-      ])
+      const users = await Authorization.skip(() =>
+        this.db.find('users', [
+          Query.equal('$id', userIds),
+          Query.limit(userIds.length),
+        ]),
+      )
       for (const user of users) {
         const targets = (user.get('targets') as TargetsDoc[]).filter(
           target => target.get('providerType') === providerType,
@@ -430,39 +438,47 @@ export class MessagingQueue extends Queue {
     }
 
     if (targetIds.length > 0) {
-      const targets = await this.db.find('targets', [
-        Query.equal('$id', targetIds),
-        Query.equal('providerType', [providerType]),
-        Query.limit(targetIds.length),
-      ])
+      const targets = await Authorization.skip(() =>
+        this.db.find('targets', [
+          Query.equal('$id', targetIds),
+          Query.equal('providerType', [providerType]),
+          Query.limit(targetIds.length),
+        ]),
+      )
 
       allTargets.push(...targets)
     }
 
     if (allTargets.length === 0) {
-      await this.db.updateDocument(
-        'messages',
-        message.getId(),
-        message
-          .set('status', MessageStatus.FAILED)
-          .set('deliveryErrors', ['No valid recipients found.']),
+      await Authorization.skip(() =>
+        this.db.updateDocument(
+          'messages',
+          message.getId(),
+          message
+            .set('status', MessageStatus.FAILED)
+            .set('deliveryErrors', ['No valid recipients found.']),
+        ),
       )
       this.logger.warn('No valid recipients found.')
       return
     }
 
-    const defaultProvider = await this.db.findOne('providers', [
-      Query.equal('enabled', [true]),
-      Query.equal('type', [providerType]),
-    ])
+    const defaultProvider = await Authorization.skip(() =>
+      this.db.findOne('providers', [
+        Query.equal('enabled', [true]),
+        Query.equal('type', [providerType]),
+      ]),
+    )
 
     if (defaultProvider.empty()) {
-      await this.db.updateDocument(
-        'messages',
-        message.getId(),
-        message
-          .set('status', MessageStatus.FAILED)
-          .set('deliveryErrors', ['No enabled provider found.']),
+      await Authorization.skip(() =>
+        this.db.updateDocument(
+          'messages',
+          message.getId(),
+          message
+            .set('status', MessageStatus.FAILED)
+            .set('deliveryErrors', ['No enabled provider found.']),
+        ),
       )
       this.logger.warn('No enabled provider found.')
       return
@@ -492,7 +508,9 @@ export class MessagingQueue extends Queue {
       if (providers[providerId]) {
         provider = providers[providerId]
       } else {
-        provider = await this.db.getDocument('providers', providerId)
+        provider = await Authorization.skip(() =>
+          this.db.getDocument('providers', providerId),
+        )
         if (provider.empty() || !provider.get('enabled')) {
           provider = defaultProvider
         } else {
@@ -564,15 +582,19 @@ export class MessagingQueue extends Queue {
 
             // Deleting push targets when token has expired
             if (result.error === 'Expired device token') {
-              const target = await this.db.findOne('targets', [
-                Query.equal('identifier', [result.recipient]),
-              ])
+              const target = await Authorization.skip(() =>
+                this.db.findOne('targets', [
+                  Query.equal('identifier', [result.recipient]),
+                ]),
+              )
 
               if (!target.empty()) {
-                await this.db.updateDocument(
-                  'targets',
-                  target.getId(),
-                  target.set('expired', true),
+                await Authorization.skip(() =>
+                  this.db.updateDocument(
+                    'targets',
+                    target.getId(),
+                    target.set('expired', true),
+                  ),
                 )
               }
             }
@@ -639,7 +661,9 @@ export class MessagingQueue extends Queue {
       .set('deliveredTotal', deliveredTotal)
       .set('deliveredAt', new Date().toISOString())
 
-    await this.db.updateDocument('messages', message.getId(), message)
+    await Authorization.skip(() =>
+      this.db.updateDocument('messages', message.getId(), message),
+    )
   }
 
   private async sendInternalMessage(message: MessagesDoc) {

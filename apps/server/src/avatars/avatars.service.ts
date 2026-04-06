@@ -3,7 +3,7 @@ import { default as path } from 'node:path'
 import { Injectable, Logger, StreamableFile } from '@nestjs/common'
 import { browserCodes, creditCards, flags } from '@nuvix/core/config'
 import { Exception } from '@nuvix/core/extend/exception'
-import { PROJECT_ROOT } from '@nuvix/utils'
+import { configuration } from '@nuvix/utils'
 import { Resvg } from '@resvg/resvg-wasm'
 import QRCode from 'qrcode'
 import { CodesQuerDTO, InitialsQueryDTO, QrQueryDTO } from './DTO/misc.dto'
@@ -73,8 +73,7 @@ export class AvatarsService {
       })
 
       const fontPath = path.join(
-        PROJECT_ROOT,
-        'assets/fonts',
+        configuration.assets.fonts,
         'Varela-Regular.ttf',
       )
       const fontFiles = [fontPath]

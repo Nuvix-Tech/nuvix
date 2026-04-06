@@ -2,7 +2,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify'
 import { ApiKey, configuration } from '@nuvix/utils'
 import { buildCreateAccountDTO } from '../factories/dto/account.factory'
 import { buildCreateEmailSessionDTO } from '../factories/dto/session.factory'
-import { parseJson } from '../setup/test-utils'
+import { Auth } from '@nuvix/core/helpers'
 
 /**
  * Creates a new user account and establishes a session.
@@ -48,17 +48,18 @@ export async function createUserAndSession(
     )
   }
 
-  const session = parseJson(createSessionRes.payload)
-  const sessionHeader = session?.secret
-  if (typeof sessionHeader !== 'string' || sessionHeader.length === 0) {
-    throw new Error('Expected session response to include a non-empty secret')
+  const sessionHeader = createSessionRes.cookies.find(
+    f => f.name === Auth.cookieName,
+  )
+  if (!sessionHeader || sessionHeader.value.length === 0) {
+    throw new Error('Expected session cookie')
   }
 
   return {
     userId: account.userId,
     email: account.email,
     password: account.password,
-    sessionHeader,
+    sessionHeader: sessionHeader.value,
   }
 }
 

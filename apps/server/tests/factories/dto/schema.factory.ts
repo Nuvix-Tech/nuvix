@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker'
 import { SchemaType } from '@nuvix/utils'
-import { CreateSchemaDTO } from 'apps/server/src/database/DTO/create-schema.dto'
+import { CreateSchemaDTO } from '@/server/database/DTO/create-schema.dto'
 
 export function buildCreateSchemaDTO(
   overrides: Partial<CreateSchemaDTO> = {},

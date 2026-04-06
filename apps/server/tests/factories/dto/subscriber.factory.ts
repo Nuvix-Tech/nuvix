@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreateSubscriberDTO } from 'apps/server/src/messaging/topics/subscribers/DTO/subscriber.dto'
+import { CreateSubscriberDTO } from '@/server/messaging/topics/subscribers/DTO/subscriber.dto'
 
 export function buildCreateSubscriberDTO(
   overrides: Partial<CreateSubscriberDTO> = {},

@@ -29,7 +29,8 @@
     "skipLibCheck": true,
     /* === Paths === */
     "paths": {
-      "*": ["./*"],
+      "@/server/*": ["./apps/server/src/*"],
+      "@/platform/*": ["./apps/platform/src/*"],
       "@nuvix/utils": ["./libs/utils/src"],
       "@nuvix/utils/*": ["./libs/utils/src/*"],
       "@nuvix/utils/types": ["./libs/utils/types"],

@@ -94,6 +94,10 @@ export default defineConfig(options => {
             from: ['../../README.md'],
             to: ['../README.md'],
           },
+          {
+            from: ['../../node_modules/@resvg/resvg-wasm/index_bg.wasm'],
+            to: ['../vendor/@resvg/resvg-wasm/index_bg.wasm'],
+          },
         ]
       : undefined,
   }

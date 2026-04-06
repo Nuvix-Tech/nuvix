@@ -18,6 +18,7 @@ import { StatsHelper } from './helpers/stats.helper.js'
 import { QueueModule } from './queue.module.js'
 import { RatelimitService } from './rate-limit.service.js'
 import { Redis as IORedis } from 'ioredis'
+import { SchedulesHelper } from './helpers/schedules.helper.js'
 
 @Global()
 @Module({
@@ -62,7 +63,7 @@ import { Redis as IORedis } from 'ioredis'
       global: true,
     }),
   ],
-  providers: [CoreService, RatelimitService, StatsHelper],
+  providers: [CoreService, RatelimitService, StatsHelper, SchedulesHelper],
   exports: [QueueModule, CoreService, RatelimitService],
 })
 export class CoreModule implements OnModuleDestroy, OnModuleInit {

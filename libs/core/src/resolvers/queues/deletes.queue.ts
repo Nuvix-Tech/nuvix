@@ -1,7 +1,7 @@
 import { OnWorkerEvent, Processor } from '@nestjs/bullmq'
 import { forwardRef, Inject, Logger } from '@nestjs/common'
 import { Audit } from '@nuvix/audit'
-import { Database, Doc, IEntity, Query } from '@nuvix/db'
+import { Authorization, Database, Doc, IEntity, Query } from '@nuvix/db'
 import { DeleteDocumentType, DeleteType, QueueFor } from '@nuvix/utils'
 import type {
   Memberships,
@@ -264,7 +264,9 @@ export class DeletesQueue extends Queue {
       return
     }
 
-    await this.db.deleteCollection(`bucket_${bucket.getSequence()}`)
+    await Authorization.skip(() =>
+      this.db.deleteCollection(`bucket_${bucket.getSequence()}`),
+    )
 
     const device = this.coreService.getStorageDevice()
     await device.deletePath(bucket.getId())
@@ -316,11 +318,13 @@ export class DeletesQueue extends Queue {
     const batch_limit = 1000
 
     try {
-      const count = await database.deleteDocumentsBatch(
-        collection,
-        queries,
-        batch_limit,
-        callback,
+      const count = await Authorization.skip(() =>
+        database.deleteDocumentsBatch(
+          collection,
+          queries,
+          batch_limit,
+          callback,
+        ),
       )
 
       const end = Date.now()
@@ -354,7 +358,9 @@ export class DeletesQueue extends Queue {
         paginatedQueries.push(Query.cursorAfter(cursor))
       }
 
-      const results = await database.find<T>(collection, paginatedQueries)
+      const results = await Authorization.skip(() =>
+        database.find<T>(collection, paginatedQueries),
+      )
 
       sum = results.length
 

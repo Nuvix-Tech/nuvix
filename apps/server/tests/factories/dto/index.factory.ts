@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker'
 import { IndexType, Order } from '@nuvix/db'
-import { CreateIndexDTO } from 'apps/server/src/schemas/collections/indexes/DTO/indexes.dto'
+import { CreateIndexDTO } from '@/server/schemas/collections/indexes/DTO/indexes.dto'
 
 export function buildCreateIndexDTO(
   overrides: Partial<CreateIndexDTO> = {},

@@ -29,7 +29,6 @@ describe('schemas/collections/indexes (integration)', () => {
       headers: getApiKeyJsonHeaders(),
       payload: JSON.stringify(schemaDto),
     })
-    await Promise.resolve(new Promise(resolve => setTimeout(resolve, 2000)))
 
     // Create a collection within the schema
     const collectionDto = buildCreateCollectionDTO()
@@ -49,9 +48,6 @@ describe('schemas/collections/indexes (integration)', () => {
       headers: getApiKeyJsonHeaders(),
       payload: JSON.stringify({ key: 'title', size: 255, required: false }),
     })
-
-    // Wait for attributes to be propagated
-    await Promise.resolve(new Promise(resolve => setTimeout(resolve, 1000)))
   })
 
   /**
@@ -116,8 +112,7 @@ describe('schemas/collections/indexes (integration)', () => {
    * INDEX CREATION TESTS
    */
 
-  it('POST /v1/schemas/:schemaId/collections/:collectionId/indexes returns 202 with complete index shape', async () => {
-    // PROTECTS: Index creation contract (202 Accepted because index creation is async)
+  it('POST /v1/schemas/:schemaId/collections/:collectionId/indexes returns 201 with complete index shape', async () => {
     const dto = buildCreateIndexDTO()
 
     const res = await app.inject({
@@ -127,8 +122,7 @@ describe('schemas/collections/indexes (integration)', () => {
       payload: JSON.stringify(dto),
     })
 
-    // Index creation may return 201 or 202 depending on whether it's async
-    expect([201, 202]).toContain(res.statusCode)
+    assertStatusCode(res, 201)
 
     const body = parseJson(res.payload)
     // Indexes use key as identifier, relax shape check for $id
@@ -196,9 +190,6 @@ describe('schemas/collections/indexes (integration)', () => {
       payload: JSON.stringify(dto),
     })
 
-    // Wait a bit for index creation (it's async)
-    await new Promise(resolve => setTimeout(resolve, 100))
-
     // Retrieve it
     const res = await app.inject({
       method: 'GET',
@@ -229,7 +220,7 @@ describe('schemas/collections/indexes (integration)', () => {
    * INDEX DELETION TESTS
    */
 
-  it('DELETE /v1/schemas/:schemaId/collections/:collectionId/indexes/:key returns 202 for existing index', async () => {
+  it('DELETE /v1/schemas/:schemaId/collections/:collectionId/indexes/:key returns 204 for existing index', async () => {
     // PROTECTS: Index deletion works correctly
     const dto = buildCreateIndexDTO()
 
@@ -241,9 +232,6 @@ describe('schemas/collections/indexes (integration)', () => {
       payload: JSON.stringify(dto),
     })
 
-    // Wait a bit for index creation
-    await new Promise(resolve => setTimeout(resolve, 100))
-
     // Delete it
     const res = await app.inject({
       method: 'DELETE',
@@ -251,7 +239,7 @@ describe('schemas/collections/indexes (integration)', () => {
       headers: getApiKeyHeaders(),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 204)
 
     // Verify it's gone or in deleting state
     const checkRes = await app.inject({

@@ -205,6 +205,7 @@ export const internalCollections: Record<
     $collection: ID.custom(Database.METADATA),
     $id: ID.custom('schedules'),
     name: 'schedules',
+
     attributes: [
       {
         $id: ID.custom('resourceType'),

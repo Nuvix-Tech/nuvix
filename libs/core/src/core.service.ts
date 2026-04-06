@@ -16,6 +16,7 @@ import { CountryResponse, Reader } from 'maxmind'
 import { Pool } from 'pg'
 import { Exception } from './extend/exception.js'
 import { StatsHelper } from './helpers/stats.helper.js'
+import { SchedulesHelper } from './helpers/schedules.helper.js'
 
 @Injectable()
 export class CoreService implements OnModuleDestroy {
@@ -67,7 +68,10 @@ export class CoreService implements OnModuleDestroy {
   private readonly dataSourceWithMainPool: DataSource | null = null
   private readonly dataSource: DataSource | null = null
 
-  constructor(private readonly statsHelper: StatsHelper) {
+  constructor(
+    private readonly statsHelper: StatsHelper,
+    private readonly schedulesHelper: SchedulesHelper,
+  ) {
     this.geoDb = this.createGeoDb()
     this.redisInstance = this.createRedisInstance()
     this.cache = this.createCache()
@@ -149,7 +153,9 @@ export class CoreService implements OnModuleDestroy {
         namespace: 'internal',
       })
       .setLogger(this.dbLogger())
-    return new Database(adapter, this.getCache())
+    const db = new Database(adapter, this.getCache())
+    this.schedulesHelper.connect(db)
+    return db
   }
 
   private createDatabase() {

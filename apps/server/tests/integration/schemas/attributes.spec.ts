@@ -29,9 +29,6 @@ describe('schemas/collections/attributes (integration)', () => {
       payload: JSON.stringify(schemaDto),
     })
 
-    // Wait for schema creation
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
     // Create a collection within the schema
     const collectionDto = buildCreateCollectionDTO()
     testCollectionId = collectionDto.collectionId
@@ -43,37 +40,6 @@ describe('schemas/collections/attributes (integration)', () => {
       payload: JSON.stringify(collectionDto),
     })
   })
-
-  const waitForAttribute = async (
-    key: string,
-    status: 'available' | 'stuck' = 'available',
-  ) => {
-    let attempts = 0
-    while (attempts < 20) {
-      const res = await app.inject({
-        method: 'GET',
-        url: `/v1/schemas/${testSchemaId}/collections/${testCollectionId}/attributes/${key}`,
-        headers: getApiKeyHeaders(),
-      })
-
-      if (res.statusCode === 200) {
-        const body = parseJson(res.payload)
-        if (body.status === 'available') {
-          return true
-        }
-        if (body.status === 'failed') {
-          throw new Error(`Attribute ${key} creation failed`)
-        }
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 500))
-      attempts++
-    }
-    if (status === 'available') {
-      console.warn(`Timeout waiting for attribute ${key} to be available`)
-    }
-    return false
-  }
 
   /**
    * ATTRIBUTE CREATION TESTS (High Effort)
@@ -93,14 +59,12 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 201)
     const body = parseJson(res.payload)
     expect(body.key).toBe(key)
     expect(body.type).toBe('string')
     expect(body.size).toBe(255)
     expect(body.required).toBe(false)
-
-    await waitForAttribute(key)
   })
 
   it('POST .../attributes/integer creates an integer attribute', async () => {
@@ -118,14 +82,12 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 201)
     const body = parseJson(res.payload)
     expect(body.key).toBe(key)
     expect(body.type).toBe('integer')
     expect(body.min).toBe(0)
     expect(body.max).toBe(100)
-
-    await waitForAttribute(key)
   })
 
   it('POST .../attributes/boolean creates a boolean attribute', async () => {
@@ -140,12 +102,10 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 201)
     const body = parseJson(res.payload)
     expect(body.key).toBe(key)
     expect(body.type).toBe('boolean')
-
-    await waitForAttribute(key)
   })
 
   it('POST .../attributes/email creates an email attribute', async () => {
@@ -160,12 +120,10 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 201)
     const body = parseJson(res.payload)
     expect(body.key).toBe(key)
     expect(body.format).toBe('email')
-
-    await waitForAttribute(key)
   })
 
   it('POST .../attributes/url creates a url attribute', async () => {
@@ -180,12 +138,10 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 201)
     const body = parseJson(res.payload)
     expect(body.key).toBe(key)
     expect(body.format).toBe('url')
-
-    await waitForAttribute(key)
   })
 
   it('POST .../attributes/ip creates an ip attribute', async () => {
@@ -200,12 +156,10 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 201)
     const body = parseJson(res.payload)
     expect(body.key).toBe(key)
     expect(body.format).toBe('ip')
-
-    await waitForAttribute(key)
   })
 
   it('POST .../attributes/enum creates an enum attribute', async () => {
@@ -223,13 +177,11 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 201)
     const body = parseJson(res.payload)
     expect(body.key).toBe(key)
     expect(body.format).toBe('enum')
     expect(body.elements).toEqual(['one', 'two', 'three'])
-
-    await waitForAttribute(key)
   })
 
   /**
@@ -297,8 +249,6 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    await waitForAttribute(key)
-
     const res = await app.inject({
       method: 'GET',
       url: `/v1/schemas/${testSchemaId}/collections/${testCollectionId}/attributes/${key}`,
@@ -329,8 +279,6 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    await waitForAttribute(key)
-
     const res = await app.inject({
       method: 'PATCH',
       url: `/v1/schemas/${testSchemaId}/collections/${testCollectionId}/attributes/string/${key}`,
@@ -352,7 +300,7 @@ describe('schemas/collections/attributes (integration)', () => {
    * ATTRIBUTE DELETION
    */
 
-  it('DELETE .../attributes/:key returns 202/204 and deletes attribute', async () => {
+  it('DELETE .../attributes/:key returns 204 and deletes attribute', async () => {
     // Create a dedicated attribute for deletion testing
     const key = 'attr_string_delete'
     await app.inject({
@@ -367,16 +315,13 @@ describe('schemas/collections/attributes (integration)', () => {
       }),
     })
 
-    await waitForAttribute(key)
-
     const res = await app.inject({
       method: 'DELETE',
       url: `/v1/schemas/${testSchemaId}/collections/${testCollectionId}/attributes/${key}`,
       headers: getApiKeyHeaders(),
     })
 
-    // Fixed: Expect 202 (Accepted) or 204 (No Content)
-    expect([202, 204]).toContain(res.statusCode)
+    assertStatusCode(res, 204)
 
     // Verify gone
     const checkRes = await app.inject({

@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker'
 import { ID } from '@nuvix/db'
-import { CreateAccountDTO } from 'apps/server/src/account/DTO/account.dto'
+import { CreateAccountDTO } from '@/server/account/DTO/account.dto'
 
 export function buildCreateAccountDTO(
   overrides: Partial<CreateAccountDTO> = {},

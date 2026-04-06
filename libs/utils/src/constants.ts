@@ -327,3 +327,5 @@ export enum SessionType {
   JWT = 'jwt',
   PHONE = 'phone',
 }
+
+export const PRIVATE_COLLECTIONS: string[] = ['schedules', 'stats']

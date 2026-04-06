@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreateBucketDTO } from 'apps/server/src/storage/DTO/bucket.dto'
+import { CreateBucketDTO } from '@/server/storage/DTO/bucket.dto'
 
 export function buildCreateBucketDTO(
   overrides: Partial<CreateBucketDTO> = {},
