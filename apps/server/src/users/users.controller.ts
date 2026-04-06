@@ -321,7 +321,10 @@ export class UsersController {
   @Get(':userId/prefs', {
     summary: 'Get user preferences',
     scopes: 'users.read',
-    model: Models.PREFERENCES,
+    model: {
+      type: Models.PREFERENCES,
+      excludeExtraneousValues: false,
+    },
     sdk: {
       name: 'getPrefs',
       descMd: '/docs/references/users/get-user-prefs.md',
@@ -336,7 +339,10 @@ export class UsersController {
   @Patch(':userId/prefs', {
     summary: 'Update user preferences',
     scopes: 'users.write',
-    model: Models.PREFERENCES,
+    model: {
+      type: Models.PREFERENCES,
+      excludeExtraneousValues: false,
+    },
     sdk: {
       name: 'updatePrefs',
       descMd: '/docs/references/users/update-user-prefs.md',

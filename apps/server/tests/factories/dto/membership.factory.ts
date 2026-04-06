@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreateMembershipDTO } from 'apps/server/src/teams/memberships/DTO/membership.dto'
+import { CreateMembershipDTO } from '@/server/teams/memberships/DTO/membership.dto'
 
 export function buildCreateMembershipDTO(
   overrides: Partial<CreateMembershipDTO> = {},

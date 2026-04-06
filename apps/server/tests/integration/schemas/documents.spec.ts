@@ -33,7 +33,6 @@ describe('schemas/collections/documents (integration)', () => {
       headers: getApiKeyJsonHeaders(),
       payload: JSON.stringify(schemaDto),
     })
-    await Promise.resolve(new Promise(resolve => setTimeout(resolve, 2000)))
 
     // Create a collection within the schema
     const collectionDto = buildCreateCollectionDTO()
@@ -61,25 +60,6 @@ describe('schemas/collections/documents (integration)', () => {
       headers: getApiKeyJsonHeaders(),
       payload: JSON.stringify({ key: 'content', size: 10000, required: false }),
     })
-
-    // Wait for attributes to be propagated
-    let attempts = 0
-    while (attempts < 10) {
-      const res = await app.inject({
-        method: 'GET',
-        url: `/v1/schemas/${testSchemaId}/collections/${testCollectionId}/attributes`,
-        headers: getApiKeyHeaders(),
-      })
-      if (res.statusCode === 200) {
-        const body = parseJson(res.payload)
-        const attrs = body.data || []
-        if (attrs.some((a: any) => a.key === 'content')) {
-          break
-        }
-      }
-      await new Promise(resolve => setTimeout(resolve, 500))
-      attempts++
-    }
   })
 
   /**

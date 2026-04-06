@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreateUserDTO } from 'apps/server/src/users/DTO/user.dto'
+import { CreateUserDTO } from '@/server/users/DTO/user.dto'
 
 export function buildCreateUserDTO(
   overrides: Partial<CreateUserDTO> = {},

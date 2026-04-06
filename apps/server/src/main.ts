@@ -2,7 +2,7 @@
  * Main entry point for the Nuvix server application.
  **/
 import fs from 'node:fs/promises'
-import { ConsoleLogger, LOG_LEVELS, LogLevel } from '@nestjs/common'
+import { ConsoleLogger, LOG_LEVELS, LogLevel, Logger } from '@nestjs/common'
 import { NestFastifyApplication } from '@nestjs/platform-fastify'
 import { SwaggerModule } from '@nestjs/swagger'
 import {
@@ -21,6 +21,7 @@ configurePgTypeParsers()
 configureDbFiltersAndFormats()
 validateConfig()
 configureHandlebarsHelpers()
+Authorization.setDefaultStatus(false)
 Authorization.enableAsyncLocalStorage()
 
 async function bootstrap() {
@@ -33,6 +34,7 @@ async function bootstrap() {
     prefix: 'Nuvix',
     logLevels,
   })
+  Logger.overrideLogger(logger)
 
   const app = await NuvixFactory.create<NestFastifyApplication>(
     AppModule,

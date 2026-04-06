@@ -8,10 +8,10 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "bun ../../scripts/bun-build.ts",
+    "postbuild": "bun ../../scripts/gen-pkg.ts platform",
     "start": "bun build/main.js",
-    "dev": "tsup --watch 'src/**' --watch '../../libs/**/*.ts'",
-    "prebuild": "../../scripts/merge-pkg.js platform",
+    "dev": "bun ../../scripts/bun-build.ts --watch",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",
     "gen:metadata": "bun src/generate-metadata.ts"

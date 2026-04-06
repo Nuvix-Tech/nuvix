@@ -20,7 +20,7 @@ import {
 import { Models, RequestContext } from '@nuvix/core/helpers'
 import { ApiInterceptor, ResponseInterceptor } from '@nuvix/core/resolvers'
 import { type Doc } from '@nuvix/db'
-import { SessionType, type IListResponse, type IResponse } from '@nuvix/utils'
+import { type IListResponse, type IResponse, SessionType } from '@nuvix/utils'
 import type { SessionsDoc, TokensDoc, UsersDoc } from '@nuvix/utils/types'
 import {
   CreateEmailSessionDTO,

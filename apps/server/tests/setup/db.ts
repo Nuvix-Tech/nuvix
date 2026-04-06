@@ -21,10 +21,10 @@ import {
   Permission,
   Role,
 } from '@nuvix/db'
-import { ApiKey, configuration, Schemas } from '@nuvix/utils'
+import { ApiKey, configuration, PRIVATE_COLLECTIONS } from '@nuvix/utils'
 import collections from '@nuvix/utils/collections'
 import { setupDatabase } from '@nuvix/utils/database'
-import type { Keys, Projects, Teams } from '@nuvix/utils/types'
+import type { Keys, Projects, Teams, Users } from '@nuvix/utils/types'
 import { loadAuthConfig } from '../../../platform/src/projects/projects.service'
 
 export async function dbSetup(app: NestFastifyApplication) {
@@ -62,13 +62,15 @@ export async function dbSetup(app: NestFastifyApplication) {
         )
 
         const indexes = (collection.indexes ?? []).map(index => new Doc(index))
-
+        const isPrivateCollection = PRIVATE_COLLECTIONS.includes(collection.$id)
         await db.createCollection({
           id: collection.$id,
           attributes,
           indexes,
-          permissions: [Permission.create(Role.any())],
-          documentSecurity: true,
+          permissions: isPrivateCollection
+            ? undefined
+            : [Permission.create(Role.any())],
+          documentSecurity: !isPrivateCollection,
         })
       }
 
@@ -146,7 +148,7 @@ export async function dbSetup(app: NestFastifyApplication) {
           )) ?? undefined
 
         const userId = ID.unique()
-        const user = new Doc({
+        const user = Doc.from<Users>({
           $id: userId,
           $permissions: [
             Permission.read(Role.any()),

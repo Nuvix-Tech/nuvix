@@ -7,7 +7,6 @@ import type {
   FastifyContextConfig,
   FastifyRouteConfig,
 } from 'fastify';
-import type { Entities } from '@nuvix/db';
 import type { Entities as NuvixEntities } from './libs/utils/types';
 import type { RouteContext, ThrottleOptions } from './libs/utils/src';
 import type { AuditEventType } from './libs/core/src/decorators';
@@ -37,7 +36,7 @@ declare module 'fastify' {
     context: RequestContext;
     // Allow storing hooks arguments and other arbitrary properties
     hooks_args: Record<string, any>;
-    requestSize?: ()=> number;
+    requestSize?: () => number;
     rate_limit?: {
       limit: number;
       remaining: number;

@@ -1,6 +1,8 @@
 import * as path from 'node:path'
 import { Logger } from '@nestjs/common'
 import { PROJECT_ROOT } from './constants'
+import { env } from './helpers'
+
 type CookieSameSite = 'none' | 'lax' | 'strict'
 
 const BYTES = {
@@ -40,39 +42,7 @@ const DEFAULT_HEADERS = [
   'x-fallback-cookies',
 ] as const
 
-const env = {
-  get: (key: string, fallback = ''): string => process.env[key] ?? fallback,
-
-  getRequired: (key: string): string | undefined => process.env[key],
-
-  bool: (key: string, fallback = false): boolean => {
-    const val = process.env[key]?.toLowerCase()
-    if (val === undefined) return fallback
-    return val === 'true' || val === '1' || val === 'yes'
-  },
-
-  int: (key: string, fallback: number): number => {
-    const val = process.env[key]
-    if (!val) return fallback
-    const parsed = Number.parseInt(val, 10)
-    return Number.isNaN(parsed) ? fallback : parsed
-  },
-
-  list: (key: string, fallback: string[] = []): string[] => {
-    const val = process.env[key]
-    if (!val) return fallback
-    return val
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
-  },
-
-  is: (key: string, value: string): boolean => process.env[key] === value,
-
-  isNot: (key: string, value: string): boolean => process.env[key] !== value,
-}
-
-const paths = {
+export const paths = {
   root: PROJECT_ROOT,
 
   fromRoot: (...segments: string[]) => path.join(PROJECT_ROOT, ...segments),
@@ -91,6 +61,7 @@ const createConfig = () => {
       color: '#ff751f',
       userAgent: 'Nuvix-Server v%s. Please report abuse at %s',
       projectId: env.get('NUVIX_PROJECT_ID', 'default'),
+      region: env.get('NUVIX_REGION', 'local'),
 
       // URLs & Hosts
       host: env.get('NUVIX_HOST', 'localhost'),
@@ -474,7 +445,7 @@ const validateConfig = (
     if (!result.valid) {
       Logger.error(
         `\n Configuration validation failed with ${result.errors.length} error(s).\n` +
-          `   Fix the above issues and restart.\n`,
+          '   Fix the above issues and restart.\n',
       )
     } else if (result.warnings.length > 0) {
       Logger.warn(
@@ -494,5 +465,4 @@ const validateConfig = (
 
 export type NuvixConfig = ReturnType<typeof createConfig>
 export const configuration = createConfig()
-export { createConfig as nxconfig }
-export { validateConfig, ValidationResult }
+export { createConfig as nxconfig, type ValidationResult, validateConfig }

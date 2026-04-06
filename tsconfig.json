@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "types": ["vitest/globals"],
+    "types": ["vitest/globals", "bun"],
     /* === Module System === */
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -25,11 +25,12 @@
     // "noPropertyAccessFromIndexSignature": true,
     "stripInternal": true,
     /* === Performance === */
-    "incremental": false,
+    "incremental": true,
     "skipLibCheck": true,
     /* === Paths === */
-    "baseUrl": "./",
     "paths": {
+      "@/server/*": ["./apps/server/src/*"],
+      "@/platform/*": ["./apps/platform/src/*"],
       "@nuvix/utils": ["./libs/utils/src"],
       "@nuvix/utils/*": ["./libs/utils/src/*"],
       "@nuvix/utils/types": ["./libs/utils/types"],

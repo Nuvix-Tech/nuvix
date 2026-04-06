@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
+import { Database, Doc, DuplicateException } from '@nuvix/db'
 import { DataSource } from '@nuvix/pg'
 import { Schema, Schemas, SchemaType } from '@nuvix/utils'
-import { CreateSchemaDTO } from './DTO/create-schema.dto'
-import { CoreService } from '@nuvix/core/core.service'
-import { Database, Doc, DuplicateException } from '@nuvix/db'
 import collections from '@nuvix/utils/collections'
+import { CreateSchemaDTO } from './DTO/create-schema.dto'
 
 @Injectable()
 export class DatabaseService {
@@ -166,5 +166,49 @@ export class DatabaseService {
       .then(rows => rows[0])
 
     return schema
+  }
+
+  /**
+   * Update a schema's description
+   */
+  public async updateSchema(name: string, description?: string) {
+    const schema = await this.dataSource
+      .table<Schema>('schemas')
+      .withSchema(Schemas.System)
+      .where('name', name)
+      .first()
+
+    if (!schema) {
+      throw new Exception(Exception.SCHEMA_NOT_FOUND)
+    }
+
+    await this.dataSource
+      .table('schemas')
+      .withSchema(Schemas.System)
+      .where('name', name)
+      .update({ description: description ?? null })
+
+    return this.getSchema(name)
+  }
+
+  /**
+   * Delete a schema
+   */
+  public async deleteSchema(name: string) {
+    const schema = await this.dataSource
+      .table<Schema>('schemas')
+      .withSchema(Schemas.System)
+      .where('name', name)
+      .first()
+
+    if (!schema) {
+      throw new Exception(Exception.SCHEMA_NOT_FOUND)
+    }
+
+    // we don't need to delete the schema from the schemas table
+    // because of `system.cleanup_schema` function that will be called by postgreSQL ddl trigger
+    await this.dataSource.transaction(tx =>
+      tx.query(tx.$client, tx.raw('drop schema if exists ?', [name]).toSQL()),
+    )
   }
 }

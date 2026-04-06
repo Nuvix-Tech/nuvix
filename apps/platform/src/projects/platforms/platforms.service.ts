@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common'
 import { CoreService } from '@nuvix/core'
 import { Exception } from '@nuvix/core/extend/exception'
+import { Hostname } from '@nuvix/core/validators/network/hostname'
 import { Database, Doc, ID, Permission, Query, Role } from '@nuvix/db'
 import { Platforms } from '@nuvix/utils/types'
 import { CreatePlatformDTO, UpdatePlatformDTO } from './DTO/platform.dto'
-import { Hostname } from '@nuvix/core/validators/network/hostname'
 
 @Injectable()
 export class PlatformsService {

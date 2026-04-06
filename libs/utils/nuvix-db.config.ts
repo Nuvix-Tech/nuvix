@@ -1,4 +1,4 @@
-import { NuvixDBConfig } from '@nuvix/db'
+import type { NuvixDBConfig } from '@nuvix/db'
 import collections from './src/collections'
 
 const config: NuvixDBConfig = {
@@ -9,6 +9,11 @@ const config: NuvixDBConfig = {
     ...collections.bucket,
     ...collections.internal,
   })
+    .map((c: any) => ({
+      ...c,
+      documentSecurity: false,
+      enabled: true,
+    }))
     .filter(Boolean)
     .filter(c => c.attributes?.length > 0),
 

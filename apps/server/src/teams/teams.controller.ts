@@ -125,7 +125,10 @@ export class TeamsController {
   @Get(':teamId/prefs', {
     summary: 'Get team preferences',
     scopes: ['teams.read'],
-    model: Models.PREFERENCES,
+    model: {
+      type: Models.PREFERENCES,
+      excludeExtraneousValues: false,
+    },
     sdk: {
       name: 'getPrefs',
       descMd: '/docs/references/teams/get-team-prefs.md',
@@ -140,7 +143,10 @@ export class TeamsController {
   @Put(':teamId/prefs', {
     summary: 'Update preferences',
     scopes: ['teams.write'],
-    model: Models.PREFERENCES,
+    model: {
+      type: Models.PREFERENCES,
+      excludeExtraneousValues: false,
+    },
     auth: [AuthType.SESSION, AuthType.JWT],
     audit: {
       key: 'teams.update',

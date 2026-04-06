@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreateCollectionDTO } from 'apps/server/src/schemas/collections/DTO/collection.dto'
+import { CreateCollectionDTO } from '@/server/schemas/collections/DTO/collection.dto'
 
 export function buildCreateCollectionDTO(
   overrides: Partial<CreateCollectionDTO> = {},

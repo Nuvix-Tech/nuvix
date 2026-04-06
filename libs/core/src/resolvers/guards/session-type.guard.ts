@@ -1,9 +1,9 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common'
+import { Reflector } from '@nestjs/core'
+import { authMethods } from '@nuvix/core/config'
+import { AllowedSessionType } from '@nuvix/core/decorators'
 import { SessionType } from '@nuvix/utils'
 import { Exception } from '../../extend/exception'
-import { authMethods } from '@nuvix/core/config'
-import { Reflector } from '@nestjs/core'
-import { AllowedSessionType } from '@nuvix/core/decorators'
 
 @Injectable()
 export class SessionTypeGuard implements CanActivate {

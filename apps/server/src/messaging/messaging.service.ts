@@ -1,11 +1,13 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { JwtService } from '@nestjs/jwt'
 import { CoreService } from '@nuvix/core'
 import { Exception } from '@nuvix/core/extend/exception'
 import { MessagingJob, MessagingJobData } from '@nuvix/core/resolvers'
 import { Database, Doc, ID, Query } from '@nuvix/db'
 import {
+  AppEvents,
   configuration,
   MessageStatus,
   MessageType,
@@ -33,6 +35,7 @@ export class MessagingService {
   constructor(
     private readonly coreService: CoreService,
     private readonly jwtService: JwtService,
+    private readonly eventEmitter: EventEmitter2,
     @InjectQueue(QueueFor.MESSAGING)
     private readonly queue: Queue<MessagingJobData, any, MessagingJob>,
   ) {
@@ -161,6 +164,7 @@ export class MessagingService {
           resourceUpdatedAt: new Date().toISOString(),
           schedule: scheduledAt,
           active: true,
+          region: configuration.app.region,
         })
 
         const createdSchedule = await this.internalDb.createDocument(
@@ -168,6 +172,7 @@ export class MessagingService {
           schedule,
         )
         createdMessage.set('scheduleId', createdSchedule.getId())
+        createdMessage.set('scheduleInternalId', createdSchedule.getSequence())
         await this.db.updateDocument(
           'messages',
           createdMessage.getId(),
@@ -176,6 +181,13 @@ export class MessagingService {
         break
       }
     }
+
+    this.eventEmitter.emit(AppEvents.MESSAGES_CREATE, {
+      messageId: createdMessage.getId(),
+      payload: {
+        data: createdMessage,
+      },
+    })
 
     return createdMessage
   }
@@ -257,14 +269,14 @@ export class MessagingService {
         })
         break
       case MessageStatus.SCHEDULED: {
-        const schedule = new Doc<Schedules>({
+        const schedule = Doc.from<Schedules>({
           resourceType: ScheduleResourceType.MESSAGE,
           resourceId: createdMessage.getId(),
           resourceInternalId: createdMessage.getSequence(),
           resourceUpdatedAt: new Date().toISOString(),
-
-          schedule: scheduledAt,
+          schedule: scheduledAt ?? undefined,
           active: true,
+          region: configuration.app.region,
         })
 
         const createdSchedule = await this.internalDb.createDocument(
@@ -272,6 +284,7 @@ export class MessagingService {
           schedule,
         )
         createdMessage.set('scheduleId', createdSchedule.getId())
+        createdMessage.set('scheduleInternalId', createdSchedule.getSequence())
         await this.db.updateDocument(
           'messages',
           createdMessage.getId(),
@@ -280,6 +293,13 @@ export class MessagingService {
         break
       }
     }
+
+    this.eventEmitter.emit(AppEvents.MESSAGES_CREATE, {
+      messageId: createdMessage.getId(),
+      payload: {
+        data: createdMessage,
+      },
+    })
 
     return createdMessage
   }
@@ -469,13 +489,13 @@ export class MessagingService {
         })
         break
       case MessageStatus.SCHEDULED: {
-        const schedule = new Doc({
+        const schedule = Doc.from<Schedules>({
           resourceType: ScheduleResourceType.MESSAGE,
           resourceId: createdMessage.getId(),
           resourceInternalId: createdMessage.getSequence(),
           resourceUpdatedAt: new Date().toISOString(),
-
-          schedule: scheduledAt,
+          region: configuration.app.region,
+          schedule: scheduledAt ?? undefined,
           active: true,
         })
 
@@ -484,6 +504,7 @@ export class MessagingService {
           schedule,
         )
         createdMessage.set('scheduleId', createdSchedule.getId())
+        createdMessage.set('scheduleInternalId', createdSchedule.getSequence())
         await this.db.updateDocument(
           'messages',
           createdMessage.getId(),
@@ -492,6 +513,13 @@ export class MessagingService {
         break
       }
     }
+
+    this.eventEmitter.emit(AppEvents.MESSAGES_CREATE, {
+      messageId: createdMessage.getId(),
+      payload: {
+        data: createdMessage,
+      },
+    })
 
     return createdMessage
   }
@@ -617,12 +645,12 @@ export class MessagingService {
     }
 
     if (!currentScheduledAt && input.scheduledAt) {
-      const schedule = new Doc<Schedules>({
+      const schedule = Doc.from<Schedules>({
         resourceType: 'message',
         resourceId: message.getId(),
         resourceInternalId: message.getSequence(),
         resourceUpdatedAt: new Date().toISOString(),
-
+        region: configuration.app.region,
         schedule: input.scheduledAt,
         active: status === MessageStatus.SCHEDULED,
       })
@@ -632,6 +660,7 @@ export class MessagingService {
         schedule,
       )
       message.set('scheduleId', createdSchedule.getId())
+      message.set('scheduleInternalId', createdSchedule.getSequence())
     }
 
     if (currentScheduledAt) {
@@ -741,6 +770,13 @@ export class MessagingService {
       })
     }
 
+    this.eventEmitter.emit(AppEvents.MESSAGES_UPDATE, {
+      messageId: updatedMessage.getId(),
+      payload: {
+        data: updatedMessage,
+      },
+    })
+
     return updatedMessage
   }
 
@@ -803,12 +839,12 @@ export class MessagingService {
     }
 
     if (!currentScheduledAt && input.scheduledAt) {
-      const schedule = new Doc<Schedules>({
-        resourceType: 'message',
+      const schedule = Doc.from<Schedules>({
+        resourceType: ScheduleResourceType.MESSAGE,
         resourceId: message.getId(),
         resourceInternalId: message.getSequence(),
         resourceUpdatedAt: new Date().toISOString(),
-
+        region: configuration.app.region,
         schedule: input.scheduledAt,
         active: status === MessageStatus.SCHEDULED,
       })
@@ -818,6 +854,7 @@ export class MessagingService {
         schedule,
       )
       message.set('scheduleId', createdSchedule.getId())
+      message.set('scheduleInternalId', createdSchedule.getSequence())
     }
 
     if (currentScheduledAt) {
@@ -886,6 +923,13 @@ export class MessagingService {
       })
     }
 
+    this.eventEmitter.emit(AppEvents.MESSAGES_UPDATE, {
+      messageId: updatedMessage.getId(),
+      payload: {
+        data: updatedMessage,
+      },
+    })
+
     return updatedMessage
   }
 
@@ -948,12 +992,12 @@ export class MessagingService {
     }
 
     if (!currentScheduledAt && input.scheduledAt) {
-      const schedule = new Doc<Schedules>({
-        resourceType: 'message',
+      const schedule = Doc.from<Schedules>({
+        resourceType: ScheduleResourceType.MESSAGE,
         resourceId: message.getId(),
         resourceInternalId: message.getSequence(),
         resourceUpdatedAt: new Date().toISOString(),
-
+        region: configuration.app.region,
         schedule: input.scheduledAt,
         active: status === MessageStatus.SCHEDULED,
       })
@@ -963,6 +1007,7 @@ export class MessagingService {
         schedule,
       )
       message.set('scheduleId', createdSchedule.getId())
+      message.set('scheduleInternalId', createdSchedule.getSequence())
     }
 
     // Handle schedule updates
@@ -1129,6 +1174,13 @@ export class MessagingService {
       })
     }
 
+    this.eventEmitter.emit(AppEvents.MESSAGES_UPDATE, {
+      messageId: updatedMessage.getId(),
+      payload: {
+        data: updatedMessage,
+      },
+    })
+
     return updatedMessage
   }
 
@@ -1168,5 +1220,9 @@ export class MessagingService {
     }
 
     await this.db.deleteDocument('messages', message.getId())
+
+    this.eventEmitter.emit(AppEvents.MESSAGES_DELETE, {
+      messageId,
+    })
   }
 }

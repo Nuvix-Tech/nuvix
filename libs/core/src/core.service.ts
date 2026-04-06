@@ -16,6 +16,7 @@ import { CountryResponse, Reader } from 'maxmind'
 import { Pool } from 'pg'
 import { Exception } from './extend/exception.js'
 import { StatsHelper } from './helpers/stats.helper.js'
+import { SchedulesHelper } from './helpers/schedules.helper.js'
 
 @Injectable()
 export class CoreService implements OnModuleDestroy {
@@ -26,11 +27,11 @@ export class CoreService implements OnModuleDestroy {
   private static _isConsole = false
 
   public static setIsConsole(isConsole: boolean) {
-    this._isConsole = isConsole
+    CoreService._isConsole = isConsole
   }
 
   public static isConsole() {
-    return this._isConsole
+    return CoreService._isConsole
   }
 
   public isConsole() {
@@ -67,7 +68,10 @@ export class CoreService implements OnModuleDestroy {
   private readonly dataSourceWithMainPool: DataSource | null = null
   private readonly dataSource: DataSource | null = null
 
-  constructor(private readonly statsHelper: StatsHelper) {
+  constructor(
+    private readonly statsHelper: StatsHelper,
+    private readonly schedulesHelper: SchedulesHelper,
+  ) {
     this.geoDb = this.createGeoDb()
     this.redisInstance = this.createRedisInstance()
     this.cache = this.createCache()
@@ -88,7 +92,7 @@ export class CoreService implements OnModuleDestroy {
 
   private dbLogger(): DbLogger {
     return new DbLogger({
-      level: 'error',
+      level: configuration.app.isProduction ? 'error' : undefined,
       enabled: configuration.logLevels.includes('error'),
     })
   }
@@ -149,7 +153,9 @@ export class CoreService implements OnModuleDestroy {
         namespace: 'internal',
       })
       .setLogger(this.dbLogger())
-    return new Database(adapter, this.getCache())
+    const db = new Database(adapter, this.getCache())
+    this.schedulesHelper.connect(db)
+    return db
   }
 
   private createDatabase() {
@@ -331,6 +337,18 @@ export class CoreService implements OnModuleDestroy {
       username: redisConfig.user,
       tls: secure ? { rejectUnauthorized: false } : undefined,
       maxRetriesPerRequest: 10,
+    })
+
+    connection.on('error', e => {
+      if (
+        'code' in e &&
+        e.code === 'ECONNREFUSED' &&
+        'syscall' in e &&
+        e.syscall === 'connect'
+      ) {
+        this.logger.error(`Redis connection failed: ${e.code}`)
+        process.exit(1)
+      } else this.logger.error(e)
     })
 
     return connection

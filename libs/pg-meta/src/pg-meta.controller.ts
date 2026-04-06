@@ -11,6 +11,7 @@ import {
   UseInterceptors,
   VERSION_NEUTRAL,
 } from '@nestjs/common'
+import { CoreService } from '@nuvix/core/core.service'
 import { Auth, AuthType } from '@nuvix/core/decorators'
 import { Exception } from '@nuvix/core/extend/exception'
 import { ParseComaStringPipe } from '@nuvix/core/pipes'
@@ -73,7 +74,6 @@ import * as Parser from './lib/Parser'
 import { PgMetaService } from './pg-meta.service'
 import { apply as applyGoTemplate } from './templates/go'
 import { apply as applySwiftTemplate } from './templates/swift'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Controller({ path: 'database', version: ['1', VERSION_NEUTRAL] })
 @UseInterceptors(ConsoleInterceptor)

@@ -164,7 +164,7 @@ export class CollectionsHelper {
             }
             relatedAttribute = await db.getDocument(
               SchemaMeta.attributes,
-              this.getRelatedAttrId(
+              CollectionsHelper.getRelatedAttrId(
                 relatedCollection.getSequence(),
                 options.twoWayKey,
               ),
@@ -223,7 +223,7 @@ export class CollectionsHelper {
             }
 
             if (exists) {
-              await this.deleteIndex({
+              await CollectionsHelper.deleteIndex({
                 db,
                 collection,
                 index,
@@ -359,7 +359,7 @@ export class CollectionsHelper {
         qb.equal('collectionInternalId', collectionInternalId),
       )
 
-      await this.deleteAuditLogsByResource(
+      await CollectionsHelper.deleteAuditLogsByResource(
         `/collection/${collectionId}`,
         coreDb,
       )
@@ -370,7 +370,7 @@ export class CollectionsHelper {
     resource: string,
     db: Database,
   ): Promise<void> {
-    await this.deleteByGroup(
+    await CollectionsHelper.deleteByGroup(
       Audit.COLLECTION,
       [Query.equal('resource', [resource])],
       db,
@@ -400,7 +400,9 @@ export class CollectionsHelper {
 
       sum = results.length
 
-      this.logger.log(`Deleting chunk #${chunk}. Found ${sum} documents`)
+      CollectionsHelper.logger.log(
+        `Deleting chunk #${chunk}. Found ${sum} documents`,
+      )
 
       for (const document of results) {
         if (
@@ -409,13 +411,17 @@ export class CollectionsHelper {
             document.getId(),
           )
         ) {
-          this.logger.log(`Deleted document "${document.getId()}" successfully`)
+          CollectionsHelper.logger.log(
+            `Deleted document "${document.getId()}" successfully`,
+          )
 
           if (callback) {
             await callback(document)
           }
         } else {
-          this.logger.warn(`Failed to delete document: ${document.getId()}`)
+          CollectionsHelper.logger.warn(
+            `Failed to delete document: ${document.getId()}`,
+          )
         }
         count++
       }
@@ -423,7 +429,7 @@ export class CollectionsHelper {
 
     const executionEnd = Date.now()
 
-    this.logger.log(
+    CollectionsHelper.logger.log(
       `Deleted ${count} documents by group in ${(executionEnd - executionStart) / 1000} seconds`,
     )
   }

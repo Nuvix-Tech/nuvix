@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import { RequestContext } from '@nuvix/core/helpers'
 import type { DeletesJobData } from '@nuvix/core/resolvers'
@@ -16,7 +17,6 @@ import { DeleteType, MessageType, QueueFor } from '@nuvix/utils'
 import type { ProvidersDoc, Targets, UsersDoc } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import { CreatePushTargetDTO, UpdatePushTargetDTO } from './DTO/target.dto'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class TargetsService {

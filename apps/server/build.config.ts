@@ -1,5 +1,4 @@
-import { copy } from 'esbuild-plugin-copy'
-import { defineConfig } from 'tsup'
+import { defineConfig } from '../../scripts/bun-build-config'
 
 function printStylizedNuvix() {
   const logo = `
@@ -7,7 +6,7 @@ function printStylizedNuvix() {
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*+=========+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*+=========+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@========================@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@@@@@@@@@@@@@@@@+===============================@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@@@@@@@@@@@@@=====================================+@@@@@@@@@@@@@@@@@@@@@
@@ -48,7 +47,7 @@ function printStylizedNuvix() {
 }
 
 export default defineConfig(options => {
-  const isDev = !!options.watch
+  const isDev = options.watch
   if (!isDev) {
     printStylizedNuvix()
   }
@@ -64,58 +63,40 @@ export default defineConfig(options => {
     splitting: false,
     minify: !isDev,
     target: 'es2024',
-    skipNodeModulesBundle: true,
+    skipNodeModulesBundle: isDev,
+    external: [
+      '@nestjs/platform-express',
+      'class-transformer/storage',
+      '@nestjs/microservices',
+      'sharp',
+      '@resvg/resvg-js',
+    ],
     bundle: true,
     shims: false,
     tsconfig: './tsconfig.app.json',
-    onSuccess: !isDev ? undefined : 'sleep 1 && bun --watch dist/main.js',
-    banner({ format }) {
-      const envPaths: string[] = isDev
-        ? ['../../.env', '../../.env.local']
-        : ['.env', '.env.server']
-      return {
-        js:
-          format === 'esm'
-            ? `import { config as __nxconfig } from 'dotenv';
-import {default as __nxpath}  from 'path';
-__nxconfig({
-  path: [${envPaths.map(p => `__nxpath.resolve(process.cwd(), '${p}')`).join(',\n\t')}],
-  override: true,
-});`
-            : `const __nxpath = require('path');
-require('dotenv').config({
-    path: [${envPaths.map(p => `__nxpath.resolve(process.cwd(), '${p}')`).join(',\n\t')}],
-    override: true,
-});`,
-      }
-    },
-    esbuildPlugins: isDev
-      ? []
-      : [
-          copy({
-            assets: [
-              {
-                from: ['../../assets/**/*'],
-                to: ['../assets'],
-              },
-              {
-                from: ['../../docs/references/**/*'],
-                to: ['../docs/references'],
-              },
-              {
-                from: ['../../public/**/*'],
-                to: ['../public'],
-              },
-              {
-                from: ['../../LICENSE', '../../.env.example'],
-                to: ['../'],
-              },
-              {
-                from: ['../../README.md'],
-                to: ['../README.md'],
-              },
-            ],
-          }),
-        ],
+    copy: !isDev
+      ? [
+          {
+            from: ['../../assets/*'],
+            to: ['../assets'],
+          },
+          {
+            from: ['../../docs/references/*'],
+            to: ['../docs/references'],
+          },
+          {
+            from: ['../../public/*'],
+            to: ['../public'],
+          },
+          {
+            from: ['../../LICENSE', '../../.env.example'],
+            to: ['../'],
+          },
+          {
+            from: ['../../README.md'],
+            to: ['../README.md'],
+          },
+        ]
+      : undefined,
   }
 })

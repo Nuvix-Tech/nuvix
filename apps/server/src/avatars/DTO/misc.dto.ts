@@ -1,4 +1,9 @@
 import {
+  ArrayToLastElement,
+  TransformStringToBoolean,
+  TryTransformTo,
+} from '@nuvix/core/validators'
+import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -8,11 +13,6 @@ import {
   Max,
   Min,
 } from 'class-validator'
-import {
-  ArrayToLastElement,
-  TransformStringToBoolean,
-  TryTransformTo,
-} from '@nuvix/core/validators'
 
 export class CreditCardParamDTO {
   /**

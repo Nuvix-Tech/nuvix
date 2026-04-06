@@ -1,6 +1,6 @@
 import { AttributeType, OnDelete, RelationSide, RelationType } from '@nuvix/db'
 import { AttributeFormat } from '@nuvix/utils'
-import { Attributes } from '@nuvix/utils/types'
+import type { Attributes } from '@nuvix/utils/types'
 import { Exclude, Expose, Transform } from 'class-transformer'
 import { AttributeModel } from './Attribute.model'
 

@@ -8,15 +8,15 @@ import {
   SessionProvider,
   TokenType,
 } from '@nuvix/utils'
-import {
+import type {
   MembershipsDoc,
   SessionsDoc,
   TokensDoc,
   UsersDoc,
 } from '@nuvix/utils/types'
 import { hash, verify } from 'argon2'
-import { Exception } from '../extend/exception'
 import { CoreService } from '../core.service'
+import { Exception } from '../extend/exception'
 
 const ALGO = 'aes-256-gcm'
 const IV_LENGTH = 12

@@ -1,6 +1,6 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify'
 import { ID } from '@nuvix/db'
-import { CreateUserDTO } from 'apps/server/src/users/DTO/user.dto'
+import { CreateUserDTO } from '@/server/users/DTO/user.dto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { buildCreateSmtpProviderDTO } from '../../factories/dto/provider.factory'
 import { buildCreateSubscriberDTO } from '../../factories/dto/subscriber.factory'

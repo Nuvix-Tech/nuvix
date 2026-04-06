@@ -1,5 +1,5 @@
 // This file is auto-generated. Do not edit manually.
-// Generated on: 2026-02-25T16:33:41.849Z
+// Generated on: 2026-04-03T06:16:52.599Z
 
 import { Doc, IEntity } from '@nuvix/db'
 
@@ -45,12 +45,20 @@ export interface Users extends IEntity {
    * @optional
    * @default "argon2"
    */
-  hash?: string
+  hash?: string | 'argon2'
   /**
    * @optional
    * @default {"type":"argon2","hashLength":32,"timeCost":3,"memoryCost":65536,"parallelism":4}
    */
-  hashOptions?: Record<string, any>
+  hashOptions?:
+    | Record<string, any>
+    | {
+        type: 'argon2'
+        hashLength: 32
+        timeCost: 3
+        memoryCost: 65536
+        parallelism: 4
+      }
   /**
    * @optional
    * @default null
@@ -158,14 +166,14 @@ export interface Teams extends IEntity {
 }
 
 export interface Tokens extends IEntity {
-  /** @default null */
+  /** @required */
   userInternalId: number
   /**
    * @optional
    * @default null
    */
   userId?: string
-  /** @default null */
+  /** @required */
   type: number
   /**
    * @optional
@@ -209,7 +217,7 @@ export interface Authenticators extends IEntity {
    * @optional
    * @default false
    */
-  verified?: boolean
+  verified?: boolean | false
   /**
    * @optional
    * @default []
@@ -251,7 +259,7 @@ export interface Challenges extends IEntity {
 }
 
 export interface Sessions extends IEntity {
-  /** @default null */
+  /** @required */
   userInternalId: number
   /**
    * @optional
@@ -366,7 +374,7 @@ export interface Sessions extends IEntity {
    * @default []
    */
   factors?: string[]
-  /** @default null */
+  /** @required */
   expire: string | Date
   /**
    * @optional
@@ -424,9 +432,9 @@ export interface Identities extends IEntity {
 }
 
 export interface Targets extends IEntity {
-  /** @default null */
+  /** @required */
   userId: string
-  /** @default null */
+  /** @required */
   userInternalId: number
   /**
    * @optional
@@ -438,7 +446,7 @@ export interface Targets extends IEntity {
    * @default null
    */
   sessionInternalId?: number
-  /** @default null */
+  /** @required */
   providerType: string
   /**
    * @optional
@@ -450,7 +458,7 @@ export interface Targets extends IEntity {
    * @default null
    */
   providerInternalId?: number
-  /** @default null */
+  /** @required */
   identifier: string
   /**
    * @optional
@@ -461,18 +469,18 @@ export interface Targets extends IEntity {
    * @optional
    * @default false
    */
-  expired?: boolean
+  expired?: boolean | false
 }
 
 export interface Memberships extends IEntity {
-  /** @default null */
+  /** @required */
   userInternalId: number
   /**
    * @optional
    * @default null
    */
   userId?: string
-  /** @default null */
+  /** @required */
   teamInternalId: number
   /**
    * @optional
@@ -513,15 +521,24 @@ export interface Memberships extends IEntity {
 }
 
 export interface Buckets extends IEntity {
+  /** @required */
   enabled: boolean
+  /** @required */
   name: string
   /** @optional */
   fileSecurity?: boolean
+  /** @required */
   maximumFileSize: number
-  /** @array */
+  /**
+   * @array
+   * @required
+   */
   allowedFileExtensions: string[]
+  /** @required */
   compression: string
+  /** @required */
   encryption: boolean
+  /** @required */
   antivirus: boolean
   /**
    * @optional
@@ -531,31 +548,31 @@ export interface Buckets extends IEntity {
 }
 
 export interface Stats extends IEntity {
-  /** @default null */
+  /** @required */
   metric: string
-  /** @default null */
+  /** @required */
   region: string
-  /** @default null */
+  /** @required */
   value: number
   /**
    * @optional
    * @default null
    */
   time?: string | Date
-  /** @default null */
+  /** @required */
   period: string
 }
 
 export interface Providers extends IEntity {
-  /** @default null */
+  /** @required */
   name: string
-  /** @default null */
+  /** @required */
   provider: string
-  /** @default null */
+  /** @required */
   type: string
-  /** @default true */
+  /** @required */
   enabled: boolean
-  /** @default null */
+  /** @required */
   credentials: string
   /**
    * @optional
@@ -566,15 +583,15 @@ export interface Providers extends IEntity {
    * @optional
    * @default ""
    */
-  search?: string
+  search?: string | ''
 }
 
 export interface Messages extends IEntity {
-  /** @default null */
+  /** @required */
   providerType: string
-  /** @default "processing" */
+  /** @required */
   status: string
-  /** @default null */
+  /** @required */
   data: Record<string, any>
   /**
    * @array
@@ -621,16 +638,16 @@ export interface Messages extends IEntity {
    * @optional
    * @default 0
    */
-  deliveredTotal?: number
+  deliveredTotal?: number | 0
   /**
    * @optional
    * @default ""
    */
-  search?: string
+  search?: string | ''
 }
 
 export interface Topics extends IEntity {
-  /** @default null */
+  /** @required */
   name: string
   /**
    * @array
@@ -642,17 +659,17 @@ export interface Topics extends IEntity {
    * @optional
    * @default 0
    */
-  emailTotal?: number
+  emailTotal?: number | 0
   /**
    * @optional
    * @default 0
    */
-  smsTotal?: number
+  smsTotal?: number | 0
   /**
    * @optional
    * @default 0
    */
-  pushTotal?: number
+  pushTotal?: number | 0
   /**
    * @optional
    * @default null
@@ -662,23 +679,23 @@ export interface Topics extends IEntity {
    * @optional
    * @default ""
    */
-  search?: string
+  search?: string | ''
 }
 
 export interface Subscribers extends IEntity {
-  /** @default null */
+  /** @required */
   targetId: string
-  /** @default null */
+  /** @required */
   targetInternalId: number
-  /** @default null */
+  /** @required */
   userId: string
-  /** @default null */
+  /** @required */
   userInternalId: number
-  /** @default null */
+  /** @required */
   topicId: string
-  /** @default null */
+  /** @required */
   topicInternalId: number
-  /** @default null */
+  /** @required */
   providerType: string
   /**
    * @optional
@@ -688,10 +705,11 @@ export interface Subscribers extends IEntity {
 }
 
 export interface Collections extends IEntity {
+  /** @required */
   name: string
-  /** @default null */
+  /** @required */
   enabled: boolean
-  /** @default null */
+  /** @required */
   documentSecurity: boolean
   /** @optional */
   attributes?: never
@@ -710,9 +728,9 @@ export interface Collections extends IEntity {
 }
 
 export interface Attributes extends IEntity {
-  /** @default null */
+  /** @required */
   collectionInternalId: number
-  /** @default null */
+  /** @required */
   collectionId: string
   /**
    * @optional
@@ -778,9 +796,9 @@ export interface Attributes extends IEntity {
 }
 
 export interface Indexes extends IEntity {
-  /** @default null */
+  /** @required */
   collectionInternalId: number
-  /** @default null */
+  /** @required */
   collectionId: string
   /**
    * @optional
@@ -822,7 +840,7 @@ export interface Files extends IEntity {
    * @default null
    */
   bucketId?: string
-  /** @default null */
+  /** @required */
   bucketInternalId: number
   /**
    * @optional
@@ -892,7 +910,7 @@ export interface Files extends IEntity {
 }
 
 export interface Projects extends IEntity {
-  /** @default null */
+  /** @required */
   teamInternalId: number
   /**
    * @optional
@@ -914,7 +932,7 @@ export interface Projects extends IEntity {
    * @default null
    */
   description?: string
-  /** @default null */
+  /** @required */
   database: string
   /**
    * @optional
@@ -935,17 +953,17 @@ export interface Projects extends IEntity {
    * @optional
    * @default true
    */
-  enabled?: boolean
+  enabled?: boolean | true
   /**
    * @optional
    * @default "pending"
    */
-  status?: string
+  status?: string | 'pending'
   /**
    * @optional
    * @default "production"
    */
-  environment?: string
+  environment?: string | 'production'
   /**
    * @optional
    * @default {}
@@ -1009,7 +1027,7 @@ export interface Schedules extends IEntity {
    * @default null
    */
   resourceType?: string
-  /** @default null */
+  /** @required */
   resourceInternalId: number
   /**
    * @optional
@@ -1041,12 +1059,12 @@ export interface Schedules extends IEntity {
    * @default null
    */
   active?: boolean
-  /** @default null */
+  /** @required */
   region: string
 }
 
 export interface Platforms extends IEntity {
-  /** @default null */
+  /** @required */
   projectInternalId: number
   /**
    * @optional
@@ -1058,7 +1076,7 @@ export interface Platforms extends IEntity {
    * @default null
    */
   type?: string
-  /** @default null */
+  /** @required */
   name: string
   /**
    * @optional
@@ -1078,21 +1096,21 @@ export interface Platforms extends IEntity {
 }
 
 export interface Keys extends IEntity {
-  /** @default null */
+  /** @required */
   projectInternalId: number
   /**
    * @optional
    * @default 0
    */
-  projectId?: string
-  /** @default null */
+  projectId?: string | 0
+  /** @required */
   name: string
   /**
    * @array
-   * @default null
+   * @required
    */
   scopes: string[]
-  /** @default null */
+  /** @required */
   secret: string
   /**
    * @optional
@@ -1106,22 +1124,22 @@ export interface Keys extends IEntity {
   accessedAt?: string | Date
   /**
    * @array
-   * @default null
+   * @required
    */
   sdks: string[]
 }
 
 export interface Webhooks extends IEntity {
-  /** @default null */
+  /** @required */
   projectInternalId: number
   /**
    * @optional
    * @default null
    */
   projectId?: string
-  /** @default null */
+  /** @required */
   name: string
-  /** @default null */
+  /** @required */
   url: string
   /**
    * @optional
@@ -1133,11 +1151,11 @@ export interface Webhooks extends IEntity {
    * @default null
    */
   httpPass?: string
-  /** @default null */
+  /** @required */
   security: boolean
   /**
    * @array
-   * @default null
+   * @required
    */
   events: string[]
   /**
@@ -1149,17 +1167,17 @@ export interface Webhooks extends IEntity {
    * @optional
    * @default true
    */
-  enabled?: boolean
+  enabled?: boolean | true
   /**
    * @optional
    * @default ""
    */
-  logs?: string
+  logs?: string | ''
   /**
    * @optional
    * @default 0
    */
-  attempts?: number
+  attempts?: number | 0
 }
 
 // Document Types

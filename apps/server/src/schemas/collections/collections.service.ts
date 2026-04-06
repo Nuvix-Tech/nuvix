@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { usageConfig } from '@nuvix/core/config'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
+import { CollectionsHelper } from '@nuvix/core/helpers'
 import { StatsQueue } from '@nuvix/core/resolvers'
 import {
   Authorization,
@@ -23,8 +25,6 @@ import type {
   CreateCollectionDTO,
   UpdateCollectionDTO,
 } from './DTO/collection.dto'
-import { CollectionsHelper } from '@nuvix/core/helpers'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class CollectionsService {

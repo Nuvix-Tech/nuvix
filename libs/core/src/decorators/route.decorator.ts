@@ -32,7 +32,7 @@ import {
   AuditEvent,
   type AuditEventKey,
 } from './events.decorator'
-import { Auth, Sensitive, type AuthType } from './misc.decorator'
+import { Auth, type AuthType, Sensitive } from './misc.decorator'
 import { ResModel } from './res-model.decorator'
 import { Scope } from './scope.decorator'
 import { Throttle } from './throttle.decorator'

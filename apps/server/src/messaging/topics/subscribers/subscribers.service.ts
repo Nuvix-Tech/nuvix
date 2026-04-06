@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import {
   Authorization,
@@ -10,16 +12,18 @@ import {
   Query,
   Role,
 } from '@nuvix/db'
-import { MessageType } from '@nuvix/utils'
+import { AppEvents, MessageType } from '@nuvix/utils'
 import type { Subscribers, SubscribersDoc } from '@nuvix/utils/types'
 import type { CreateSubscriber, ListSubscribers } from './subscribers.types'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class SubscribersService {
   protected readonly db: Database
 
-  constructor(private readonly coreService: CoreService) {
+  constructor(
+    private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     this.db = this.coreService.getDatabase()
   }
 
@@ -101,6 +105,14 @@ export class SubscribersService {
       )
 
       createdSubscriber.set('target', target).set('userName', user.get('name'))
+
+      this.eventEmitter.emit(AppEvents.SUBSCRIBERS_CREATE, {
+        topicId,
+        subscriberId: createdSubscriber.getId(),
+        payload: {
+          data: createdSubscriber,
+        },
+      })
 
       return createdSubscriber
     } catch (error) {
@@ -226,5 +238,10 @@ export class SubscribersService {
     await Authorization.skip(() =>
       this.db.decreaseDocumentAttribute('topics', topicId, totalAttribute, 1),
     )
+
+    this.eventEmitter.emit(AppEvents.SUBSCRIBERS_DELETE, {
+      topicId,
+      subscriberId,
+    })
   }
 }

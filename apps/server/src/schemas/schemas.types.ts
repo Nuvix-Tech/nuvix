@@ -1,11 +1,11 @@
+import type { RequestContext } from '@nuvix/core/helpers'
 import type {
   Expression,
+  ParsedOrdering,
   ParserResult,
   SelectNode,
-  ParsedOrdering,
 } from '@nuvix/utils/query'
 import type { SelectQueryDTO } from './DTO/table.dto'
-import type { RequestContext } from '@nuvix/core/helpers'
 
 export interface SelectQuery
   extends Omit<SelectQueryDTO, 'select' | 'filter' | 'order'> {
@@ -27,14 +27,28 @@ export interface Select extends Common {
 export interface InsertQuery {
   columns?: string[]
   select?: SelectNode[]
+  onConflict?: string[]
+  ignoreDuplicates?: boolean
 }
 
 export interface Insert extends Common {
   input:
     | Record<string, string | number | null | boolean>
     | Record<string, string | number | null | boolean>[]
-  returnPref?: 'minimal' | 'location' | 'full'
   query: InsertQuery
+}
+
+export interface UpsertQuery {
+  columns?: string[]
+  select?: SelectNode[]
+  onConflict?: string[]
+}
+
+export interface Upsert extends Common {
+  input:
+    | Record<string, string | number | null | boolean>
+    | Record<string, string | number | null | boolean>[]
+  query: UpsertQuery
 }
 
 export interface UpdateQuery extends SelectQuery {
@@ -42,7 +56,7 @@ export interface UpdateQuery extends SelectQuery {
   columns?: string[]
 }
 
-export interface Update extends Omit<Insert, 'input'> {
+export interface Update extends Omit<Insert, 'input' | 'query'> {
   input: Record<string, string | number | null | boolean>
   query: UpdateQuery
 }
@@ -53,6 +67,14 @@ export interface DeleteQuery extends SelectQuery {
 
 export interface Delete extends Omit<Select, 'query'> {
   query: DeleteQuery
+}
+
+export interface CountQuery {
+  filter?: Expression & ParserResult
+}
+
+export interface Count extends Common {
+  query: CountQuery
 }
 
 interface CallFunctionQuery extends SelectQuery {}

@@ -1,3 +1,4 @@
+import { Database, Doc } from '@nuvix/db'
 import { AppMode, configuration, Schema } from '@nuvix/utils'
 import type {
   ProjectsDoc,
@@ -5,14 +6,13 @@ import type {
   TeamsDoc,
   UsersDoc,
 } from '@nuvix/utils/types'
-import type { Key } from './key.helper'
-import { Database, Doc } from '@nuvix/db'
 import type { AuthType } from '../decorators'
-import { localeTranslatorInstance } from './locale.helper'
-import { Detector } from './detector.helper'
-import { Platform } from '../validators/network/platform'
-import { RedirectValidator } from '../validators'
 import { Exception } from '../extend/exception'
+import { RedirectValidator } from '../validators'
+import { Platform } from '../validators/network/platform'
+import { Detector } from './detector.helper'
+import type { Key } from './key.helper'
+import { localeTranslatorInstance } from './locale.helper'
 
 export class RequestContext {
   private _allowedHostnames?: string[]
@@ -22,7 +22,7 @@ export class RequestContext {
   user: UsersDoc = new Doc()
   team?: TeamsDoc
   session?: SessionsDoc
-  locale: string = 'en'
+  locale = 'en'
   apiKey?: Key
   scopes?: string[]
   role?: string
@@ -39,8 +39,8 @@ export class RequestContext {
   cookieDomain = configuration.server.cookieDomain
   cookieSameSite = configuration.server.cookieSameSite
 
-  _isAPIUser: boolean = false // This is set to true if the user is authenticated via API key
-  _isAdminUser: boolean = false // This is set to true if the user has admin privileges (mostly for console users)
+  _isAPIUser = false // This is set to true if the user is authenticated via API key
+  _isAdminUser = false // This is set to true if the user has admin privileges (mostly for console users)
 
   get isAPIUser() {
     return this._isAPIUser
@@ -69,7 +69,7 @@ export class RequestContext {
   /**
    * Returns a detector instance for detecting device, browser, and OS information based on the user agent string.
    */
-  public detector(userAgent: string = 'UNKNOWN') {
+  public detector(userAgent = 'UNKNOWN') {
     return new Detector(userAgent)
   }
 

@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { type SavedMultipartFile } from '@fastify/multipart'
 import { Injectable, StreamableFile } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { JwtService } from '@nestjs/jwt'
 import { CoreService } from '@nuvix/core'
 import { logos } from '@nuvix/core/config'
@@ -19,7 +20,7 @@ import {
   Role,
 } from '@nuvix/db'
 import { Device, FileExt, FileSize } from '@nuvix/storage'
-import { configuration } from '@nuvix/utils'
+import { AppEvents, configuration } from '@nuvix/utils'
 import type { Files, FilesDoc } from '@nuvix/utils/types'
 import {
   CreateFileDTO,
@@ -36,6 +37,7 @@ export class FilesService {
   constructor(
     private readonly coreService: CoreService,
     private readonly jwtService: JwtService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     this.db = this.coreService.getDatabase()
     this.deviceForFiles = this.coreService.getStorageDevice()
@@ -525,9 +527,9 @@ export class FilesService {
 
       // Create or update file document
       if (fileDocument.empty()) {
-        fileDocument = await this.db.createDocument<Files>(
+        fileDocument = (await this.db.createDocument<Files, string>(
           this.getCollectionName(bucket.getSequence()),
-          new Doc({
+          Doc.from<Files>({
             $id: fileId,
             $permissions: permissions,
             bucketId: bucket.getId(),
@@ -543,7 +545,15 @@ export class FilesService {
             search: [fileId, fileName].join(' '),
             metadata: finalMetadata,
           }),
-        )
+        )) as FilesDoc
+
+        this.eventEmitter.emit(AppEvents.FILES_CREATE, {
+          bucketId: bucket.getId(),
+          fileId: fileDocument.getId(),
+          payload: {
+            data: fileDocument,
+          },
+        })
       } else {
         fileDocument = fileDocument
           .set('$permissions', permissions)
@@ -558,17 +568,25 @@ export class FilesService {
           throw new Exception(Exception.USER_UNAUTHORIZED)
         }
 
-        fileDocument = await this.db.updateDocument(
+        fileDocument = await this.db.updateDocument<FilesDoc>(
           this.getCollectionName(bucket.getSequence()),
           fileId,
           fileDocument,
         )
+
+        this.eventEmitter.emit(AppEvents.FILES_CREATE, {
+          bucketId: bucket.getId(),
+          fileId: fileDocument.getId(),
+          payload: {
+            data: fileDocument,
+          },
+        })
       }
     } else if (fileDocument.empty()) {
       // === First chunk of a new chunked upload ===
-      fileDocument = await this.db.createDocument<Files>(
+      fileDocument = await this.db.createDocument<Files, string>(
         this.getCollectionName(bucket.getSequence()),
-        new Doc({
+        Doc.from<Files>({
           $id: fileId,
           $permissions: permissions,
           bucketId: bucket.getId(),
@@ -587,7 +605,7 @@ export class FilesService {
       )
     } else {
       // === Intermediate chunk of an existing chunked upload ===
-      fileDocument = await this.db.updateDocument(
+      fileDocument = await this.db.updateDocument<FilesDoc>(
         this.getCollectionName(bucket.getSequence()),
         fileId,
         fileDocument
@@ -1249,19 +1267,35 @@ export class FilesService {
     }
 
     if (fileSecurity && !valid) {
-      return this.db.updateDocument(
+      const updatedFile = await this.db.updateDocument<FilesDoc>(
         this.getCollectionName(bucket.getSequence()),
         fileId,
         file,
       )
+      this.eventEmitter.emit(AppEvents.FILES_UPDATE, {
+        bucketId,
+        fileId,
+        payload: {
+          data: updatedFile,
+        },
+      })
+      return updatedFile
     }
-    return Authorization.skip(() =>
-      this.db.updateDocument(
+    const updatedFileSkipped = await Authorization.skip(() =>
+      this.db.updateDocument<FilesDoc>(
         this.getCollectionName(bucket.getSequence()),
         fileId,
         file,
       ),
     )
+    this.eventEmitter.emit(AppEvents.FILES_UPDATE, {
+      bucketId,
+      fileId,
+      payload: {
+        data: updatedFileSkipped,
+      },
+    })
+    return updatedFileSkipped
   }
 
   /**
@@ -1331,6 +1365,11 @@ export class FilesService {
           'Failed to remove file from DB',
         )
       }
+
+      this.eventEmitter.emit(AppEvents.FILES_DELETE, {
+        bucketId,
+        fileId,
+      })
     } else {
       throw new Exception(
         Exception.GENERAL_SERVER_ERROR,

@@ -252,6 +252,8 @@ export class SessionService {
         }
       }
 
+      await this.db.purgeCachedDocument('users', user.getId())
+
       this.eventEmitter.emit(AppEvents.SESSIONS_DELETE, {
         userId: user.getId(),
         sessionId: session.getId(),
@@ -328,6 +330,7 @@ export class SessionService {
     }
 
     await this.db.updateDocument('sessions', sessionId, session)
+    await this.db.purgeCachedDocument('users', user.getId())
 
     this.eventEmitter.emit(AppEvents.SESSION_UPDATE, {
       userId: user.getId(),
@@ -1932,14 +1935,14 @@ export class SessionService {
       await this.sendSessionAlert(user, createdSession, ctx)
     }
 
-    // await this.eventEmitter.emitAsync(AppEvents.SESSION_CREATE, {
-    //   userId: user.getId(),
-    //   sessionId: createdSession.getId(),
-    //   payload: {
-    //     data: createdSession,
-    //     type: Models.SESSION,
-    //   },
-    // })
+    this.eventEmitter.emit(AppEvents.SESSION_CREATE, {
+      userId: user.getId(),
+      sessionId: createdSession.getId(),
+      payload: {
+        data: createdSession,
+        type: Models.SESSION,
+      },
+    })
 
     if (configuration.server.fallbackCookies) {
       response.header(

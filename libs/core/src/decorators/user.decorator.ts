@@ -1,7 +1,7 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common'
+import { Doc } from '@nuvix/db'
 import { UsersDoc } from '@nuvix/utils/types'
 import { CoreService } from '../core.service'
-import { Doc } from '@nuvix/db'
 
 export const User = createParamDecorator<any, UsersDoc | null>(
   (_data: unknown, ctx: ExecutionContext): UsersDoc => {

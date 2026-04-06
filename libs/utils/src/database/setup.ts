@@ -10,7 +10,7 @@ import {
   Permission,
   Role,
 } from '@nuvix/db'
-import { Schemas } from '@nuvix/utils'
+import { PRIVATE_COLLECTIONS, Schemas } from '@nuvix/utils'
 import collections from '@nuvix/utils/collections'
 
 const logger = new Logger('Database Setup')
@@ -98,7 +98,10 @@ async function createSchemaIfNotExists(
  */
 async function setupCollections(
   db: Database,
-  collectionEntries: [string, Collection][],
+  collectionEntries: [
+    string,
+    Omit<Collection, 'documentSecurity' | 'enabled'>,
+  ][],
   projectId: string,
 ): Promise<number> {
   const MAX_RETRIES = 3
@@ -119,6 +122,7 @@ async function setupCollections(
     const indexes = (collection.indexes || []).map(idx => new Doc(idx))
 
     let lastError: any = null
+    const isPrivateCollection = PRIVATE_COLLECTIONS.includes(collection.$id)
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -126,8 +130,15 @@ async function setupCollections(
           id: collectionId,
           attributes,
           indexes,
-          documentSecurity: true,
-          permissions: [Permission.create(Role.any())],
+          permissions: isPrivateCollection
+            ? [
+                Permission.read(Role.any()),
+                Permission.create(Role.any()),
+                Permission.update(Role.any()),
+                Permission.delete(Role.any()),
+              ]
+            : [Permission.create(Role.any())],
+          documentSecurity: !isPrivateCollection,
         })
 
         successCount++

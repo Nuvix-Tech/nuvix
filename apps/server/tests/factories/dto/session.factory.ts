@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreateEmailSessionDTO } from 'apps/server/src/account/sessions/DTO/session.dto'
+import { CreateEmailSessionDTO } from '@/server/account/sessions/DTO/session.dto'
 
 export function buildCreateEmailSessionDTO(
   overrides: Partial<CreateEmailSessionDTO> = {},

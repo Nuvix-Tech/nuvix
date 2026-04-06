@@ -107,7 +107,7 @@ describe('database/schemas (integration)', () => {
     expect(body.type).toBe('managed')
   })
 
-  it('POST /v1/database/schemas returns 202 for document schema', async () => {
+  it('POST /v1/database/schemas returns 201 for document schema', async () => {
     // PROTECTS: Document schema creation works correctly
     const dto = buildCreateDocumentSchemaDTO()
 
@@ -118,7 +118,7 @@ describe('database/schemas (integration)', () => {
       payload: JSON.stringify(dto),
     })
 
-    assertStatusCode(res, 202)
+    assertStatusCode(res, 201)
 
     const body = parseJson(res.payload)
     expect(body.name).toBe(dto.name)

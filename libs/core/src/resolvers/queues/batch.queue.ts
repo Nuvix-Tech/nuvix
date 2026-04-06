@@ -1,6 +1,6 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
-import { Queue } from './queue'
 import { Job } from 'bullmq'
+import { Queue } from './queue'
 
 export abstract class AbstractBatchQueue<T, J = any>
   extends Queue

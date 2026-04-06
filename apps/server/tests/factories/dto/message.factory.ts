@@ -3,7 +3,7 @@ import {
   CreateEmailMessageDTO,
   CreatePushMessageDTO,
   CreateSmsMessageDTO,
-} from 'apps/server/src/messaging/DTO/message.dto'
+} from '@/server/messaging/DTO/message.dto'
 
 export function buildCreateEmailMessageDTO(
   overrides: Partial<CreateEmailMessageDTO> = {},

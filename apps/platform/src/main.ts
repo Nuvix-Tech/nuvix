@@ -2,6 +2,7 @@
  * Main entry point for the Nuvix Console API application.
  */
 import { CoreService } from '@nuvix/core'
+
 CoreService.setIsConsole(true)
 
 import cookieParser from '@fastify/cookie'
@@ -26,11 +27,11 @@ import { RequestContext } from '@nuvix/core/helpers'
 import { NuvixAdapter, NuvixFactory } from '@nuvix/core/server'
 import { Authorization, Role, storage } from '@nuvix/db'
 import {
+  AppMode,
   configuration,
   PROJECT_ROOT,
   parseNumber,
   validateConfig,
-  AppMode,
 } from '@nuvix/utils'
 import QueryString from 'qs'
 import { AppModule } from './app.module'

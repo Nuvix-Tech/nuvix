@@ -1,10 +1,10 @@
 import { Processor } from '@nestjs/bullmq'
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common'
+import { DataSource } from '@nuvix/pg'
 import { configuration, QueueFor, Schemas } from '@nuvix/utils'
 import { Job } from 'bullmq'
 import { CoreService } from '../../core.service.js'
 import { AbstractBatchQueue } from './batch.queue.js'
-import { DataSource } from '@nuvix/pg'
 
 const SENSITIVE_KEYS = new Set([
   'authorization',

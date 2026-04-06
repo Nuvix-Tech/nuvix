@@ -1,7 +1,17 @@
-import { Auth } from '@nuvix/core/helpers'
-import { AttributeType, Database, ID, IndexType, Order } from '@nuvix/db'
+import { Auth } from '@nuvix/core/helpers/auth.helper'
+import {
+  AttributeType,
+  Collection,
+  Database,
+  ID,
+  IndexType,
+  Order,
+} from '@nuvix/db'
 
-export const authCollections = {
+export const authCollections: Record<
+  string,
+  Omit<Collection, 'documentSecurity' | 'enabled'>
+> = {
   users: {
     $collection: ID.custom(Database.METADATA),
     $id: ID.custom('users'),

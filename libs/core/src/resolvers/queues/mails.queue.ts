@@ -1,14 +1,13 @@
 import * as fs from 'node:fs'
-import { OnModuleDestroy } from '@nestjs/common'
 import { OnWorkerEvent, Processor } from '@nestjs/bullmq'
+import { Logger, OnModuleDestroy } from '@nestjs/common'
 import { configuration, QueueFor } from '@nuvix/utils'
 import { Job } from 'bullmq'
 import Template from 'handlebars'
 import { createTransport, Transporter } from 'nodemailer'
+import SMTPPool from 'nodemailer/lib/smtp-pool'
 import type { SmtpConfig } from '../../config/smtp'
 import { Queue } from './queue'
-import { Logger } from '@nestjs/common'
-import SMTPPool from 'nodemailer/lib/smtp-pool'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MAX_BATCH_SIZE = 50
@@ -264,7 +263,7 @@ export class MailsQueue extends Queue implements OnModuleDestroy {
         }
 
         if (attempt < SEND_RETRY_ATTEMPTS) {
-          const delay = SEND_RETRY_DELAY_MS * Math.pow(2, attempt - 1)
+          const delay = SEND_RETRY_DELAY_MS * 2 ** (attempt - 1)
           this.logger.warn(
             `Send attempt ${attempt}/${SEND_RETRY_ATTEMPTS} failed for ${params.email}, retrying in ${delay}ms: ${err.message}`,
           )

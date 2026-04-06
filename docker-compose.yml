@@ -9,8 +9,7 @@ services:
     container_name: nuvix-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${NUVIX_DATABASE_ADMIN_PASSWORD}
-      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_PASSWORD: ${NUVIX_DATABASE_PASSWORD}
     env_file:
       - .env
     ports:
@@ -19,19 +18,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - nuvix
-    healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'PGPASSWORD=${NUVIX_DATABASE_ADMIN_PASSWORD} pg_isready -U nuvix_admin -d postgres -h localhost',
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   redis:
-    image: redis:7.2
+    image: redis
     container_name: redis
     command: ['redis-server', '/usr/local/etc/redis/redis.conf']
     volumes:
@@ -140,6 +129,18 @@ services:
       options:
         max-size: '10m'
         max-file: '5'
+        
+  console:
+    image: nuvix/console:latest
+
+    ports:
+      - "${NUVIX_CONSOLE_PORT:-3000}:3000"
+    env_file:
+    - .env
+
+    networks:
+      - nuvix
+    restart: unless-stopped
 
 volumes:
   postgres_data:

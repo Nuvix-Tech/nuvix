@@ -1,7 +1,7 @@
 import { Exclude, Expose, Transform, Type } from 'class-transformer'
+import { AttributeModel } from './Attribute.model'
 import { BaseModel } from './base.model'
 import { IndexModel } from './Index.model'
-import { AttributeModel } from './Attribute.model'
 
 @Exclude()
 export class CollectionModel extends BaseModel {

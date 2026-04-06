@@ -1,6 +1,6 @@
 {
   "name": "@nuvix/server",
-  "version": "1.0.0",
+  "version": "0.1.2",
   "description": "Nuvix is a Open Source Backend that provides a set of tools and services to help developers build and deploy applications quickly and efficiently.",
   "type": "module",
   "engines": {
@@ -8,10 +8,10 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch 'src/**' --watch '../../libs/**/*.ts'",
+    "build": "bun ../../scripts/bun-build.ts",
+    "dev": "bun ../../scripts/bun-build.ts --watch",
+    "postbuild": "bun ../../scripts/gen-pkg.ts server --deps sharp@^0.34.2 --deps @resvg/resvg-js@^2.6.2",
     "start": "bun build/main.js",
-    "prebuild": "../../scripts/merge-pkg.js server",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -23,20 +23,14 @@
     "gen:metadata": "bun src/generate-metadata.ts"
   },
   "dependencies": {
-    "@apollo/server": "^4.12.2",
-    "@nestjs/apollo": "^13.1.0",
-    "@nestjs/graphql": "^13.1.0",
-    "@scalar/nestjs-api-reference": "^0.5.8",
-    "graphql": "^16.11.0",
-    "sharp": "^0.34.2"
+    "sharp": "^0.34.2",
+    "@resvg/resvg-js": "^2.6.2"
   },
   "devDependencies": {
     "@nuvix/core": "workspace:*",
     "@nuvix/utils": "workspace:*"
   },
   "trustedDependencies": [
-    "@apollo/protobufjs",
-    "protobufjs",
     "sharp"
   ]
 }

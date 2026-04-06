@@ -12,6 +12,7 @@ import {
   services,
 } from '@nuvix/core/config'
 import { Exception } from '@nuvix/core/extend/exception'
+import { Auth } from '@nuvix/core/helpers'
 import {
   Database,
   Doc,
@@ -34,7 +35,6 @@ import {
   UpdateProjectDTO,
   UpdateProjectTeamDTO,
 } from './DTO/update-project.dto'
-import { Auth } from '@nuvix/core/helpers'
 
 @Injectable()
 export class ProjectService {

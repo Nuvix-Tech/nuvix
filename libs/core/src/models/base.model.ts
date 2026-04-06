@@ -17,7 +17,7 @@ export abstract class BaseModel {
 
   @Expose() declare $permissions: string[]
 
-  @Exclude() $collection!: string
+  @Exclude() declare $collection: string
 
   constructor(doc?: any) {
     Object.assign(this, doc)

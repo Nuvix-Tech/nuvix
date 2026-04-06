@@ -31,7 +31,6 @@ describe('schemas/collections (integration)', () => {
       headers: getApiKeyJsonHeaders(),
       payload: JSON.stringify(schemaDto),
     })
-    await Promise.resolve(new Promise(resolve => setTimeout(resolve, 2000)))
   })
 
   /**

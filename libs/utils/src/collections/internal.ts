@@ -8,7 +8,10 @@ import {
 } from '@nuvix/db'
 import { authCollections, commonCollections } from './common'
 
-export const internalCollections: Record<string, Collection> = {
+export const internalCollections: Record<
+  string,
+  Omit<Collection, 'documentSecurity' | 'enabled'>
+> = {
   ...authCollections,
 
   projects: {
@@ -202,6 +205,7 @@ export const internalCollections: Record<string, Collection> = {
     $collection: ID.custom(Database.METADATA),
     $id: ID.custom('schedules'),
     name: 'schedules',
+
     attributes: [
       {
         $id: ID.custom('resourceType'),

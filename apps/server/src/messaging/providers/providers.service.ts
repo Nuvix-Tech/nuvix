@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Database, Doc, DuplicateException, ID, Query } from '@nuvix/db'
-import { MessageType } from '@nuvix/utils'
+import { AppEvents, MessageType } from '@nuvix/utils'
 import type { Providers } from '@nuvix/utils/types'
 import type {
   CreateApnsProvider,
@@ -27,13 +29,15 @@ import type {
   UpdateTwilioProvider,
   UpdateVonageProvider,
 } from './providers.types'
-import { CoreService } from '@nuvix/core/core.service'
 
 @Injectable()
 export class ProvidersService {
   private readonly db: Database
 
-  constructor(private readonly coreService: CoreService) {
+  constructor(
+    private readonly coreService: CoreService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     this.db = this.coreService.getDatabase()
   }
 
@@ -96,6 +100,13 @@ export class ProvidersService {
         'providers',
         provider,
       )
+
+      this.eventEmitter.emit(AppEvents.PROVIDERS_CREATE, {
+        providerId: createdProvider.getId(),
+        payload: {
+          data: createdProvider,
+        },
+      })
 
       return createdProvider
     } catch (error) {
@@ -426,7 +437,7 @@ export class ProvidersService {
     provider.set('credentials', credentials)
 
     // Update options
-    const options = provider.get('options') || {}
+    const options = (provider.get('options', {}) || {}) as Record<string, any>
     Object.entries(optionFields).forEach(([key, inputKey]) => {
       if (
         updatedFields[inputKey] !== undefined &&
@@ -455,6 +466,13 @@ export class ProvidersService {
       provider.getId(),
       provider,
     )
+
+    this.eventEmitter.emit(AppEvents.PROVIDERS_UPDATE, {
+      providerId: updatedProvider.getId(),
+      payload: {
+        data: updatedProvider,
+      },
+    })
 
     return updatedProvider
   }
@@ -734,5 +752,9 @@ export class ProvidersService {
     }
 
     await this.db.deleteDocument('providers', providerId)
+
+    this.eventEmitter.emit(AppEvents.PROVIDERS_DELETE, {
+      providerId,
+    })
   }
 }

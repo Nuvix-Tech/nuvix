@@ -11,9 +11,11 @@ import { Delete, Get, Patch, Post, Put } from '@nuvix/core'
 import { AuthType, CurrentSchemaType, Namespace } from '@nuvix/core/decorators'
 import { ApiInterceptor, SchemaGuard } from '@nuvix/core/resolvers'
 import { SchemaType } from '@nuvix/utils'
+import { OrderParser, Parser, SelectParser } from '@nuvix/utils/query'
 import { PermissionsDTO } from './DTO/permissions.dto'
 import {
   CallFunctionQueryDTO,
+  CountQueryDTO,
   DeleteQueryDTO,
   FunctionParamsDTO,
   InsertQueryDTO,
@@ -21,10 +23,10 @@ import {
   SelectQueryDTO,
   TableParamsDTO,
   UpdateQueryDTO,
+  UpsertQueryDTO,
 } from './DTO/table.dto'
 import { SchemasService } from './schemas.service'
 import { RestContext, SelectQuery } from './schemas.types'
-import { OrderParser, Parser, SelectParser } from '@nuvix/utils/query'
 
 // Note: The `schemaId` parameter is used in hooks and must be included in all relevant routes.
 @Controller({ version: ['1'], path: ['schemas/:schemaId', 'public'] })
@@ -53,22 +55,109 @@ export class SchemasController {
     })
   }
 
+  @Get(['tables/:tableId/count'], {
+    summary: 'Count table rows',
+    description:
+      'Return the total number of rows in a table that match an optional filter',
+    scopes: 'schemas.tables.read',
+  })
+  async countTable(
+    @Param() { schemaId: schema = 'public', tableId: table }: TableParamsDTO,
+    @Req() request: NuvixRequest,
+    @Query() query: CountQueryDTO,
+  ) {
+    const parsed = query.filter
+      ? { filter: Parser.create({ tableName: table }).parse(query.filter) }
+      : {}
+    return this.schemasService.count({
+      table,
+      schema,
+      query: parsed,
+      context: this.buildContext(request),
+    })
+  }
+
+  @Get(['tables/:tableId/:rowId'], {
+    summary: 'Get a single row',
+    description: 'Retrieve a single row from a table by its primary key (_id)',
+    scopes: 'schemas.tables.read',
+  })
+  @CurrentSchemaType(SchemaType.Managed)
+  async getRow(
+    @Param()
+    { schemaId: schema = 'public', tableId: table, rowId }: RowParamsDTO,
+    @Req() request: NuvixRequest,
+    @Query() query: SelectQueryDTO,
+  ) {
+    const rowFilter = `_id.eq(${Number(rowId)})`
+    const combinedFilter = query.filter
+      ? `and(${query.filter},${rowFilter})`
+      : rowFilter
+    return this.schemasService.select({
+      table,
+      schema,
+      query: this.parseQuery({
+        ...query,
+        filter: combinedFilter,
+        limit: 1,
+        table,
+      }),
+      context: this.buildContext(request),
+    })
+  }
+
   @Post(['tables/:tableId'], {
     summary: 'Insert data into table',
-    description: 'Insert one or more records into a specific table',
+    description:
+      'Insert one or more records into a specific table. Use `on_conflict` to enable upsert behaviour.',
     scopes: 'schemas.tables.write',
   })
   async insertIntoTable(
     @Req() request: NuvixRequest,
     @Param() { schemaId: schema = 'public', tableId: table }: TableParamsDTO,
     @Body() input: Record<string, any> | Record<string, any>[],
-    @Query() { columns, select }: InsertQueryDTO,
+    @Query() {
+      columns,
+      select,
+      on_conflict,
+      ignore_duplicates,
+    }: InsertQueryDTO,
   ) {
     return this.schemasService.insert({
       schema,
       table,
       input,
-      query: { ...this.parseQuery({ select, table }), columns },
+      query: {
+        ...this.parseQuery({ select, table }),
+        columns,
+        onConflict: on_conflict,
+        ignoreDuplicates: ignore_duplicates,
+      },
+      context: this.buildContext(request),
+    })
+  }
+
+  @Put(['tables/:tableId'], {
+    summary: 'Upsert table data',
+    description:
+      'Insert or update records using ON CONFLICT DO UPDATE. Supply `on_conflict` with the column(s) to match on; omit to silently ignore duplicates.',
+    scopes: 'schemas.tables.write',
+  })
+  async upsertTable(
+    @Req() request: NuvixRequest,
+    @Param() { schemaId: schema = 'public', tableId: table }: TableParamsDTO,
+    @Body() input: Record<string, any> | Record<string, any>[],
+    @Query() { columns, select, on_conflict }: UpsertQueryDTO,
+  ) {
+    return this.schemasService.upsert({
+      schema,
+      table,
+      input,
+      query: {
+        ...this.parseQuery({ select, table }),
+        columns,
+        onConflict: on_conflict,
+      },
       context: this.buildContext(request),
     })
   }
@@ -94,6 +183,33 @@ export class SchemasController {
     })
   }
 
+  @Patch(['tables/:tableId/:rowId'], {
+    summary: 'Update a single row',
+    description:
+      'Update a single row in a table identified by its primary key (_id)',
+    scopes: 'schemas.tables.write',
+  })
+  @CurrentSchemaType(SchemaType.Managed)
+  async updateRow(
+    @Param()
+    { schemaId: schema = 'public', tableId: table, rowId }: RowParamsDTO,
+    @Req() request: NuvixRequest,
+    @Body() input: Record<string, any>,
+    @Query() query: UpdateQueryDTO,
+  ) {
+    const rowFilter = `_id.eq(${Number(rowId)})`
+    const combinedFilter = query.filter
+      ? `and(${query.filter},${rowFilter})`
+      : rowFilter
+    return this.schemasService.update({
+      schema,
+      table,
+      input,
+      query: this.parseQuery({ ...query, filter: combinedFilter, table }),
+      context: this.buildContext(request),
+    })
+  }
+
   @Delete(['tables/:tableId'], {
     summary: 'Delete table data',
     scopes: 'schemas.tables.write',
@@ -113,6 +229,31 @@ export class SchemasController {
       schema,
       table,
       query: this.parseQuery({ ...query, table }),
+      context: this.buildContext(request),
+    })
+  }
+
+  @Delete(['tables/:tableId/:rowId'], {
+    summary: 'Delete a single row',
+    description:
+      'Delete a single row from a table identified by its primary key (_id)',
+    scopes: 'schemas.tables.write',
+  })
+  @CurrentSchemaType(SchemaType.Managed)
+  async deleteRow(
+    @Param()
+    { schemaId: schema = 'public', tableId: table, rowId }: RowParamsDTO,
+    @Req() request: NuvixRequest,
+    @Query() query: DeleteQueryDTO,
+  ) {
+    const rowFilter = `_id.eq(${Number(rowId)})`
+    const combinedFilter = query.filter
+      ? `and(${query.filter},${rowFilter})`
+      : rowFilter
+    return this.schemasService.delete({
+      schema,
+      table,
+      query: this.parseQuery({ ...query, filter: combinedFilter, table }),
       context: this.buildContext(request),
     })
   }
@@ -224,7 +365,7 @@ export class SchemasController {
     query: SelectQueryDTO & { table: string } & T,
   ): SelectQuery & T {
     const { filter, select, order, table: tableName, ...rest } = query
-    let parsed: SelectQuery = { ...rest }
+    const parsed: SelectQuery = { ...rest }
 
     if (filter) {
       parsed.filter = Parser.create({ tableName }).parse(filter)

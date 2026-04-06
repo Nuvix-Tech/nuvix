@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { CreateTopicDTO } from 'apps/server/src/messaging/topics/DTO/topics.dto'
+import { CreateTopicDTO } from '@/server/messaging/topics/DTO/topics.dto'
 
 export function buildCreateTopicDTO(
   overrides: Partial<CreateTopicDTO> = {},

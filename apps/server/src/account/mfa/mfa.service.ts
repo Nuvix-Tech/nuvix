@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq'
 import { Injectable } from '@nestjs/common'
+import { CoreService } from '@nuvix/core/core.service'
 import { Exception } from '@nuvix/core/extend/exception'
 import { Auth, EmailHelper, RequestContext } from '@nuvix/core/helpers'
 import {
@@ -17,6 +18,7 @@ import {
   TOTPChallenge,
 } from '@nuvix/utils/auth'
 import type {
+  Authenticators,
   AuthenticatorsDoc,
   ChallengesDoc,
   SessionsDoc,
@@ -24,7 +26,7 @@ import type {
 } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import { CreateMfaChallengeDTO, VerifyMfaChallengeDTO } from './DTO/mfa.dto'
-import { CoreService } from '@nuvix/core/core.service'
+import { doc } from 'prettier'
 
 @Injectable()
 export class MfaService {
@@ -145,15 +147,15 @@ export class MfaService {
       await this.db.deleteDocument('authenticators', authenticator.getId())
     }
 
-    const newAuthenticator = new Doc({
+    const newAuthenticator = Doc.from<Authenticators>({
       $id: ID.unique(),
       userId: user.getId(),
       userInternalId: user.getSequence(),
       type: MfaType.TOTP,
       verified: false,
-      data: {
+      data: JSON.stringify({
         secret: otp.getSecret(),
-      },
+      }),
       $permissions: [
         Permission.read(Role.user(user.getId())),
         Permission.update(Role.user(user.getId())),
@@ -338,6 +340,7 @@ export class MfaService {
       'challenges',
       challenge,
     )
+    await this.db.purgeCachedDocument('users', user)
 
     const locale = ctx.translator()
     const project = ctx.project

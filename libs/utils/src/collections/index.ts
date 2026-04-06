@@ -3,7 +3,7 @@ import { internalCollections } from './internal.js'
 import { bucketCollections, dbCollections } from './misc'
 import { projectCollections } from './project'
 
-const collections = {
+export default {
   auth: authCollections,
   project: projectCollections,
   internal: internalCollections,
@@ -11,5 +11,3 @@ const collections = {
   database: dbCollections,
   common: commonCollections,
 }
-
-export default collections
