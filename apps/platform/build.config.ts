@@ -21,6 +21,8 @@ export default defineConfig(options => {
       '@nestjs/microservices',
       'argon2',
       'bcrypt',
+      'pg-format',
+      'pgsql-parser',
     ],
     bundle: true,
     shims: false,
