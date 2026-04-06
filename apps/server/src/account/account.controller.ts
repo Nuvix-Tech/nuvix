@@ -114,7 +114,10 @@ export class AccountController {
   @Get('prefs', {
     summary: 'Get account preferences',
     scopes: 'account',
-    model: Models.PREFERENCES,
+    model: {
+      type: Models.PREFERENCES,
+      excludeExtraneousValues: false,
+    },
     auth: [AuthType.SESSION, AuthType.JWT],
     sdk: {
       name: 'getPrefs',
@@ -128,7 +131,10 @@ export class AccountController {
   @Patch('prefs', {
     summary: 'Update preferences',
     scopes: 'account',
-    model: Models.PREFERENCES,
+    model: {
+      type: Models.PREFERENCES,
+      excludeExtraneousValues: false,
+    },
     auth: [AuthType.SESSION, AuthType.JWT],
     audit: {
       key: 'user.update',

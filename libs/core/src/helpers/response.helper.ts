@@ -1,4 +1,4 @@
-import { PlatformModel } from '../models'
+import { PlatformModel, PrefsModel } from '../models'
 import { AccountModel } from '../models/Account.model'
 import { AlgoArgon2Model } from '../models/AlgoArgon2.model'
 import { AlgoBcryptModel } from '../models/AlgoBcrypt.model'
@@ -81,7 +81,7 @@ import { WebhookModel } from '../models/Webhook.model'
  */
 export class Models {
   public static NONE = class {}
-  public static ANY = class {}
+  // public static ANY = class {}
   public static LOG = LogModel
   public static METRIC = MetricModel
   public static METRIC_BREAKDOWN = MetricBreakdownModel
@@ -116,9 +116,7 @@ export class Models {
   public static IDENTITY = IdentityModel
   public static TOKEN = TokenModel
   public static JWT = JWTModel
-  public static PREFERENCES = class {
-    [key: string]: any
-  }
+  public static PREFERENCES = PrefsModel
 
   // MFA
   public static MFA_TYPE = MFATypeModel

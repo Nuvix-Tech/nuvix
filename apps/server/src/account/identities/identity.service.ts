@@ -60,6 +60,7 @@ export class IdentityService {
     }
 
     await this.db.deleteDocument('identities', identityId)
+    await this.db.purgeCachedDocument('users', identity.get('userId'))
   }
 }
 

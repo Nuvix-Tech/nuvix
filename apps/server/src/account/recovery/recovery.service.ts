@@ -145,7 +145,7 @@ export class RecoveryService {
     this.eventEmitter.emit(AppEvents.ACCOUNT_RECOVERY_CREATE, {
       userId: profile.getId(),
       payload: {
-        data: createdRecovery,
+        data: createdRecovery.clone().delete('secret'),
       },
     })
 
@@ -235,7 +235,7 @@ export class RecoveryService {
     this.eventEmitter.emit(AppEvents.ACCOUNT_RECOVERY_UPDATE, {
       userId: profile.getId(),
       payload: {
-        data: recoveryDocument,
+        data: recoveryDocument.clone().delete('secret'),
       },
     })
 

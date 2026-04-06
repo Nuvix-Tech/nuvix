@@ -222,7 +222,7 @@ describe('account (integration)', () => {
       },
       payload: JSON.stringify({ prefs }),
     })
-
+    console.log(res.body, '---', res.payload)
     assertStatusCode(res, 200)
 
     const body = parseJson(res.payload)

@@ -26,6 +26,7 @@ import type {
 } from '@nuvix/utils/types'
 import { Queue } from 'bullmq'
 import { CreateMfaChallengeDTO, VerifyMfaChallengeDTO } from './DTO/mfa.dto'
+import { doc } from 'prettier'
 
 @Injectable()
 export class MfaService {
@@ -339,6 +340,7 @@ export class MfaService {
       'challenges',
       challenge,
     )
+    await this.db.purgeCachedDocument('users', user)
 
     const locale = ctx.translator()
     const project = ctx.project

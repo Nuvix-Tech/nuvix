@@ -10,6 +10,7 @@ import {
   assertStatusCode,
   parseJson,
 } from '../../setup/test-utils'
+import { Auth } from '@nuvix/core/helpers'
 
 describe('account/sessions (integration)', () => {
   let app: NestFastifyApplication
@@ -55,14 +56,13 @@ describe('account/sessions (integration)', () => {
     expect(body).toMatchObject({
       $id: expect.any(String),
       userId: expect.any(String),
-      secret: expect.any(String),
       expire: expect.any(String),
       provider: 'email',
       current: true,
     })
 
     // Secret should be non-empty
-    expect(body.secret.length).toBeGreaterThan(0)
+    expect(body.secret).toBe(undefined)
   })
 
   it('POST /v1/account/sessions/email returns 401 for invalid password', async () => {
@@ -288,14 +288,15 @@ describe('account/sessions (integration)', () => {
         password: account.password,
       }),
     })
-    const session2 = parseJson(session2Res.payload)
 
     // Delete first session using second session's auth
     const deleteRes = await app.inject({
       method: 'DELETE',
       url: `/v1/account/sessions/${session1.$id}`,
       headers: {
-        'x-nuvix-session': session2.secret,
+        'x-nuvix-session': session2Res.cookies.find(
+          c => c.name === Auth.cookieName,
+        )?.value,
       },
     })
 
@@ -306,7 +307,9 @@ describe('account/sessions (integration)', () => {
       method: 'GET',
       url: `/v1/account/sessions/${session1.$id}`,
       headers: {
-        'x-nuvix-session': session2.secret,
+        'x-nuvix-session': session2Res.cookies.find(
+          c => c.name === Auth.cookieName,
+        )?.value,
       },
     })
     assertStatusCode(checkRes, 404)

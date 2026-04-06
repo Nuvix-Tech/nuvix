@@ -1,6 +1,6 @@
 import { findProjectRoot } from './helpers'
 
-export const APP_VERSION = '0.1.1'
+export const APP_VERSION = '0.1.2'
 export const PROJECT_ROOT = findProjectRoot()
 
 export const IS_PUBLIC_KEY = 'isPublic'

@@ -52,7 +52,7 @@ export class MembershipsService {
     ctx: RequestContext,
   ) {
     const url = input.url?.trim()
-    const isPrivileged = ctx.isAPIUser || ctx.isAdminUser
+    const isPrivileged = ctx.isPrivilegedUser()
     if (!url) {
       if (!isPrivileged) {
         throw new Exception(
