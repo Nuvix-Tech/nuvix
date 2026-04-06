@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "bun ../../scripts/bun-build.ts",
-    "postbuild": "bun ../../scripts/gen-pkg.ts platform",
+    "postbuild": "bun ../../scripts/gen-pkg.ts platform --deps argon2@^0.44.0",
     "start": "bun build/main.js",
     "dev": "bun ../../scripts/bun-build.ts --watch",
     "lint": "eslint \"src/**/*.ts\" --fix",

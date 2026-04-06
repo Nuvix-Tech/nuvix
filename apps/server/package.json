@@ -10,7 +10,7 @@
   "scripts": {
     "build": "bun ../../scripts/bun-build.ts",
     "dev": "bun ../../scripts/bun-build.ts --watch",
-    "postbuild": "bun ../../scripts/gen-pkg.ts server --deps sharp@^0.34.2 --deps @resvg/resvg-js@^2.6.2",
+    "postbuild": "bun ../../scripts/gen-pkg.ts server --deps sharp@^0.34.2 --deps @resvg/resvg-js@^2.6.2 --deps argon2@^0.44.0 --deps bcrypt@^6.0.0",
     "start": "bun build/main.js",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit",

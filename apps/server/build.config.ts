@@ -70,6 +70,8 @@ export default defineConfig(options => {
       '@nestjs/microservices',
       'sharp',
       '@resvg/resvg-js',
+      'argon2',
+      'bcrypt',
     ],
     bundle: true,
     shims: false,

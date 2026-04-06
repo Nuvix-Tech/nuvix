@@ -19,6 +19,8 @@ export default defineConfig(options => {
       '@nestjs/platform-express',
       'class-transformer/storage',
       '@nestjs/microservices',
+      'argon2',
+      'bcrypt',
     ],
     bundle: true,
     shims: false,
