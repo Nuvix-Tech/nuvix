@@ -840,7 +840,7 @@ const generateDocSchemaConstants = (collections: CollectionsDoc[]): string => {
   })
 
   if (enumTypes.size === 0) {
-    return '[_ in never]: never'
+    return ''
   }
 
   return Array.from(enumTypes.entries())
