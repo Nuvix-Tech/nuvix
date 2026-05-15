@@ -4,3 +4,23 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1.80"
+thiserror = "1.0"
+anyhow = "1.0"
+bytes = "1.5"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+regex = "1.10"
+md-5 = "0.10"
+hex = "0.4"
+mime_guess = "2.0"
+lazy_static = "1.4"
+hmac = "0.12"
+sha2 = "0.10"
+chrono = "0.4"
+base64 = "0.22"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+quick-xml = { version = "0.31", features = ["serialize"] }
+uuid = { version = "1.8", features = ["v4"] }
+url = "2.5.8"
