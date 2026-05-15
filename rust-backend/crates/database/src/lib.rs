@@ -9,4 +9,4 @@ pub use doc::Doc;
 pub use enums::*;
 pub use error::DatabaseError;
 pub use query::{Query, QueryBuilder};
-pub use types::AttributeOptions;
+pub use types::{Attribute, AttributeOptions, Collection, Index};
