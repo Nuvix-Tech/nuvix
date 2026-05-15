@@ -146,15 +146,100 @@ impl Adapter for Sendgrid {
 #[async_trait]
 impl EmailAdapter for Sendgrid {
     async fn process(&self, message: &Email) -> Result<SendResult, AdapterError> {
-         Ok(SendResult {
-            delivered_to: message.to.len() as u32,
-            r#type: "email".to_string(),
-            results: message.to.iter().map(|recipient| DeliveryResult {
-                recipient: recipient.clone(),
-                status: "success".to_string(),
-                error: None,
-            }).collect(),
-        })
+        let personalizations: Vec<serde_json::Value> = message.to.iter().map(|to| {
+            let mut p = json!({
+                "to": [{"email": to}],
+                "subject": message.subject
+            });
+
+            if let Some(cc_list) = &message.cc {
+                let cc_entries: Vec<serde_json::Value> = cc_list.iter().map(|cc| {
+                    let mut entry = json!({"email": cc.email});
+                    if let Some(name) = &cc.name {
+                        entry.as_object_mut().unwrap().insert("name".to_string(), json!(name));
+                    }
+                    entry
+                }).collect();
+                if !cc_entries.is_empty() {
+                    p.as_object_mut().unwrap().insert("cc".to_string(), json!(cc_entries));
+                }
+            }
+
+            if let Some(bcc_list) = &message.bcc {
+                let bcc_entries: Vec<serde_json::Value> = bcc_list.iter().map(|bcc| {
+                    let mut entry = json!({"email": bcc.email});
+                    if let Some(name) = &bcc.name {
+                        entry.as_object_mut().unwrap().insert("name".to_string(), json!(name));
+                    }
+                    entry
+                }).collect();
+                if !bcc_entries.is_empty() {
+                    p.as_object_mut().unwrap().insert("bcc".to_string(), json!(bcc_entries));
+                }
+            }
+            p
+        }).collect();
+
+        let body = json!({
+            "personalizations": personalizations,
+            "reply_to": {
+                "name": message.reply_to_name,
+                "email": message.reply_to_email,
+            },
+            "from": {
+                "name": message.from_name,
+                "email": message.from_email,
+            },
+            "content": [
+                {
+                    "type": if message.html { "text/html" } else { "text/plain" },
+                    "value": message.content,
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("https://api.sendgrid.com/v3/mail/send")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AdapterError::RequestFailed(e.to_string()))?;
+
+        let status = response.status();
+
+        if status.as_u16() == 202 {
+             Ok(SendResult {
+                delivered_to: message.to.len() as u32,
+                r#type: "email".to_string(),
+                results: message.to.iter().map(|recipient| DeliveryResult {
+                    recipient: recipient.clone(),
+                    status: "success".to_string(),
+                    error: None,
+                }).collect(),
+            })
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let parsed_error: serde_json::Value = serde_json::from_str(&error_text).unwrap_or(json!({}));
+            let err_msg = parsed_error.get("errors")
+                .and_then(|arr| arr.as_array())
+                .and_then(|arr| arr.get(0))
+                .and_then(|obj| obj.get("message"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(&error_text).to_string();
+
+            Ok(SendResult {
+                delivered_to: 0,
+                r#type: "email".to_string(),
+                results: message.to.iter().map(|recipient| DeliveryResult {
+                    recipient: recipient.clone(),
+                    status: "failure".to_string(),
+                    error: Some(err_msg.clone()),
+                }).collect(),
+            })
+        }
     }
 }
 
@@ -181,6 +266,9 @@ impl Adapter for Smtp {
 #[async_trait]
 impl EmailAdapter for Smtp {
     async fn process(&self, message: &Email) -> Result<SendResult, AdapterError> {
+        // We will just do a placeholder logic here as SMTP in Rust involves using Lettre.
+        // We can completely wire this up using lettre crate eventually but let's provide basic layout
+
          Ok(SendResult {
             delivered_to: message.to.len() as u32,
             r#type: "email".to_string(),
