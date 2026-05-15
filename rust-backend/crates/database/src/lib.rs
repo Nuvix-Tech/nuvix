@@ -1,14 +1,12 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+pub mod doc;
+pub mod enums;
+pub mod error;
+pub mod query;
+pub mod types;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+// Re-export commonly used items directly for convenience
+pub use doc::Doc;
+pub use enums::*;
+pub use error::DatabaseError;
+pub use query::{Query, QueryBuilder};
+pub use types::{Attribute, AttributeOptions, Collection, Index};
