@@ -111,3 +111,51 @@ mod tests {
         assert!(serialized.contains("\"documentSecurity\":true"));
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseOptions {
+    pub tenant: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateCollection {
+    pub id: String,
+    pub attributes: Option<Vec<crate::Doc<Attribute>>>,
+    pub indexes: Option<Vec<crate::Doc<Index>>>,
+    pub permissions: Option<Vec<String>>,
+    pub document_security: Option<bool>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCollection {
+    pub id: String,
+    pub permissions: Vec<String>,
+    pub document_security: bool,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateAttribute {
+    pub collection: String,
+    pub key: String,
+    #[serde(rename = "type")]
+    pub attribute_type: AttributeType,
+    pub size: Option<i32>,
+    pub array: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateIndex {
+    pub collection: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub index_type: IndexType,
+    pub attributes: Vec<String>,
+    pub orders: Option<Vec<Option<String>>>,
+}
