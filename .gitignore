@@ -90,3 +90,7 @@ storage/uploads/*
 **/dist/*
 **/output/*
 **/build/*
+rust-backend/target/
+rust-backend/Cargo.lock
+rust-backend/target
+/rust-backend/target/
