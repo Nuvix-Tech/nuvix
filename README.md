@@ -224,7 +224,6 @@ We welcome contributions. Whether it's code, docs, bug reports, or ideas—we'd 
 | [Console](https://github.com/nuvix-dev/console) | Admin dashboard (self-hosted or managed) |
 | [Discord Community](https://discord.gg/rHKCXu7cYW) | Get help, ask questions, share ideas |
 | [X / Twitter](https://x.com/nuvix_dev) | Latest updates and announcements |
-| [Blog](#) | Tutorials, case studies, releases |
 
 ---
 
