@@ -252,11 +252,10 @@ export function IsPositiveInt(
       validator: {
         validate(value: any) {
           // Transform string to number first
-          if (typeof value === 'string') {
-            value = Number.parseInt(value, 10)
-          }
-          if (!Number.isInteger(value)) return false
-          if (value < min || value > max) return false
+          const numericValue =
+            typeof value === 'string' ? Number.parseInt(value, 10) : value
+          if (!Number.isInteger(numericValue)) return false
+          if (numericValue < min || numericValue > max) return false
           return true
         },
         defaultMessage() {
