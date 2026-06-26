@@ -232,3 +232,40 @@ export function TrySplitStringToArray(separator: string) {
     })(target, propertyKey)
   }
 }
+
+/**
+ * Decorator that validates a value is a positive integer within bounds.
+ * Used for numeric path parameters like rowId to prevent negative, zero,
+ * or excessively large values that could cause issues.
+ */
+export function IsPositiveInt(
+  options?: { min?: number; max?: number },
+  validationOptions?: ValidationOptions,
+): PropertyDecorator {
+  const { min = 1, max = Number.MAX_SAFE_INTEGER } = options ?? {}
+  return (object: object, propertyName: string | symbol) => {
+    registerDecorator({
+      name: 'isPositiveInt',
+      target: object.constructor,
+      propertyName: propertyName.toString(),
+      options: validationOptions,
+      validator: {
+        validate(value: any) {
+          // Transform string to number first
+          if (typeof value === 'string') {
+            value = Number.parseInt(value, 10)
+          }
+          if (!Number.isInteger(value)) return false
+          if (value < min || value > max) return false
+          return true
+        },
+        defaultMessage() {
+          if (max === Number.MAX_SAFE_INTEGER) {
+            return `${String(propertyName)} must be a positive integer (minimum ${min}).`
+          }
+          return `${String(propertyName)} must be an integer between ${min} and ${max}.`
+        },
+      },
+    })
+  }
+}
