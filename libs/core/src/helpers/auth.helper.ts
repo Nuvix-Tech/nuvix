@@ -1,5 +1,11 @@
 import * as crypto from 'node:crypto'
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from 'node:crypto'
 import { Logger } from '@nestjs/common'
 import { Role, UserDimension } from '@nuvix/db'
 import {
@@ -67,7 +73,9 @@ export class Auth {
   public static readonly MFA_RECENT_DURATION = 1800 // 30 mins
 
   public static encodeSession(id: string, secret: string): string {
-    return Buffer.from(JSON.stringify({ id, secret })).toString('base64')
+    // Encrypt session data to prevent tampering and hijacking
+    const sessionData = JSON.stringify({ id, secret })
+    return Auth.encrypt(sessionData)
   }
 
   public static get cookieName(): string {
@@ -97,15 +105,34 @@ export class Auth {
     id?: string
     secret?: string
   } {
-    const bufferStr = Buffer.from(session, 'base64').toString()
-    const decoded = JSON.parse(bufferStr)
     const defaultSession = { id: undefined, secret: undefined }
 
-    if (typeof decoded !== 'object' || decoded === null) {
-      return defaultSession
-    }
+    try {
+      // Try encrypted format first (v1:)
+      const decrypted = Auth.decrypt(session)
+      const decoded = JSON.parse(decrypted)
 
-    return { ...defaultSession, ...decoded }
+      if (typeof decoded !== 'object' || decoded === null) {
+        return defaultSession
+      }
+
+      return { ...defaultSession, ...decoded }
+    } catch (decryptError) {
+      // Fall back to legacy base64 format for backward compatibility
+      // TODO: Remove this fallback in next major version after all sessions rotate
+      try {
+        const bufferStr = Buffer.from(session, 'base64').toString()
+        const decoded = JSON.parse(bufferStr)
+
+        if (typeof decoded !== 'object' || decoded === null) {
+          return defaultSession
+        }
+
+        return { ...defaultSession, ...decoded }
+      } catch (legacyError) {
+        return defaultSession
+      }
+    }
   }
 
   public static hash(string: string): string {
@@ -304,7 +331,7 @@ export class Auth {
         session.get('secret') !== null &&
         session.get('expire') !== null &&
         session.get('provider') !== null &&
-        session.get('secret') === Auth.hash(secret) &&
+        Auth.safeCompare(session.get('secret'), Auth.hash(secret)) &&
         new Date(session.get('expire') as string).getTime() >= Date.now()
       ) {
         return session.getId()
