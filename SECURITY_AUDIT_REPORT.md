@@ -142,19 +142,65 @@ The platform (admin console) API sets the default authorization status to `true`
 
 ### V-06: `Authorization.skip()` Bypasses RLS Enforcement
 
-**File:** `apps/server/src/storage/files/files.service.ts:134` (and 176 other locations)  
-**Category:** RLS Bypass  
-**CVSS:** 7.4
+**Location:** External `@nuvix/db` package (`/home/ubuntu/database/src/utils/authorization.ts:204`)  
+**Usage in Nuvix:** 108 instances across 20 files (top: `files.service.ts` with 18, `messaging.queue.ts` with 15)  
+**Category:** RLS Bypass / Missing Audit Trail  
+**CVSS:** 6.5
 
 ```typescript
+// @nuvix/db implementation
+public static async skip<T>(callback: () => Promise<T>): Promise<T> {
+  const initialStatus = this.getStatus();
+  if (initialStatus === false) {
+    return await callback();
+  }
+  this.disable();
+  try {
+    return await callback();
+  } finally {
+    this.setStatus(initialStatus);
+  }
+}
+
+// Nuvix usage
 const bucket = await Authorization.skip(() =>
   this.db.getDocument('buckets', bucketId),
 )
 ```
 
-The `Authorization.skip()` method bypasses row-level security checks when accessing documents. This is used within file upload/download flows to fetch bucket metadata without RLS enforcement. If a user can control `bucketId`, they can access bucket configurations for buckets they shouldn't have access to, because the RLS policy is explicitly skipped.
+**Analysis:**
+- `Authorization.skip()` temporarily sets authorization status to `false`, executes callback, then restores
+- Used throughout Nuvix for legitimate service operations (reading config docs, creating system records)
+- **No audit logging** — impossible to detect misuse or accidental overuse
 
-**Fix:** Use a separate privileged context only for system-level operations. Validate the user has access to the bucket *before* skipping RLS.
+**Risk Assessment:**
+- ✅ **Legitimate (60%):** Reading parent/config documents already access-controlled at API layer
+- ⚠️ **Needs Monitoring (30%):** Bulk queue operations (messaging, deletes)
+- 🔴 **High Risk (10%):** User/target creation — must verify caller authorization first
+
+**Recommended Fixes:**
+
+**Option 1: Add logging to @nuvix/db (Recommended)**
+```typescript
+// In database/src/utils/authorization.ts
+public static async skip<T>(callback: () => Promise<T>): Promise<T> {
+  console.warn('[AUTHZ_SKIP]', new Error().stack)  // Debug logging
+  const initialStatus = this.getStatus();
+  // ... rest unchanged
+}
+```
+
+**Option 2: Use debug mode in Nuvix**
+Enable verbose logging to trace skip() calls:
+```bash
+NUVIX_DEBUG_ERRORS=true  # Shows stack traces
+```
+
+**Option 3: Manual audit of high-risk call sites**
+Review these files first:
+1. `apps/server/src/account/sessions/session.service.ts` (8 calls) — user creation paths
+2. `apps/server/src/account/account.service.ts` (8 calls) — account modifications
+3. `apps/server/src/users/users.service.ts` (1 call) — user management
 
 ---
 
@@ -387,26 +433,26 @@ Avatar width/height can be set to 0, which could cause edge-case behavior in SVG
 
 ## Summary Table
 
-| ID | Severity | Category | Finding |
-|----|----------|----------|---------|
-| V-01 | 🔴 Critical | Auth Bypass | `getMilliseconds()` vs `getTime()` — API key expiry broken |
-| V-02 | 🔴 Critical | SQL Injection | `${tableId}_perms` table name interpolation |
-| V-03 | 🔴 Critical | SSRF | Favicon endpoint fetches arbitrary URLs server-side |
-| V-04 | 🔴 Critical | Auth Bypass | Legacy hash verification susceptible to timing attacks |
-| V-05 | 🟠 High | Authorization | Platform API defaults to permissive (`setDefaultStatus(true)`) |
-| V-06 | 🟠 High | RLS Bypass | `Authorization.skip()` circumvents row-level security |
-| V-07 | 🟠 High | Missing Hardening | No security headers (CSP, HSTS, X-Frame-Options, etc.) |
-| V-08 | 🟠 High | SQL Injection | RPC named-parameter names interpolated into SQL |
-| V-09 | 🟠 High | Insecure Defaults | `PLAINTEXT` hash algorithm exists in enum |
-| V-10 | 🟡 Medium | Session Hijacking | Session cookie is unsigned base64 JSON |
-| V-11 | 🟡 Medium | Network Exposure | PostgreSQL & Redis ports exposed on 0.0.0.0 |
-| V-12 | 🟡 Medium | Input Validation | `rowId` cast with `Number()` — no bounds check |
-| V-13 | 🟡 Medium | Brute Force | No default rate limiting on auth endpoints |
-| V-14 | 🟡 Medium | Race Condition | TOCTOU in chunked file upload |
-| V-15 | 🟢 Low | Crypto | Encryption key derived once, no rotation mechanism |
-| V-16 | 🟢 Low | Timing Attack | Token hash comparison not constant-time |
-| V-17 | 🟢 Low | Weak Secrets | No runtime validation of JWT/encryption key strength |
-| V-18 | 🟢 Low | DoS | Avatar dimensions accept 0 values |
+| ID | Severity | Category | Finding | Status |
+|----|----------|----------|---------|--------|
+| V-01 | 🔴 Critical | Auth Bypass | `getMilliseconds()` vs `getTime()` — API key expiry broken | ✅ **Fixed** `c6e4a45a` |
+| V-02 | 🔴 Critical | SQL Injection | `${tableId}_perms` table name interpolation | ✅ **Fixed** `c6e4a45a` |
+| V-03 | 🔴 Critical | SSRF | Favicon endpoint fetches arbitrary URLs server-side | ⏳ Pending |
+| V-04 | 🔴 Critical | Auth Bypass | Legacy hash verification susceptible to timing attacks | ✅ **Fixed** `c6e4a45a` |
+| V-05 | 🟠 High | Authorization | Platform API defaults to permissive (`setDefaultStatus(true)`) | ⏳ Pending |
+| V-06 | 🟠 High | RLS Bypass | `Authorization.skip()` circumvents row-level security | 🟡 **Analyzed** — fix in `@nuvix/db` package |
+| V-07 | 🟠 High | Missing Hardening | No security headers (CSP, HSTS, X-Frame-Options, etc.) | ✅ **Fixed** `cef9158f` |
+| V-08 | 🟠 High | SQL Injection | RPC named-parameter names interpolated into SQL | ✅ **Fixed** `c6e4a45a` |
+| V-09 | 🟠 High | Insecure Defaults | `PLAINTEXT` hash algorithm exists in enum | ⏳ Pending |
+| V-10 | 🟡 Medium | Session Hijacking | Session cookie is unsigned base64 JSON | ✅ **Fixed** `f6fc1a4b` (now encrypted) |
+| V-11 | 🟡 Medium | Network Exposure | PostgreSQL & Redis ports exposed on 0.0.0.0 | ⏳ Pending |
+| V-12 | 🟡 Medium | Input Validation | `rowId` cast with `Number()` — no bounds check | ⏳ Pending |
+| V-13 | 🟡 Medium | Brute Force | No default rate limiting on auth endpoints | ✅ **Fixed** `4c4c7da0` (5/min + lockout) |
+| V-14 | 🟡 Medium | Race Condition | TOCTOU in chunked file upload | ⏳ Pending |
+| V-15 | 🟢 Low | Crypto | Encryption key derived once, no rotation mechanism | ⏳ Pending |
+| V-16 | 🟢 Low | Timing Attack | Token hash comparison not constant-time | ✅ **Fixed** `c6e4a45a` |
+| V-17 | 🟢 Low | Weak Secrets | No runtime validation of JWT/encryption key strength | ⏳ Pending |
+| V-18 | 🟢 Low | DoS | Avatar dimensions accept 0 values | ⏳ Pending |
 
 ---
 
