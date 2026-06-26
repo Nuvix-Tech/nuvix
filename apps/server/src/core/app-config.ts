@@ -58,9 +58,10 @@ export const applyAppConfig = (app: NestFastifyApplication): void => {
   fastify.decorateRequest('hooks_args')
   fastify.addHook('onRequest', (_req, _, done) => {
     storage.run(new Map(), () => {
-      Authorization.setDefaultStatus(true) // Set per-request default status
+      // Keep deny-by-default from main.ts — don't override
+      // Authorization.setDefaultStatus(true) // REMOVED: was overriding main.ts!
       Authorization.cleanRoles() // Reset roles per request
-      Authorization.setRole(Role.any().toString())
+      // Don't set Role.any() — wait for auth.hook to set proper roles after authentication
       done()
     })
   })

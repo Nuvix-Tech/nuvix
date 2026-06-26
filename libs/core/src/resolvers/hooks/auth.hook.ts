@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
-import { Authorization, Database, Doc } from '@nuvix/db'
+import { Authorization, Database, Doc, Role } from '@nuvix/db'
 import { AppMode, configuration } from '@nuvix/utils'
 import { SessionsDoc, UsersDoc } from '@nuvix/utils/types'
 import { CoreService } from '../../core.service.js'
@@ -29,7 +29,8 @@ export class AuthHook implements Hook {
     const params = new ParamsHelper(req)
     const mode = req.context.mode || AppMode.DEFAULT
 
-    Authorization.setDefaultStatus(true)
+    // Keep deny-by-default from main.ts — don't override here
+    // Authorization.setDefaultStatus(true) // REMOVED: was set before auth!
     const isConsole = this.coreService.isConsole()
     const cookieName =
       isConsole || mode === AppMode.ADMIN ? 'nc_session' : Auth.cookieName
@@ -104,6 +105,9 @@ export class AuthHook implements Hook {
       user = new Doc()
     } else {
       req.context.authType = AuthType.SESSION
+      // Set user role after successful session authentication
+      Authorization.setRole(Role.user(user.getId()).toString())
+      Authorization.setRole('users') // General authenticated user role
     }
 
     const authJWT = params.getFromHeaders('x-nuvix-jwt')
@@ -135,8 +139,11 @@ export class AuthHook implements Hook {
         )
       ) {
         user = new Doc()
-      } else {
+      } else if (jwtUserId) {
         req.context.authType = AuthType.JWT
+        // Set user role after successful JWT authentication
+        Authorization.setRole(Role.user(jwtUserId).toString())
+        Authorization.setRole('users') // General authenticated user role
       }
     }
 
