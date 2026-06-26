@@ -156,7 +156,8 @@ export class SessionsController {
     sensitiveFields: ['secret'],
     auth: [],
     throttle: {
-      limit: 10,
+      limit: 5,
+      ttl: 60, // 5 attempts per minute (brute-force protection)
       key: 'url:{url},email:{body-email}',
       configKey: 'create_email_session',
     },
