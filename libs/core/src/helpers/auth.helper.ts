@@ -1,5 +1,5 @@
 import * as crypto from 'node:crypto'
-import { createHash, createHmac, randomBytes, scryptSync } from 'node:crypto'
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { Logger } from '@nestjs/common'
 import { Role, UserDimension } from '@nuvix/db'
 import {
@@ -201,13 +201,16 @@ export class Auth {
       case HashAlgorithm.MD5:
       case HashAlgorithm.SHA: {
         const generatedHash = await Auth.passwordHash(plain, algo, options)
-        return generatedHash === hash
+        if (!generatedHash || !hash) return false
+        return Auth.safeCompare(generatedHash, hash)
       }
 
       case HashAlgorithm.PHPASS: {
         // TODO: recheck or remove
+        if (!hash) return false
         const salt = hash.slice(0, 6)
-        return createHmac('sha1', salt).update(plain).digest('base64') === hash
+        const phpHash = createHmac('sha1', salt).update(plain).digest('base64')
+        return Auth.safeCompare(phpHash, hash)
       }
 
       case HashAlgorithm.SCRYPT:
@@ -217,12 +220,29 @@ export class Auth {
           algo,
           options,
         )
-        return scryptGeneratedHash === hash
+        if (!scryptGeneratedHash || !hash) return false
+        return Auth.safeCompare(scryptGeneratedHash, hash)
       }
 
       default:
         throw new Error(`Hashing algorithm '${algo}' is not supported.`)
     }
+  }
+
+  /**
+   * Constant-time string comparison to prevent timing attacks.
+   * Returns true if both strings are equal, false otherwise.
+   * If lengths differ, still performs comparison with a dummy buffer
+   * to avoid leaking length information through timing.
+   */
+  public static safeCompare(a: string, b: string): boolean {
+    const bufA = Buffer.from(a, 'utf-8')
+    const bufB = Buffer.from(b, 'utf-8')
+    if (bufA.length !== bufB.length) {
+      // Still perform a comparison to avoid timing leak on length difference
+      return timingSafeEqual(bufA, Buffer.alloc(bufA.length)) && false
+    }
+    return timingSafeEqual(bufA, bufB)
   }
 
   public static passwordGenerator(length = 20): string {
@@ -261,7 +281,7 @@ export class Auth {
         token.get('expire') !== null &&
         token.get('type') !== null &&
         (type === null || token.get('type') === type) &&
-        token.get('secret') === Auth.hash(secret) &&
+        Auth.safeCompare(token.get('secret'), Auth.hash(secret)) &&
         new Date(token.get('expire') as string).getTime() >= Date.now()
       ) {
         return token

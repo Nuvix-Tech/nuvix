@@ -25,6 +25,26 @@ import {
   Upsert,
 } from './schemas.types'
 
+/**
+ * Validate and sanitize a SQL identifier (table name, schema name, parameter name).
+ * Rejects any identifier containing characters outside [a-zA-Z0-9_]
+ * or that doesn't start with a letter or underscore.
+ * Throws an Exception on invalid input to prevent SQL injection.
+ */
+function sanitizeIdentifier(identifier: string, label = 'identifier'): string {
+  if (!identifier || typeof identifier !== 'string') {
+    throw new Exception(Exception.INVALID_PARAMS, `Invalid ${label}: must be a non-empty string`)
+  }
+  // Only allow letters, digits, underscores; must start with letter or underscore
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier)) {
+    throw new Exception(
+      Exception.INVALID_PARAMS,
+      `Invalid ${label}: "${identifier}" contains disallowed characters. Only alphanumeric characters and underscores are allowed.`,
+    )
+  }
+  return identifier
+}
+
 @Injectable()
 export class SchemasService {
   private readonly pg: DataSource
@@ -333,6 +353,10 @@ export class SchemasService {
     args,
     context,
   }: CallFunction) {
+    // Sanitize SQL identifiers to prevent injection via crafted names
+    sanitizeIdentifier(functionName, 'functionName')
+    sanitizeIdentifier(schema, 'schema')
+
     let placeholder: string
     let values: any[]
 
@@ -344,7 +368,9 @@ export class SchemasService {
       // Handle object args (named parameters)
       const _argNames = Object.keys(args || {})
       const _values = Object.values(args || {})
-      placeholder = _argNames.map(n => `${n}:= ?`).join(', ')
+      // Sanitize parameter names to prevent SQL injection through crafted keys
+      const safeArgNames = _argNames.map(n => sanitizeIdentifier(n, 'function parameter name'))
+      placeholder = safeArgNames.map(n => `${n}:= ?`).join(', ')
       values = [schema, functionName, ..._values]
     }
 
@@ -395,6 +421,10 @@ export class SchemasService {
     permissions,
     rowId,
   }: UpdatePermissions) {
+    // Sanitize SQL identifiers to prevent injection via crafted table/schema names
+    sanitizeIdentifier(tableId, 'tableId')
+    sanitizeIdentifier(schema, 'schema')
+
     const allowed = [
       PermissionType.Read,
       PermissionType.Update,
@@ -415,7 +445,7 @@ export class SchemasService {
 
     // Get current permissions from DB
     const query = this.dataSource
-      .table(`${tableId}_perms`)
+      .table(`${sanitizeIdentifier(tableId, 'tableId')}_perms`)
       .withSchema(schema)
       .select(['permission', 'roles'])
 
@@ -454,7 +484,7 @@ export class SchemasService {
         // Delete existing row
         if (currentPermissions.length > 0) {
           const delQuery = this.dataSource
-            .table(`${tableId}_perms`)
+            .table(`${sanitizeIdentifier(tableId, 'tableId')}_perms`)
             .withSchema(schema)
             .andWhere('permission', type)
 
@@ -469,7 +499,7 @@ export class SchemasService {
       } else if (currentPermissions.length > 0) {
         // Update existing row
         const updQuery = this.dataSource
-          .table(`${tableId}_perms`)
+          .table(`${sanitizeIdentifier(tableId, 'tableId')}_perms`)
           .withSchema(schema)
           .andWhere('permission', type)
 
@@ -485,7 +515,7 @@ export class SchemasService {
       } else {
         // Insert new row
         await this.dataSource
-          .table(`${tableId}_perms`)
+          .table(`${sanitizeIdentifier(tableId, 'tableId')}_perms`)
           .withSchema(schema)
           .insert({
             permission: type,
@@ -503,8 +533,12 @@ export class SchemasService {
     rowId,
     schema,
   }: GetPermissions): Promise<string[]> {
+    // Sanitize SQL identifiers to prevent injection
+    sanitizeIdentifier(tableId, 'tableId')
+    sanitizeIdentifier(schema, 'schema')
+
     const query = this.dataSource
-      .table(`${tableId}_perms`)
+      .table(`${sanitizeIdentifier(tableId, 'tableId')}_perms`)
       .withSchema(schema)
       .select(['roles', 'permission'])
 

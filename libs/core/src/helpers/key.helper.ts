@@ -132,7 +132,7 @@ export class Key {
         const expire = keyDoc.get('expire')
         if (
           expire &&
-          new Date(expire as string).getMilliseconds() < Date.now()
+          new Date(expire as string).getTime() < Date.now()
         ) {
           expired = true
         }
