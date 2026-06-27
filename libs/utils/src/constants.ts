@@ -53,6 +53,7 @@ export enum QueueFor {
   STATS = 'stats',
   LOGS = 'logs',
   DELETES = 'deletes',
+  WEBHOOKS = 'webhooks',
 }
 
 export const EVENT_DELIMITER = '.'

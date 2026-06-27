@@ -544,5 +544,70 @@ export const internalCollections: Record<
     ],
   },
 
+  webhook_logs: {
+    $collection: ID.custom(Database.METADATA),
+    $id: ID.custom('webhook_logs'),
+    name: 'webhook_logs',
+    attributes: [
+      {
+        $id: ID.custom('webhookInternalId'),
+        key: 'webhookInternalId',
+        type: AttributeType.Integer,
+        size: Database.LENGTH_KEY,
+        required: true,
+        default: null,
+      },
+      {
+        $id: ID.custom('timestamp'),
+        key: 'timestamp',
+        type: AttributeType.Timestamptz,
+        required: true,
+        default: null,
+      },
+      {
+        $id: ID.custom('success'),
+        key: 'success',
+        type: AttributeType.Boolean,
+        required: true,
+        default: false,
+      },
+      {
+        $id: ID.custom('statusCode'),
+        key: 'statusCode',
+        type: AttributeType.Integer,
+        size: 4,
+        default: null,
+      },
+      {
+        $id: ID.custom('response'),
+        key: 'response',
+        type: AttributeType.String,
+        size: 1000,
+        default: null,
+      },
+      {
+        $id: ID.custom('error'),
+        key: 'error',
+        type: AttributeType.String,
+        size: 1000,
+        default: null,
+      },
+    ],
+    indexes: [
+      {
+        $id: ID.custom('_key_webhook'),
+        type: IndexType.Key,
+        attributes: ['webhookInternalId'],
+        orders: [Order.Asc],
+      },
+      {
+        $id: '_key_timestamp',
+        type: IndexType.Key,
+        attributes: ['timestamp'],
+        orders: [Order.Desc],
+      },
+    ],
+  },
+
   ...commonCollections,
 }

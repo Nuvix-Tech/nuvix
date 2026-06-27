@@ -28,6 +28,7 @@ import { SchemasModule } from './schemas/schemas.module'
 import { StorageModule } from './storage/storage.module'
 import { TeamsModule } from './teams/teams.module'
 import { UsersModule } from './users/users.module'
+import { WebhooksModule } from './webhooks/webhooks.module'
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { UsersModule } from './users/users.module'
     SchemasModule,
     MessagingModule,
     LocaleModule,
+    WebhooksModule,
   ],
   controllers: [AppController],
   providers: [AppService],
