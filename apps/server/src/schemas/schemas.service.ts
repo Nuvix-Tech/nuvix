@@ -33,7 +33,10 @@ import {
  */
 function sanitizeIdentifier(identifier: string, label = 'identifier'): string {
   if (!identifier || typeof identifier !== 'string') {
-    throw new Exception(Exception.INVALID_PARAMS, `Invalid ${label}: must be a non-empty string`)
+    throw new Exception(
+      Exception.INVALID_PARAMS,
+      `Invalid ${label}: must be a non-empty string`,
+    )
   }
   // Only allow letters, digits, underscores; must start with letter or underscore
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier)) {
@@ -369,7 +372,9 @@ export class SchemasService {
       const _argNames = Object.keys(args || {})
       const _values = Object.values(args || {})
       // Sanitize parameter names to prevent SQL injection through crafted keys
-      const safeArgNames = _argNames.map(n => sanitizeIdentifier(n, 'function parameter name'))
+      const safeArgNames = _argNames.map(n =>
+        sanitizeIdentifier(n, 'function parameter name'),
+      )
       placeholder = safeArgNames.map(n => `${n}:= ?`).join(', ')
       values = [schema, functionName, ..._values]
     }

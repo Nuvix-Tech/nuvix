@@ -412,68 +412,7 @@ describe('UserService', () => {
 
 ## Common Pitfalls
 
-### 1. SQL Injection via Identifier Interpolation
-
-**❌ Wrong:**
-```typescript
-const query = db.table(`${userInput}_perms`)  // VULNERABLE
-```
-
-**✅ Correct:**
-```typescript
-import { sanitizeIdentifier } from './helpers'
-
-const safeTable = sanitizeIdentifier(userInput, 'tableId')
-const query = db.table(`${safeTable}_perms`)
-```
-
-**Rule:** Never interpolate user input directly into SQL identifiers (table names, schema names, column names). Use `sanitizeIdentifier()` which validates against `/^[a-zA-Z_][a-zA-Z0-9_]*$/`.
-
-### 2. Timing-Unsafe Hash Comparison
-
-**❌ Wrong:**
-```typescript
-if (hash1 === hash2) { ... }  // Timing attack vulnerable
-```
-
-**✅ Correct:**
-```typescript
-import { Auth } from '@nuvix/core/helpers'
-
-if (Auth.safeCompare(hash1, hash2)) { ... }  // Constant-time
-```
-
-**Rule:** Always use `Auth.safeCompare()` for comparing hashes, tokens, or secrets.
-
-### 3. API Key Expiry Check
-
-**❌ Wrong:**
-```typescript
-new Date(expire).getMilliseconds() < Date.now()  // BUG: returns 0-999
-```
-
-**✅ Correct:**
-```typescript
-new Date(expire).getTime() < Date.now()  // Full epoch timestamp
-```
-
-**Rule:** Use `.getTime()` for timestamp comparisons, NOT `.getMilliseconds()` (which returns only ms-within-second).
-
-### 4. Authorization Defaults
-
-**⚠️ Risk:**
-```typescript
-Authorization.setDefaultStatus(true)  // Permissive by default
-```
-
-**✅ Recommended:**
-```typescript
-Authorization.setDefaultStatus(false)  // Deny by default
-```
-
-**Rule:** Default-deny is safer. The server app uses `false`, but the platform app historically used `true` — this is a known security gap.
-
-### 5. `Authorization.skip()` Misuse
+### 1. `Authorization.skip()` Misuse
 
 **⚠️ Risk:**
 ```typescript
@@ -485,7 +424,7 @@ This bypasses RLS entirely. Only use when:
 - The operation is system-level (not user-triggered)
 - You're in a trusted context (internal jobs, migrations)
 
-### 6. Node.js Import Protocol
+### 2. Node.js Import Protocol
 
 Biome requires `node:` prefix for built-in modules:
 
@@ -501,7 +440,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 ```
 
-### 7. Parameter Reassignment
+### 3. Parameter Reassignment
 
 Biome forbids reassigning function parameters:
 
@@ -522,7 +461,7 @@ async deleteUser(id: string) {
 }
 ```
 
-### 8. Using `any` Type
+### 4. Using `any` Type
 
 Biome warns on `any` — use proper types:
 
@@ -612,28 +551,10 @@ Location: `apps/<app>/src/<domain>/DTO/<name>.dto.ts`
 
 ---
 
-## Security Notes
-
-**Verified fixes (June 2026):**
-- V-01: API key expiry now uses `.getTime()` ✅
-- V-02: SQL identifier sanitization added ✅
-- V-04: Constant-time hash comparison implemented ✅
-- V-08: RPC parameter names sanitized ✅
-- V-16: Token secret comparison uses `safeCompare()` ✅
-
-**Known issues to audit:**
-- `Authorization.setDefaultStatus(true)` in platform app
-- 176 `Authorization.skip()` call sites — review each
-- No rate limiting enabled by default (requires `NUVIX_ENABLE_THROTTLING`)
-- Session cookie is unsigned base64 (no HMAC/AES)
-
----
-
 ## Resources
 
 - **Docs:** None (self-documenting codebase)
 - **Issues:** https://github.com/nuvix-dev/nuvix/issues
-- **Security:** See `SECURITY_AUDIT_REPORT.md` in repo root
 
 ---
 

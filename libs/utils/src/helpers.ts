@@ -4,7 +4,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const env = {
-  get: (key: string, fallback = ''): string => process.env[key] ?? fallback,
+  get: (key: string, fallback = ''): string => {
+    const value = process.env[key]
+    if (value === undefined || value === null || value === '') {
+      return fallback
+    }
+    return value
+  },
 
   getRequired: (key: string): string | undefined => process.env[key],
 

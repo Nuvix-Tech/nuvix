@@ -10,7 +10,7 @@ export async function registerSecurityHeaders(app: NestFastifyApplication) {
   const httpAdapter = app.getHttpAdapter()
   const fastifyApp = httpAdapter.getInstance()
 
-  fastifyApp.addHook('onResponse', async (request: any, reply: any) => {
+  fastifyApp.addHook('onRequest', async (_, reply) => {
     // Prevent XSS attacks by controlling which resources can execute
     // 'self' = only resources from same origin
     // 'unsafe-inline' = allows inline scripts (needed for some OAuth flows)
