@@ -23,9 +23,8 @@ describe('Auth', () => {
     // Verify it has the v1: prefix
     expect(encoded.startsWith('v1:')).toBe(true)
 
-    // Strip prefix and decode to verify round-trip
-    const stripped = encoded.slice(3) // Remove 'v1:'
-    const decoded = Auth.decodeSession(stripped)
+    // Decode with full prefix to verify round-trip
+    const decoded = Auth.decodeSession(encoded)
 
     expect(decoded).toEqual({ id, secret })
 
