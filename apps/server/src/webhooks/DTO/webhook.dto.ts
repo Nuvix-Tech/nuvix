@@ -1,5 +1,4 @@
 import { IsString, IsOptional, IsBoolean, IsArray, IsUrl, ValidateNested } from 'class-validator'
-import { ArrayToLastElement, IsPermissionsArray } from '@nuvix/core/validators'
 
 export class CreateWebhookDTO {
   /**
