@@ -1,9 +1,7 @@
-import { Type } from 'class-transformer'
-import { IsInt, IsPositive } from 'class-validator'
+import { IsPositiveInt, TryTransformTo } from '@nuvix/core/validators'
 
 export class SchemaIdParamDTO {
-  @IsInt()
-  @IsPositive()
-  @Type(() => Number)
+  @IsPositiveInt()
+  @TryTransformTo('int')
   declare id: number
 }

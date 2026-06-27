@@ -1,5 +1,11 @@
 import * as crypto from 'node:crypto'
-import { createHash, createHmac, randomBytes, scryptSync } from 'node:crypto'
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from 'node:crypto'
 import { Logger } from '@nestjs/common'
 import { Role, UserDimension } from '@nuvix/db'
 import {
@@ -67,7 +73,9 @@ export class Auth {
   public static readonly MFA_RECENT_DURATION = 1800 // 30 mins
 
   public static encodeSession(id: string, secret: string): string {
-    return Buffer.from(JSON.stringify({ id, secret })).toString('base64')
+    // Encrypt session data to prevent tampering and hijacking
+    const sessionData = JSON.stringify({ id, secret })
+    return Auth.encrypt(sessionData)
   }
 
   public static get cookieName(): string {
@@ -97,15 +105,34 @@ export class Auth {
     id?: string
     secret?: string
   } {
-    const bufferStr = Buffer.from(session, 'base64').toString()
-    const decoded = JSON.parse(bufferStr)
     const defaultSession = { id: undefined, secret: undefined }
 
-    if (typeof decoded !== 'object' || decoded === null) {
-      return defaultSession
-    }
+    try {
+      // Try encrypted format first (v1:)
+      const decrypted = Auth.decrypt(session)
+      const decoded = JSON.parse(decrypted)
 
-    return { ...defaultSession, ...decoded }
+      if (typeof decoded !== 'object' || decoded === null) {
+        return defaultSession
+      }
+
+      return { ...defaultSession, ...decoded }
+    } catch (decryptError) {
+      // Fall back to legacy base64 format for backward compatibility
+      // TODO: Remove this fallback in next major version after all sessions rotate
+      try {
+        const bufferStr = Buffer.from(session, 'base64').toString()
+        const decoded = JSON.parse(bufferStr)
+
+        if (typeof decoded !== 'object' || decoded === null) {
+          return defaultSession
+        }
+
+        return { ...defaultSession, ...decoded }
+      } catch (legacyError) {
+        return defaultSession
+      }
+    }
   }
 
   public static hash(string: string): string {
@@ -201,13 +228,16 @@ export class Auth {
       case HashAlgorithm.MD5:
       case HashAlgorithm.SHA: {
         const generatedHash = await Auth.passwordHash(plain, algo, options)
-        return generatedHash === hash
+        if (!generatedHash || !hash) return false
+        return Auth.safeCompare(generatedHash, hash)
       }
 
       case HashAlgorithm.PHPASS: {
         // TODO: recheck or remove
+        if (!hash) return false
         const salt = hash.slice(0, 6)
-        return createHmac('sha1', salt).update(plain).digest('base64') === hash
+        const phpHash = createHmac('sha1', salt).update(plain).digest('base64')
+        return Auth.safeCompare(phpHash, hash)
       }
 
       case HashAlgorithm.SCRYPT:
@@ -217,12 +247,35 @@ export class Auth {
           algo,
           options,
         )
-        return scryptGeneratedHash === hash
+        if (!scryptGeneratedHash || !hash) return false
+        return Auth.safeCompare(scryptGeneratedHash, hash)
       }
 
       default:
         throw new Error(`Hashing algorithm '${algo}' is not supported.`)
     }
+  }
+
+  /**
+   * Constant-time string comparison to prevent timing attacks.
+   * Returns true if both strings are equal, false otherwise.
+   * If lengths differ, still performs comparison with a dummy buffer
+   * to avoid leaking length information through timing.
+   * Validates inputs are strings before comparison.
+   */
+  public static safeCompare(a: unknown, b: unknown): boolean {
+    // Validate inputs are strings
+    if (typeof a !== 'string' || typeof b !== 'string') {
+      return false
+    }
+
+    const bufA = Buffer.from(a, 'utf-8')
+    const bufB = Buffer.from(b, 'utf-8')
+    if (bufA.length !== bufB.length) {
+      // Still perform a comparison to avoid timing leak on length difference
+      return timingSafeEqual(bufA, Buffer.alloc(bufA.length)) && false
+    }
+    return timingSafeEqual(bufA, bufB)
   }
 
   public static passwordGenerator(length = 20): string {
@@ -261,7 +314,7 @@ export class Auth {
         token.get('expire') !== null &&
         token.get('type') !== null &&
         (type === null || token.get('type') === type) &&
-        token.get('secret') === Auth.hash(secret) &&
+        Auth.safeCompare(token.get('secret'), Auth.hash(secret)) &&
         new Date(token.get('expire') as string).getTime() >= Date.now()
       ) {
         return token
@@ -284,7 +337,7 @@ export class Auth {
         session.get('secret') !== null &&
         session.get('expire') !== null &&
         session.get('provider') !== null &&
-        session.get('secret') === Auth.hash(secret) &&
+        Auth.safeCompare(session.get('secret'), Auth.hash(secret)) &&
         new Date(session.get('expire') as string).getTime() >= Date.now()
       ) {
         return session.getId()

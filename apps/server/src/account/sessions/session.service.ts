@@ -357,6 +357,22 @@ export class SessionService {
     const protocol = request.protocol
     const ctx = request.context
 
+    // Check account lockout due to too many failed attempts
+    const lockoutKey = `login_lockout:${email}`
+    const lockoutData = await this.coreService
+      .getRedisInstance()
+      .get(lockoutKey)
+    if (lockoutData) {
+      const { lockedUntil, failedAttempts } = JSON.parse(lockoutData)
+      if (Date.now() < lockedUntil) {
+        const retryAfter = Math.ceil((lockedUntil - Date.now()) / 1000)
+        throw new Exception(
+          Exception.GENERAL_RATE_LIMIT_EXCEEDED,
+          `Account temporarily locked due to too many failed login attempts. Try again in ${retryAfter} seconds.`,
+        )
+      }
+    }
+
     const profile = await this.db.findOne('users', [
       Query.equal('email', [email]),
     ])
@@ -371,8 +387,13 @@ export class SessionService {
         profile.get('hashOptions'),
       ))
     ) {
+      // Track failed login attempt
+      await this.trackFailedLogin(email)
       throw new Exception(Exception.USER_INVALID_CREDENTIALS)
     }
+
+    // Clear lockout on successful login
+    await this.clearFailedLogin(email)
 
     if (profile.get('status') === false) {
       throw new Exception(Exception.USER_BLOCKED)
@@ -1984,6 +2005,42 @@ export class SessionService {
       .set('secret', sessionSecret)
 
     return createdSession
+  }
+
+  /**
+   * Track a failed login attempt and lock account if threshold exceeded.
+   * Locks account for 15 minutes after 5 failed attempts within 10 minutes.
+   */
+  private async trackFailedLogin(email: string): Promise<void> {
+    const redis = this.coreService.getRedisInstance()
+    const failedKey = `login_failed:${email}`
+
+    // Increment failed attempt counter (10-minute window)
+    const attempts = await redis.incr(failedKey)
+    if (attempts === 1) {
+      await redis.expire(failedKey, 600) // 10 minutes
+    }
+
+    // Lock account if 5 or more failed attempts
+    if (attempts >= 5) {
+      const lockoutKey = `login_lockout:${email}`
+      const lockedUntil = Date.now() + 15 * 60 * 1000 // 15 minutes
+      await redis.setex(
+        lockoutKey,
+        900, // 15 minutes TTL
+        JSON.stringify({ lockedUntil, failedAttempts: attempts }),
+      )
+      // Clear the failed counter
+      await redis.del(failedKey)
+    }
+  }
+
+  /**
+   * Clear failed login tracking on successful authentication.
+   */
+  private async clearFailedLogin(email: string): Promise<void> {
+    const redis = this.coreService.getRedisInstance()
+    await redis.del(`login_failed:${email}`, `login_lockout:${email}`)
   }
 
   private getProviderConfig(project: ProjectsDoc, provider: string) {

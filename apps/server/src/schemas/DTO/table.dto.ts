@@ -1,11 +1,11 @@
 import { PickType } from '@nestjs/swagger'
 import {
   ArrayToLastElement,
+  IsPositiveInt,
   TransformStringToBoolean,
   TrySplitStringToArray,
   TryTransformTo,
 } from '@nuvix/core/validators'
-import { Type } from 'class-transformer'
 import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator'
 
 export class TableParamsDTO {
@@ -42,8 +42,8 @@ export class RowParamsDTO extends TableParamsDTO {
   /**
    * Row ID. (See [Schemas](https://docs.nuvix.in/schemas/managed-schema#_id))
    */
-  @Type(() => Number)
-  @IsNumber()
+  @TryTransformTo('int')
+  @IsPositiveInt()
   declare rowId: number
 }
 

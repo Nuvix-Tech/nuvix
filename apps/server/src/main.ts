@@ -16,6 +16,7 @@ import { configuration, PROJECT_ROOT, validateConfig } from '@nuvix/utils'
 import QueryString from 'qs'
 import { AppModule } from './app.module'
 import { applyAppConfig, openApiSetup } from './core'
+import { registerSecurityHeaders } from './security-headers'
 
 configurePgTypeParsers()
 configureDbFiltersAndFormats()
@@ -64,6 +65,9 @@ async function bootstrap() {
     root: `${PROJECT_ROOT}/public`,
     prefix: '/public/',
   })
+
+  // Register security headers middleware
+  registerSecurityHeaders(app)
 
   // Apply additional app configuration
   applyAppConfig(app)
