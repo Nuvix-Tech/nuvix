@@ -14,28 +14,28 @@ describe('Auth', () => {
   })
 
   test('encode decode session', () => {
-      const id = 'test-session-id'
-      const secret = 'test-secret-key'
+    const id = 'test-session-id'
+    const secret = 'test-secret-key'
 
-      // Encode the session
-      const encoded = Auth.encodeSession(id, secret)
+    // Encode the session
+    const encoded = Auth.encodeSession(id, secret)
 
-      // Verify it has the v1: prefix
-      expect(encoded.startsWith('v1:')).toBe(true)
+    // Verify it has the v1: prefix
+    expect(encoded.startsWith('v1:')).toBe(true)
 
-      // Strip prefix and decode to verify round-trip
-      const stripped = encoded.slice(3) // Remove 'v1:'
-      const decoded = Auth.decodeSession(stripped)
+    // Strip prefix and decode to verify round-trip
+    const stripped = encoded.slice(3) // Remove 'v1:'
+    const decoded = Auth.decodeSession(stripped)
 
-      expect(decoded).toEqual({ id, secret })
+    expect(decoded).toEqual({ id, secret })
 
-      // Legacy format test - verify backward compatibility
-      const legacySession = 'eyJpZC...0In0='
-      expect(Auth.decodeSession(legacySession)).toEqual({
-        id: 'id',
-        secret: 'secret',
-      })
+    // Legacy format test - verify backward compatibility
+    const legacySession = 'eyJpZC...0In0='
+    expect(Auth.decodeSession(legacySession)).toEqual({
+      id: 'id',
+      secret: 'secret',
     })
+  })
 
   test('hash', () => {
     const secret = 'secret'
