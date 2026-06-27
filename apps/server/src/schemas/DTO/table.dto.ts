@@ -42,6 +42,7 @@ export class RowParamsDTO extends TableParamsDTO {
   /**
    * Row ID. (See [Schemas](https://docs.nuvix.in/schemas/managed-schema#_id))
    */
+  @TryTransformTo('int')
   @IsPositiveInt()
   declare rowId: number
 }
