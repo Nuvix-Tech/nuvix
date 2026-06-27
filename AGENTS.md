@@ -24,7 +24,7 @@
 
 ### Monorepo Structure
 
-```
+```text
 nuvix/
 ├── apps/
 │   ├── server/          # Main API server (port 4000)
@@ -40,7 +40,7 @@ nuvix/
 
 ### Package Dependencies
 
-```
+```text
 @nuvix/server      → @nuvix/core, @nuvix/utils
 @nuvix/platform    → @nuvix/core, @nuvix/pg-meta, @nuvix/utils
 @nuvix/core        → @nuvix/db, @nuvix/pg, external deps
@@ -50,7 +50,7 @@ nuvix/
 
 ### Request Pipeline (Server)
 
-```
+```text
 CORS → Auth → API → Audit → Stats → (Logs) → Controller
 ```
 
@@ -348,7 +348,7 @@ Authorization.enableAsyncLocalStorage()
 
 ### Test Structure
 
-```
+```text
 apps/server/tests/
 ├── integration/      # E2E tests hitting real API
 │   ├── account/

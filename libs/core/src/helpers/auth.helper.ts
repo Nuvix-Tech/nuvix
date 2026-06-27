@@ -261,8 +261,14 @@ export class Auth {
    * Returns true if both strings are equal, false otherwise.
    * If lengths differ, still performs comparison with a dummy buffer
    * to avoid leaking length information through timing.
+   * Validates inputs are strings before comparison.
    */
-  public static safeCompare(a: string, b: string): boolean {
+  public static safeCompare(a: unknown, b: unknown): boolean {
+    // Validate inputs are strings
+    if (typeof a !== 'string' || typeof b !== 'string') {
+      return false
+    }
+
     const bufA = Buffer.from(a, 'utf-8')
     const bufB = Buffer.from(b, 'utf-8')
     if (bufA.length !== bufB.length) {

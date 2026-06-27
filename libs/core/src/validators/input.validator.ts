@@ -250,13 +250,28 @@ export function IsPositiveInt(
       propertyName: propertyName.toString(),
       options: validationOptions,
       validator: {
-        validate(value: any) {
-          // Transform string to number first
-          const numericValue =
-            typeof value === 'string' ? Number.parseInt(value, 10) : value
+        validate(value: unknown) {
+          // Reject non-string, non-number values immediately
+          if (typeof value !== 'string' && typeof value !== 'number') {
+            return false
+          }
+
+          // If it's already a number, just validate it
+          if (typeof value === 'number') {
+            if (!Number.isInteger(value)) return false
+            return value >= min && value <= max
+          }
+
+          // For strings, reject non-integer representations
+          // This rejects: '1.5', '1e2', '1abc', '1.0', '', ' '
+          const trimmedValue = value.trim()
+          if (trimmedValue === '' || !/^-?\d+$/.test(trimmedValue)) {
+            return false
+          }
+
+          const numericValue = Number.parseInt(trimmedValue, 10)
           if (!Number.isInteger(numericValue)) return false
-          if (numericValue < min || numericValue > max) return false
-          return true
+          return numericValue >= min && numericValue <= max
         },
         defaultMessage() {
           if (max === Number.MAX_SAFE_INTEGER) {

@@ -446,7 +446,7 @@ Avatar width/height can be set to 0, which could cause edge-case behavior in SVG
 | V-09 | 🟠 High | Insecure Defaults | `PLAINTEXT` hash algorithm exists in enum | ⏳ Pending |
 | V-10 | 🟡 Medium | Session Hijacking | Session cookie is unsigned base64 JSON | ✅ **Fixed** `f6fc1a4b` (now encrypted) |
 | V-11 | 🟡 Medium | Network Exposure | PostgreSQL & Redis ports exposed on 0.0.0.0 | ⏳ Pending |
-| V-12 | 🟡 Medium | Input Validation | `rowId` cast with `Number()` — no bounds check | ⏳ Pending |
+| V-12 | 🟡 Medium | Input Validation | `rowId` cast with `Number()` — no bounds check | ✅ **Fixed** `PR #61` (IsPositiveInt validator) |
 | V-13 | 🟡 Medium | Brute Force | No default rate limiting on auth endpoints | ✅ **Fixed** `4c4c7da0` (5/min + lockout) |
 | V-14 | 🟡 Medium | Race Condition | TOCTOU in chunked file upload | ⏳ Pending |
 | V-15 | 🟢 Low | Crypto | Encryption key derived once, no rotation mechanism | ⏳ Pending |
