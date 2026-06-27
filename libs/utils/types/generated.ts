@@ -1,5 +1,5 @@
 // This file is auto-generated. Do not edit manually.
-// Generated on: 2026-04-03T06:16:52.599Z
+// Generated on: 2026-06-27T16:12:30.206Z
 
 import { Doc, IEntity } from '@nuvix/db'
 
@@ -1180,6 +1180,30 @@ export interface Webhooks extends IEntity {
   attempts?: number | 0
 }
 
+export interface WebhookLogs extends IEntity {
+  /** @required */
+  webhookInternalId: number
+  /** @required */
+  timestamp: string | Date
+  /** @required */
+  success: boolean
+  /**
+   * @optional
+   * @default null
+   */
+  statusCode?: number
+  /**
+   * @optional
+   * @default null
+   */
+  response?: string
+  /**
+   * @optional
+   * @default null
+   */
+  error?: string
+}
+
 // Document Types
 export type UsersDoc = Doc<Users>
 export type TeamsDoc = Doc<Teams>
@@ -1205,6 +1229,7 @@ export type SchedulesDoc = Doc<Schedules>
 export type PlatformsDoc = Doc<Platforms>
 export type KeysDoc = Doc<Keys>
 export type WebhooksDoc = Doc<Webhooks>
+export type WebhookLogsDoc = Doc<WebhookLogs>
 
 // Utility Types
 
@@ -1477,6 +1502,17 @@ export type WebhooksKeys = keyof Webhooks
 export type WebhooksValues = Webhooks[WebhooksKeys]
 export type WebhooksPick<K extends keyof Webhooks> = Pick<Webhooks, K>
 export type WebhooksOmit<K extends keyof Webhooks> = Omit<Webhooks, K>
+
+// Utility types for WebhookLogs
+export type WebhookLogsCreate = Omit<
+  WebhookLogs,
+  '$id' | '$createdAt' | '$updatedAt' | '$sequence'
+>
+export type WebhookLogsUpdate = Partial<WebhookLogsCreate>
+export type WebhookLogsKeys = keyof WebhookLogs
+export type WebhookLogsValues = WebhookLogs[WebhookLogsKeys]
+export type WebhookLogsPick<K extends keyof WebhookLogs> = Pick<WebhookLogs, K>
+export type WebhookLogsOmit<K extends keyof WebhookLogs> = Omit<WebhookLogs, K>
 
 // Input Types
 
@@ -1816,6 +1852,20 @@ export type WebhooksInput = Omit<
 export type WebhooksCreateInput = WebhooksInput
 export type WebhooksUpdateInput = Partial<WebhooksInput>
 
+// Input types for WebhookLogs
+export type WebhookLogsInput = Omit<
+  WebhookLogs,
+  | '$id'
+  | '$createdAt'
+  | '$updatedAt'
+  | '$permissions'
+  | '$sequence'
+  | '$collection'
+  | '$tenant'
+>
+export type WebhookLogsCreateInput = WebhookLogsInput
+export type WebhookLogsUpdateInput = Partial<WebhookLogsInput>
+
 export interface Entities {
   users: Users
   teams: Teams
@@ -1841,4 +1891,5 @@ export interface Entities {
   platforms: Platforms
   keys: Keys
   webhooks: Webhooks
+  webhook_logs: WebhookLogs
 }

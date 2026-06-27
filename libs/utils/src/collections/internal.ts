@@ -609,6 +609,5 @@ export const internalCollections: Record<
     ],
   },
 
-
   ...commonCollections,
 }

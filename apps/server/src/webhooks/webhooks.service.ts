@@ -1,15 +1,15 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bullmq'
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter'
 import { CoreService } from '@nuvix/core'
 import { Database, Doc, ID, Query } from '@nuvix/db'
-import { AppEvents, QueueFor } from '@nuvix/utils'
-import { WebhooksDoc } from '@nuvix/utils/types'
+import { QueueFor } from '@nuvix/utils'
+import type { WebhookLogs, WebhooksDoc } from '@nuvix/utils/types'
 import { Queue, Job } from 'bullmq'
 import { createHmac } from 'crypto'
 
 export interface WebhookJobData {
   webhookId: string
+  webhookInternalId: number
   projectId: string
   event: string
   payload: any
@@ -77,10 +77,11 @@ export class WebhooksService implements OnModuleInit {
       return // No webhooks subscribed to this event
     }
 
-    const jobs = webhooks.map((webhook) => ({
+    const jobs = webhooks.map(webhook => ({
       name: 'deliver',
       data: {
         webhookId: webhook.getId(),
+        webhookInternalId: webhook.getSequence(),
         projectId,
         event,
         payload,
@@ -119,6 +120,7 @@ export class WebhooksService implements OnModuleInit {
    * Log webhook delivery attempt
    */
   async logDelivery(
+    webhookInternalId: number,
     webhookId: string,
     success: boolean,
     statusCode?: number,
@@ -126,9 +128,9 @@ export class WebhooksService implements OnModuleInit {
     error?: string,
   ): Promise<void> {
     try {
-      const deliveryLog = new Doc({
+      const deliveryLog = new Doc<WebhookLogs>({
         $id: ID.unique(),
-        webhookInternalId: webhookId,
+        webhookInternalId: webhookInternalId,
         timestamp: new Date().toISOString(),
         success,
         statusCode: statusCode ?? null,
@@ -148,7 +150,7 @@ export class WebhooksService implements OnModuleInit {
           webhook.set('attempts', currentAttempts + 1)
           webhook.set('logs', error?.substring(0, 500) ?? 'Unknown error')
         }
-        await this.db.updateDocument('webhooks', webhookId, webhook)
+        await this.db.updateDocument('webhooks', webhook.getId(), webhook)
       }
     } catch (err) {
       this.logger.error('Failed to log webhook delivery', err)
@@ -159,11 +161,10 @@ export class WebhooksService implements OnModuleInit {
    * Process a single webhook delivery
    */
   async deliverWebhook(job: Job<WebhookJobData>): Promise<void> {
-    const { webhookId, event, payload, attempts } = job.data
+    const { webhookId, webhookInternalId, event, payload, attempts } = job.data
 
     try {
       const webhook = await this.db.getDocument('webhooks', webhookId)
-
       if (webhook.empty()) {
         this.logger.warn(`Webhook not found: ${webhookId}`)
         return // Don't retry if webhook doesn't exist
@@ -231,6 +232,7 @@ export class WebhooksService implements OnModuleInit {
 
       // Log successful delivery
       await this.logDelivery(
+        webhook.getSequence(),
         webhookId,
         true,
         response.status,
@@ -246,6 +248,7 @@ export class WebhooksService implements OnModuleInit {
 
       // Log failed delivery
       await this.logDelivery(
+        webhookInternalId,
         webhookId,
         false,
         undefined,
