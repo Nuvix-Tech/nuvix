@@ -8,7 +8,6 @@ import {
   Auth,
   Detector,
   emailHelper,
-  LocaleTranslator,
   RequestContext,
 } from '@nuvix/core/helpers'
 import type { DeletesJobData } from '@nuvix/core/resolvers'
@@ -30,6 +29,7 @@ import {
 } from '@nuvix/db'
 import {
   AppEvents,
+  configuration,
   DeleteType,
   type HashAlgorithm,
   QueueFor,
@@ -456,6 +456,10 @@ export class AccountService {
           httpOnly: true,
           sameSite: ctx.cookieSameSite,
         })
+
+        if (configuration.server.fallbackCookies) {
+          response.header('X-Fallback-Cookies', JSON.stringify({}))
+        }
       }
     }
 
@@ -661,6 +665,15 @@ export class AccountService {
         httpOnly: true,
       })
       .status(201)
+
+    if (configuration.server.fallbackCookies) {
+      response.header(
+        'X-Fallback-Cookies',
+        JSON.stringify({
+          nc_session: Auth.encodeSession(user.getId(), secret),
+        }),
+      )
+    }
 
     const key = `countries.${session.get('countryCode')}`
     const countryName = locale.has(key)
