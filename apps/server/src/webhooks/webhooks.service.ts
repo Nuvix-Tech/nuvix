@@ -7,6 +7,30 @@ import type { WebhookLogs, WebhooksDoc } from '@nuvix/utils/types'
 import { Queue, Job } from 'bullmq'
 import { createHmac } from 'crypto'
 
+export function eventMatchesPattern(event: string, pattern: string): boolean {
+  if (!pattern || !event) {
+    return false
+  }
+
+  if (pattern === '*') {
+    return true
+  }
+
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+  const regexString = `^${escaped.replace(/\*/g, '.*')}$`
+  const matcher = new RegExp(regexString)
+
+  return matcher.test(event)
+}
+
+export function webhookSubscribesToEvent(
+  webhook: WebhooksDoc,
+  event: string,
+): boolean {
+  const events = webhook.get('events', [])
+  return events.some((pattern: string) => eventMatchesPattern(event, pattern))
+}
+
 export interface WebhookJobData {
   webhookId: string
   webhookInternalId: number
@@ -56,11 +80,10 @@ export class WebhooksService implements OnModuleInit {
       Query.limit(100), // Reasonable limit for webhooks per project
     ])
 
-    // Filter webhooks that subscribe to this event (including wildcard *)
-    return webhooks.filter((webhook: WebhooksDoc) => {
-      const events = webhook.get('events', [])
-      return events.includes(event) || events.includes('*')
-    })
+    // Filter webhooks that subscribe to this event via wildcard-aware matching
+    return webhooks.filter((webhook: WebhooksDoc) =>
+      webhookSubscribesToEvent(webhook, event),
+    )
   }
 
   /**
