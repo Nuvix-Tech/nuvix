@@ -1,0 +1,13 @@
+diff --git a/dist/gen/index.mjs b/dist/gen/index.mjs
+index 27baa3f4900963856809d0b13dc49e91f454a1d3..a7d3f3b0b4053e250b6046187e5b82af7604e7a5 100644
+--- a/dist/gen/index.mjs
++++ b/dist/gen/index.mjs
+@@ -1,5 +1,6 @@
+-import { Script } from "../node_modules/typebox/build/type/script/script.mjs";
+-import "../node_modules/typebox/build/type/index.mjs";
++// PATCHED(nuvix): broken relative typebox imports in published beta.1 bundle.
++// Script is only used by fromTypes() (TS-types -> OpenAPI), which we do not use.
++const Script = () => { throw new Error("fromTypes() is stubbed in @elysia/openapi patch") };
+ 
+ //#region src/gen/index.ts
+ const matchRoute = /: Elysia<(.*)>/gs;

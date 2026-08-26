@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "noUnusedLocals": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": false,
+    "noEmit": true
+  },
+  "exclude": ["node_modules", "dist", "build"]
+}

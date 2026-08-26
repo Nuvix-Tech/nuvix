@@ -1,0 +1,7 @@
+{
+  "hello": "Hello!",
+  "greeting": "Hello {name}!",
+  "photos": "You have {count, plural, one {# photo} other {# photos}}.",
+  "replied": "{gender, select, male {He} female {She} other {They}} replied.",
+  "apos": "Don''t panic."
+}

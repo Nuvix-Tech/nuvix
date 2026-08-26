@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.DS_Store
+
+# env — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# bun / build artifacts
+bun.lockb.tmp_*
+*.tsbuildinfo

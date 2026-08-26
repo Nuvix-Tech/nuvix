@@ -1,0 +1,17 @@
+{
+  "name": "@nuvix/i18n",
+  "version": "2.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "migrate:translations": "bun run scripts/migrate.ts",
+    "generate:keys": "bun run scripts/generate-keys.ts"
+  },
+  "dependencies": {
+    "intl-messageformat": "^10.7.16"
+  }
+}
