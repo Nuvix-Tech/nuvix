@@ -136,6 +136,7 @@ describe('smoke: real-app behavioral parity', () => {
         const json = (await res.json()) as Record<string, unknown>
         if (c.jsonKeys) expect(Object.keys(json).sort()).toEqual([...c.jsonKeys].sort())
         if (c.problemType) expect(json.type).toBe(c.problemType)
+        if (c.problemCode) expect(json.code).toBe(c.problemCode)
         if (c.envelope?.totalEqualsData) {
           const data = json.data as unknown[]
           const total = (json.meta as { total: number }).total

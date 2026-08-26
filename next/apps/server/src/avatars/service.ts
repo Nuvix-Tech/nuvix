@@ -52,6 +52,7 @@ export function createAvatarService() {
   async function assertCode(set: AvatarSet, code: string): Promise<string> {
     if (!CODE_RE.test(code)) {
       throw new NotFoundError('Unknown avatar code', {
+        code: 'unknown_avatar_code',
         messageKey: 'errors.avatars.unknownCode',
         params: { code },
       })
@@ -59,6 +60,7 @@ export function createAvatarService() {
     const normalized = code.toLowerCase()
     if (!(await sets[set]).has(normalized)) {
       throw new NotFoundError('Unknown avatar code', {
+        code: 'unknown_avatar_code',
         messageKey: 'errors.avatars.unknownCode',
         params: { code },
       })
@@ -200,6 +202,7 @@ export function createAvatarService() {
       parsed = new URL(url)
     } catch {
       throw new NotFoundError('Favicon unavailable', {
+        code: 'favicon_unavailable',
         messageKey: 'errors.avatars.faviconUnavailable',
       })
     }
@@ -209,6 +212,7 @@ export function createAvatarService() {
       PRIVATE_HOST_RE.test(parsed.hostname)
     ) {
       throw new NotFoundError('Favicon unavailable', {
+        code: 'favicon_unavailable',
         messageKey: 'errors.avatars.faviconUnavailable',
       })
     }
@@ -222,12 +226,14 @@ export function createAvatarService() {
       })
     } catch {
       throw new NotFoundError('Favicon unavailable', {
+        code: 'favicon_unavailable',
         messageKey: 'errors.avatars.faviconUnavailable',
       })
     }
 
     if (!response.ok || !response.headers.get('content-type')?.startsWith('image/')) {
       throw new NotFoundError('Favicon unavailable', {
+        code: 'favicon_unavailable',
         messageKey: 'errors.avatars.faviconUnavailable',
       })
     }
@@ -238,6 +244,7 @@ export function createAvatarService() {
       return { body, contentType: 'image/png', headers: FAVICON_CACHE }
     } catch {
       throw new NotFoundError('Favicon unavailable', {
+        code: 'favicon_unavailable',
         messageKey: 'errors.avatars.faviconUnavailable',
       })
     }

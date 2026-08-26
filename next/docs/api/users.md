@@ -112,8 +112,10 @@ Body: `{ targetId?, providerType, identifier }`.
 1. **Legacy hash create endpoints removed** (D29) — see above.
 2. **Envelope**: `{ data, meta: { total, limit, offset } }`; list queries
    use the shared cursor/offset conventions from `_conventions.md`.
-3. **Error format**: problem+json; i18n keys `errors.users.*`
-   (`userNotFound`, `emailExists`, `identityNotFound`, …).
+3. **Error format**: problem+json with stable `code`s mirroring i18n keys
+   `errors.users.*`: `user_not_found`, `user_email_exists`,
+   `identity_not_found`, … — restoring v1's `USER_NOT_FOUND`-style
+   specificity that clients can branch on.
 4. **Sensitive-field stripping** becomes explicit response serialization
    (`password`, `hashOptions`, token/session secrets) instead of interceptor
    magic.

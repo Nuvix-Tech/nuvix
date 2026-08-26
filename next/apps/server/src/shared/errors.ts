@@ -4,12 +4,24 @@
  * Every thrown `AppError` is converted by the Elysia error handler in
  * `app.ts` into a `application/problem+json` body:
  *
- *   { type, title, status, detail, instance?, errors? }
+ *   { type, title, status, detail, code?, instance?, errors? }
+ *
+ * Two-layer error identity (Stripe-style):
+ * - `type` — coarse class (`/errors/not-found`, `/errors/conflict`, …).
+ *   Generic middleware, retry/backoff, and auth-flow logic key off this
+ *   (or off `status`).
+ * - `code` — stable, flat, snake_case machine code (`user_not_found`,
+ *   `schema_already_exists`, …). THE public contract: SDKs and consoles
+ *   branch on this. Additive changes only; never parse `detail`.
  */
-
 export interface ProblemFields {
-  /** URI identifying the problem class, e.g. `/errors/invalid-credentials`. */
+  /** Coarse problem class URI, e.g. `/errors/not-found`. */
   type: string
+  /**
+   * Stable machine-readable error code (snake_case), e.g. `user_not_found`.
+   * This is what clients branch on — the public contract.
+   */
+  code?: string
   /** Short human-readable summary (maps to HTTP status reason). */
   title?: string
   /** Human-readable explanation for this occurrence (English fallback). */

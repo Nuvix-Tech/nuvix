@@ -31,6 +31,8 @@ export interface ParityCase {
   jsonKeys?: string[]
   /** Exact problem+json `type` field */
   problemType?: string
+  /** Exact problem+json `code` field (stable machine code) */
+  problemCode?: string
   /** Envelope checks for list endpoints ({ data, meta.total }) */
   envelope?: {
     /** meta.total === data.length */
@@ -183,6 +185,7 @@ export const cases: ParityCase[] = [
     status: 404,
     contentType: 'application/problem+json',
     problemType: '/errors/not-found',
+    problemCode: 'favicon_unavailable',
   },
   {
     name: 'unknown flag code returns problem+json 404',
@@ -190,6 +193,7 @@ export const cases: ParityCase[] = [
     status: 404,
     contentType: 'application/problem+json',
     problemType: '/errors/not-found',
+    problemCode: 'unknown_avatar_code',
   },
 
   // ── Error semantics ───────────────────────────────────────────────────

@@ -99,9 +99,15 @@ only travels inside the emailed/SMS'd `confirmUrl`.
    with `teams.write`).
 4. **Remove** — `DELETE membership`.
 
-Errors: duplicate invite → `409 /errors/conflict`; unknown team/membership →
-`404 /errors/not-found`; bad/expired secret → `401 /errors/unauthorized`;
-wrong session type on status endpoint → `403 /errors/forbidden`.
+Errors (`type` = coarse class, `code` = what SDKs branch on):
+
+| Status | Type                   | Code                         |
+| ------ | ---------------------- | ---------------------------- |
+| 404    | `/errors/not-found`    | `team_not_found`             |
+| 404    | `/errors/not-found`    | `membership_not_found`       |
+| 409    | `/errors/conflict`     | `team_invite_already_exists` |
+| 401    | `/errors/unauthorized` | `invalid_invite_secret`      |
+| 403    | `/errors/forbidden`    | — (wrong session type)       |
 
 ---
 
@@ -109,9 +115,10 @@ wrong session type on status endpoint → `403 /errors/forbidden`.
 
 1. **Envelope**: `{ data, meta: { total, limit, offset } }` everywhere,
    including logs (v1 flat `{data,total}`).
-2. **Error format**: problem+json slugs; i18n keys `errors.teams.*`
-   (`teamNotFound`, `membershipNotFound`, `inviteAlreadyExists`,
-   `invalidSecret`, …) added at implementation.
+2. **Error format**: problem+json with stable `code`s mirroring i18n keys
+   `errors.teams.*`: `team_not_found`, `membership_not_found`,
+   `team_invite_already_exists`, `invalid_invite_secret`, … added at
+   implementation.
 3. **`PUT /v2/teams/:teamId` drops `roles`** (see above — dead parameter).
 4. **Audit events** (`membership.create`, etc.) move to the shared audit
    pipeline when it lands; log _shape_ stays compatible.

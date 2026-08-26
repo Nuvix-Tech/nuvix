@@ -38,6 +38,9 @@ export function problemErrors(options: ProblemErrorsOptions) {
         type: error.fields.type,
         title: error.fields.title,
         detail,
+        // Stable machine code — the field SDKs branch on. Omitted (not
+        // null) when an error has no specific code yet.
+        ...(error.fields.code ? { code: error.fields.code } : {}),
         instance: error.message,
         errors: error.fields.errors,
       })

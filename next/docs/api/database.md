@@ -77,10 +77,13 @@ description)`; PostgreSQL DDL triggers handle policy scaffolding for
 
 Errors:
 
-| Status | Type               | When                        |
-| ------ | ------------------ | --------------------------- |
-| 409    | `/errors/conflict` | name already exists         |
-| 422    | validation         | name pattern / unknown type |
+`code` is the machine-readable contract (see `_conventions.md` §3):
+
+| Status | Type               | Code                    | When                        |
+| ------ | ------------------ | ----------------------- | --------------------------- |
+| 409    | `/errors/conflict` | `schema_already_exists` | name already taken          |
+| 404    | `/errors/not-found` | `schema_not_found`     | unknown schema              |
+| 422    | validation         | —                       | bad name / type             |
 
 ### `PATCH /v2/database/schemas/:name`
 
@@ -98,11 +101,11 @@ schema → `404 /errors/not-found`.
 ## v1 → v2 deviations
 
 1. **Envelope**: `{ data, meta: { total } }` replaces v1's `{ data, total }`.
-2. **Error format**: RFC-9457 problem+json with `/errors/*` slugs replaces
-   legacy `Exception` codes. New i18n keys required at implementation time:
-   `errors.database.schemaExists`, `errors.database.schemaNotFound`
-   (English detail strings remain the source of truth; translations never
-   mask them).
+2. **Error format**: RFC-9457 problem+json replaces legacy `Exception`
+   codes — but the *specificity* returns as the stable `code` field:
+   `schema_already_exists`, `schema_not_found` (matching i18n keys
+   `errors.database.schemaExists` / `.schemaNotFound`). English `detail`
+   remains the fallback; translations never mask it.
 3. **Out of scope (deferred)**: collections, attributes, indexes, documents
    endpoints — separate contract once `@nuvix/db` API surface stabilizes.
    Tracked as Phase 3 work; do not implement stubs.

@@ -28,6 +28,7 @@ Every non-2xx response is `application/problem+json`:
 ```json
 {
   "type": "/errors/conflict",
+  "code": "user_email_exists",
   "title": "Conflict",
   "status": 409,
   "detail": "A user with this email already exists",
@@ -35,13 +36,27 @@ Every non-2xx response is `application/problem+json`:
 }
 ```
 
+Two-layer error identity (Stripe-style):
+
+- **`type`** — coarse class. Generic middleware, retry/backoff, and auth-flow
+  logic key off this (or off `status`). Only the handful of classes below exist.
+- **`code`** — stable, flat, snake_case machine code (`user_not_found`,
+  `schema_already_exists`, …). **This is the public contract**: SDKs and the
+  console branch on it. Rules: additive changes only; never parse `detail`;
+  every domain-specific failure gets one (generic helpers may omit it).
+
 | Field    | Always? | Meaning                                              |
 | -------- | ------- | ---------------------------------------------------- |
-| `type`   | yes     | URI slug identifying the error class (`/errors/*`)   |
+| `type`   | yes     | Coarse problem class URI (`/errors/*`)               |
+| `code`   | opt     | Stable machine code — what clients branch on         |
 | `title`  | yes     | Short human summary (HTTP reason)                    |
 | `status` | yes     | Mirrors the HTTP status code                         |
 | `detail` | opt     | Human explanation for THIS occurrence                |
 | `errors` | opt     | Array of `{ field?, message }` for validation errors |
+
+Codes are registered in `apps/server/src/shared/errors.ts` (single source of
+truth); a generated error catalog page ships with the docs so each code is
+discoverable without reading source.
 
 ### Error type registry
 

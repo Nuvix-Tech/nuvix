@@ -34,6 +34,9 @@ const probe = new Elysia({ prefix: '/v2' })
   .get('/not-found', () => {
     throw new NotFoundError('User')
   })
+  .get('/coded', () => {
+    throw new NotFoundError('User', { code: 'user_not_found' })
+  })
   .get('/localized', () => {
     throw new ConflictError('duplicate resource', {
       messageKey: 'errors.test.taken',
@@ -64,6 +67,17 @@ describe('problem+json error mapping (via treaty)', () => {
     const body = error!.value as Record<string, unknown>
     expect(body.type).toBe('/errors/not-found')
     expect(body.detail).toBe('User not found')
+    // No specific code given -> field omitted entirely (not null)
+    expect(body.code).toBeUndefined()
+  })
+
+  test('emits stable machine code when provided', async () => {
+    const { error } = await client.v2.coded.get()
+
+    expect(error!.status).toBe(404)
+    const body = error!.value as Record<string, unknown>
+    expect(body.type).toBe('/errors/not-found')
+    expect(body.code).toBe('user_not_found')
   })
 
   test('translates detail via messageKey + params (D34)', async () => {
