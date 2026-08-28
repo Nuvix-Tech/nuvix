@@ -1,5 +1,23 @@
 import { describe, expect, test } from 'bun:test'
 import { CacheError, CacheKeyError, UnsupportedOperationError } from '@nuvix/cache'
+import {
+  AuthorizationException,
+  ConflictException,
+  DatabaseException,
+  DependencyException,
+  DuplicateException,
+  IndexException,
+  LimitException,
+  NotFoundException,
+  OrderException,
+  QueryException,
+  RelationshipException,
+  RestrictedException,
+  StructureException,
+  TimeoutException,
+  TransactionException,
+  TruncateException,
+} from '@nuvix/db'
 import { MessagingError, MessagingErrorCode } from '@nuvix/messaging'
 import { StorageError, type StorageErrorCode } from '@nuvix/storage'
 import { translatePackageError } from '../src/infrastructure/package-errors'
@@ -9,6 +27,36 @@ const CONTEXT = {
   operation: 'perform package operation',
   publicCode: 'operation_failed',
 }
+
+const DATABASE_MESSAGE =
+  "secret package message: SELECT * FROM secret_table WHERE id = 'secret_identifier'"
+
+class FutureDatabaseException extends DatabaseException {}
+
+const databaseCases = [
+  ['authorization', new AuthorizationException(DATABASE_MESSAGE), 403, '/errors/forbidden'],
+  ['not found', new NotFoundException(DATABASE_MESSAGE), 404, '/errors/not-found'],
+  ['duplicate', new DuplicateException(DATABASE_MESSAGE), 409, '/errors/conflict'],
+  ['conflict', new ConflictException(DATABASE_MESSAGE), 409, '/errors/conflict'],
+  ['structure', new StructureException(DATABASE_MESSAGE), 400, '/errors/bad-request'],
+  ['query', new QueryException(DATABASE_MESSAGE), 400, '/errors/bad-request'],
+  ['relationship', new RelationshipException(DATABASE_MESSAGE), 400, '/errors/bad-request'],
+  ['index', new IndexException(DATABASE_MESSAGE), 400, '/errors/bad-request'],
+  ['dependency', new DependencyException(DATABASE_MESSAGE), 500, '/errors/internal'],
+  ['limit', new LimitException(DATABASE_MESSAGE), 500, '/errors/internal'],
+  ['timeout', new TimeoutException(DATABASE_MESSAGE), 500, '/errors/internal'],
+  ['transaction', new TransactionException(DATABASE_MESSAGE), 500, '/errors/internal'],
+  ['truncate', new TruncateException(DATABASE_MESSAGE), 500, '/errors/internal'],
+  ['restricted', new RestrictedException(DATABASE_MESSAGE), 500, '/errors/internal'],
+  ['order', new OrderException(DATABASE_MESSAGE, 'secret_identifier'), 500, '/errors/internal'],
+  [
+    'generic',
+    new DatabaseException(DATABASE_MESSAGE, 'SECRET_PACKAGE_CODE'),
+    500,
+    '/errors/internal',
+  ],
+  ['unmapped', new FutureDatabaseException(DATABASE_MESSAGE), 500, '/errors/internal'],
+] as const
 
 const cacheCases = [
   ['validation', new CacheKeyError('secret invalid key'), 400, '/errors/bad-request'],
@@ -46,6 +94,33 @@ const messagingCases = [
 ] as const
 
 describe('package error translation', () => {
+  for (const [name, packageError, status, type] of databaseCases) {
+    test(`classifies database ${name} without disclosing package details`, () => {
+      // Arrange
+      const error = packageError
+      error.stack = 'secret stack details'
+
+      // Act
+      const result = translatePackageError(error, CONTEXT)
+
+      // Assert
+      expect({
+        status: result.status,
+        type: result.fields.type,
+        code: result.fields.code,
+      }).toEqual({
+        status,
+        type,
+        code: CONTEXT.publicCode,
+      })
+
+      const serialized = JSON.stringify(result.fields)
+      expect(serialized).not.toContain('secret')
+      expect(serialized).not.toContain('SELECT')
+      expect(serialized).not.toContain(error.name)
+    })
+  }
+
   for (const [name, packageError, status, type] of cacheCases) {
     test(`classifies cache ${name}`, () => {
       // Arrange
@@ -142,6 +217,21 @@ describe('package error translation', () => {
 
     // Assert
     expect(result.fields.code).toBeUndefined()
+  })
+
+  test('does not promote a database package code to a public code', () => {
+    // Arrange
+    const error = new DatabaseException(DATABASE_MESSAGE, 'SECRET_PACKAGE_CODE')
+
+    // Act
+    const result = translatePackageError(error, { operation: 'query records' })
+
+    // Assert
+    expect(result.fields).toEqual({
+      type: '/errors/internal',
+      detail: 'Unable to query records',
+    })
+    expect(JSON.stringify(result.fields)).not.toContain('SECRET_PACKAGE_CODE')
   })
 
   test('does not expose package details in mapped errors', () => {

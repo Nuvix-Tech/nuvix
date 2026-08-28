@@ -1,9 +1,20 @@
 import { CacheError, CacheKeyError, UnsupportedOperationError } from '@nuvix/cache'
+import {
+  AuthorizationException,
+  ConflictException as DatabaseConflictException,
+  DatabaseException,
+  NotFoundException as DatabaseNotFoundException,
+  DuplicateException,
+  IndexException,
+  QueryException,
+  RelationshipException,
+  StructureException,
+} from '@nuvix/db'
 import { MessagingError, MessagingErrorCode } from '@nuvix/messaging'
 import { StorageError, type StorageErrorCode } from '@nuvix/storage'
-import { AppError, BadRequestError, NotFoundError } from '../shared/errors'
+import { AppError, BadRequestError, ConflictError, NotFoundError } from '../shared/errors'
 
-type ErrorKind = 'bad-request' | 'not-found' | 'internal'
+type ErrorKind = 'bad-request' | 'forbidden' | 'not-found' | 'conflict' | 'internal'
 
 interface OperationContext {
   readonly operation: string
@@ -37,6 +48,20 @@ const MESSAGING_ERROR_KINDS = {
 } as const satisfies Record<MessagingErrorCode, ErrorKind>
 
 function classify(error: unknown): ErrorKind | undefined {
+  if (error instanceof AuthorizationException) return 'forbidden'
+  if (error instanceof DatabaseNotFoundException) return 'not-found'
+  if (error instanceof DuplicateException || error instanceof DatabaseConflictException) {
+    return 'conflict'
+  }
+  if (
+    error instanceof StructureException ||
+    error instanceof QueryException ||
+    error instanceof RelationshipException ||
+    error instanceof IndexException
+  ) {
+    return 'bad-request'
+  }
+  if (error instanceof DatabaseException) return 'internal'
   if (error instanceof CacheKeyError) return 'bad-request'
   if (error instanceof UnsupportedOperationError || error instanceof CacheError) return 'internal'
   if (error instanceof StorageError && Object.hasOwn(STORAGE_ERROR_KINDS, error.code)) {
@@ -57,7 +82,15 @@ function mapped(kind: ErrorKind, context: OperationContext): AppError {
   if (kind === 'bad-request') {
     return new BadRequestError(`Invalid request for ${context.operation}`, fields)
   }
+  if (kind === 'forbidden') {
+    return new AppError(403, {
+      type: '/errors/forbidden',
+      detail: 'Insufficient permissions',
+      ...fields,
+    })
+  }
   if (kind === 'not-found') return new NotFoundError(context.operation, fields)
+  if (kind === 'conflict') return new ConflictError(`Unable to ${context.operation}`, fields)
 
   return new AppError(500, {
     type: '/errors/internal',

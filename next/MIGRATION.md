@@ -79,7 +79,7 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D8  | Runtime                        | **Bun-only**, Node dropped                                                                                                                                                                                                                                                              | Unlocks all native APIs                                                                                       |
 | D9  | Templates                      | Keep Handlebars                                                                                                                                                                                                                                                                         | Template-syntax compat for users                                                                              |
 | D10 | API docs                       | `@elysia/openapi` (official 2.x plugin, Scalar UI)                                                                                                                                                                                                                                      | Spec at `/v2/openapi/json`, Scalar UI at `/v2/openapi`. Needs a small Bun patch (Phase 1 notes)               |
-| D11 | Nuvix infrastructure packages  | Exact npm-published versions: `@nuvix/db@1.0.0-alpha.2`, `@nuvix/cache@2.0.0`, `@nuvix/storage@2.0.0`, `@nuvix/messaging@2.0.0`; all Bun/ESM-only                                                                                                                                       | Installed in `@nuvix/server`; no local filesystem links                                                       |
+| D11 | Nuvix infrastructure packages  | Bun/ESM-only sibling source checkouts linked from `@nuvix/server`: `file:../../../../database`, `file:../../../../cache`, `file:../../../../storage`, and `file:../../../../messaging`                                                                                                  | Build siblings before installing/validating `next`; see `docs/architecture/integrations.md`                   |
 | D12 | `@nuvix/pg`                    | Skip now; build locally in `next/packages/pg-meta`-adjacent work later                                                                                                                                                                                                                  | See §6                                                                                                        |
 | D13 | **API surface**                | **Full v2 API redesign**                                                                                                                                                                                                                                                                | Paths, payloads, pagination may all change; documented per-module first                                       |
 | D14 | **Errors**                     | **New unified error format**                                                                                                                                                                                                                                                            | Consistent codes, structured details, correct HTTP statuses                                                   |
@@ -164,15 +164,15 @@ long-running connections during AOT dry-run.
 
 ### Kept (justified)
 
-| Package                                                                                           | Why                                                                           |
-| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `handlebars`                                                                                      | User template syntax compat (D9)                                              |
-| `bullmq`                                                                                          | Queue engine w/ Bun adapter (D4)                                              |
-| `maxmind`                                                                                         | GeoIP; no Bun native equivalent                                               |
-| `@resvg/resvg-js`                                                                                 | SVG→PNG rendering — `Bun.Image` has no SVG support (pending Open Question #7) |
-| `@nuvix/db@1.0.0-alpha.2`, `@nuvix/cache@2.0.0`, `@nuvix/storage@2.0.0`, `@nuvix/messaging@2.0.0` | Migrated Bun/ESM package APIs; integrated through D37 boundaries              |
-| `@nuvix/audit`, `@nuvix/telemetry`                                                                | Nuvix libraries retained; versions selected when their phases begin           |
-| `elysia@next`, `@elysia/openapi`                                                                  | New foundation                                                                |
+| Package                                                           | Why                                                                           |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `handlebars`                                                      | User template syntax compat (D9)                                              |
+| `bullmq`                                                          | Queue engine w/ Bun adapter (D4)                                              |
+| `maxmind`                                                         | GeoIP; no Bun native equivalent                                               |
+| `@resvg/resvg-js`                                                 | SVG→PNG rendering — `Bun.Image` has no SVG support (pending Open Question #7) |
+| `@nuvix/db`, `@nuvix/cache`, `@nuvix/storage`, `@nuvix/messaging` | Local sibling source packages; integrated through D37 boundaries              |
+| `@nuvix/audit`, `@nuvix/telemetry`                                | Nuvix libraries retained; versions selected when their phases begin           |
+| `elysia@next`, `@elysia/openapi`                                  | New foundation                                                                |
 
 ### Deferred
 
@@ -182,16 +182,17 @@ long-running connections during AOT dry-run.
 
 ### Final migrated package contracts
 
-| Package                   | Integration contract                                                                                                                                                             |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@nuvix/db@1.0.0-alpha.2` | `Database` owns admin/schema operations. All document operations use immutable `Session`s from `db.for(...roles)` or explicit `db.system()`. Generated types augment `Entities`. |
-| `@nuvix/cache@2.0.0`      | `Cache` is the application facade; `Memory`, `Redis`, and `None` are drivers. DB depends only on structural `CacheDriver` methods: `get`, `set`, `flushByTags`, `flush`.         |
-| `@nuvix/storage@2.0.0`    | `Local` keeps its positional root; cloud device constructors use options objects. A central `Storage` registry owns devices. `StorageError.code` drives translation.             |
-| `@nuvix/messaging@2.0.0`  | Sends report every recipient's success/failure. `MessagingError.code` drives translation. `JWT.sign` is async for RS256/ES256 provider assertions; there is no `JWT.encode`.     |
+| Package            | Integration contract                                                                                                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@nuvix/db`        | Infrastructure owns raw `Database` resources. Requests receive only role-scoped `Session` leases from `db.for(...roles)` and never receive `db.system()`. Generated types augment `Entities`. |
+| `@nuvix/cache`     | `Cache` is the application facade; `Memory`, `Redis`, and `None` are drivers. DB depends only on structural `CacheDriver` methods: `get`, `set`, `flushByTags`, `flush`.                      |
+| `@nuvix/storage`   | `Local` keeps its positional root; cloud device constructors use options objects. A central `Storage` registry owns devices. `StorageError.code` drives translation.                          |
+| `@nuvix/messaging` | Sends report every recipient's success/failure. `MessagingError.code` drives translation. `JWT.sign` is async for RS256/ES256 provider assertions; there is no `JWT.encode`.                  |
 
-These are exact dependencies of `@nuvix/server` and resolve from npm; local
-filesystem links are not used. Package API stabilization does not authorize new
-endpoints.
+These dependencies resolve from the required sibling checkout layout through
+the `file:` paths in `apps/server/package.json`. Package API stabilization does
+not authorize new endpoints. See the integration architecture for the build,
+refresh, and validation workflow.
 
 ---
 
@@ -278,7 +279,9 @@ next/
 - [x] Typed error classes + problem+json envelope (done early in Phase 0 — `apps/server/src/shared/errors.ts` + `plugins/errors.ts`)
 - [x] Auth resolution primitives: JWT util (`utils/jwt.ts`, zero-dep HS256 on `crypto.subtle`), auth context (`context/auth.ts`: guest/session/jwt/apiKey union, pluggable DB-backed verifiers for later phases; precedence session > jwt > key > guest)
 - [x] CORS (`plugins/cors.ts`, hand-rolled), security headers (`plugins/security.ts`), rate limiting (`plugins/rate-limit.ts`, pluggable `Store`; memory impl now, Redis drops in later) — all tested
-- [ ] Context chain: project resolution (internal vs project DB via new `@nuvix/db`), console/admin modes — deferred until `@nuvix/db` is wired
+- [ ] Context chain: platform connection-metadata lookup and tenant-registry
+      composition, console/admin modes — deferred; the implemented resource factory
+      accepts only an already-resolved PostgreSQL connection value
 - [x] OpenAPI docs via `@elysia/openapi@2.0.0-beta.1` (D10) — spec at `/v2/openapi/json` (typed from `t` schemas), Scalar UI at `/v2/openapi`. **Requires a Bun patch** (`patches/@elysia+openapi@2.0.0-beta.1.patch`): the published bundle has broken relative `../node_modules/typebox` imports in its `gen` submodule; the patch stubs `Script` (only used by `fromTypes()`, which we don't use). Root `package.json` also carries `elysia` so the patched copy resolves it under Bun's isolated linker. Defaults differ from v1 plugin: spec path is `/openapi/json` (not `/openapi.json`), UI is Scalar (not Swagger).
 
 **Phase 1 notes (verified against elysia 2.0.0-beta.6 source):**
@@ -307,9 +310,15 @@ next/
 ### Phase 3 — Data services
 
 - [x] Contracts drafted for review: `docs/api/database.md` (schemas CRUD only — collections/documents require a separate reviewed contract), `docs/api/teams.md` (incl. invite/accept lifecycle), `docs/api/users.md` (**legacy hash-create endpoints dropped per D29** — md5/sha/phpass/scrypt variants not carried over)
-- [x] Verify final migrated package APIs and define reusable integration boundaries (`docs/architecture/integrations.md`)
-- [x] Install exact latest npm-published package versions in `@nuvix/server`; do not use local links
-- [ ] Implement database service on `@nuvix/db` with caller-scoped sessions and explicit system sessions
+- [x] Link and validate the four sibling source packages; repair the local
+      `@nuvix/db` declaration export at its source/build boundary without a package
+      patch, deep import, shim, generated-file edit, or `node_modules` edit
+- [x] Implement the database foundation: canonical claim-to-role conversion,
+      request-only `Session` leases, tenant registry lifecycle, resolved-connection
+      resource construction, and safe package-error translation
+- [ ] Compose platform connection-metadata lookup with the tenant registry; the
+      platform owns one PostgreSQL database and its connection metadata per project
+- [ ] Implement database services and reviewed routes on the foundation
 - [ ] Teams, Users slices
 - [ ] Schemas slice — minus `@nuvix/pg`-dependent endpoints (deferred list in `DEFERRED_ROUTES.md`)
 
@@ -384,7 +393,7 @@ v2 makes tenancy **structural**:
                     │  creates projects/tenants,  │
                     │  provisions their DBs       │
                     └──────────┬──────────────────┘
-                               │ provision
+                               │ provision + own connection metadata
         ┌──────────┬───────────┼───────────┬──────────┐
         ▼          ▼           ▼           ▼
    tenant DB A  tenant DB B  tenant DB C  …          ← one Postgres database
@@ -392,10 +401,10 @@ v2 makes tenancy **structural**:
                                                      nuvix-dev/postgres
         ▲          ▲           ▲
         └──────────┴───────────┘
-                   │ routed by resolved tenant context
+                   │ already-resolved tenant connection
             ┌──────┴──────┐
             │ server app  │  every request resolves: API key / token
-            └─────────────┘  → project → tenant DB connection
+            └─────────────┘  → tenant registry → request `Session` lease
 ```
 
 **Rules:**
@@ -404,16 +413,22 @@ v2 makes tenancy **structural**:
 2. The **platform app owns provisioning**: creating the project record,
    creating its database (via the pg-18 image's auto-schema bootstrap),
    tracking connection metadata in the internal/platform DB.
-3. The **server app never hardcodes tenants**: each request resolves
-   `credentials → project → tenant DB handle` through the typed context chain.
-4. Connection management: pooled per-tenant handles with LRU eviction +
-   optional pooler (pgcat) — design lives in `packages/core` (`tenants/`).
+3. The **server app never hardcodes tenants or derives connection metadata**.
+   Its database resource boundary consumes an already-resolved, normalized
+   PostgreSQL connection value.
+4. The tenant registry owns one raw database resource per project, deduplicates
+   concurrent creation, and leases role-scoped sessions to requests. Its
+   `maxTenants` is an idle-resource cache target, not a hard cap on active
+   tenants; in-use resources are never evicted to satisfy it.
 5. Schema/collection model inside a tenant DB is **redesigned freely** (D25) —
    the pg-18 image's auto-schema features are the foundation; consult
    github.com/nuvix-dev/postgres when designing.
 6. Platform-side features that depend on provisioning (billing, quotas,
    region placement) are **explicitly out of scope for now** — interfaces are
    stubbed so they can be added later without rework.
+7. Platform metadata lookup and composition with the registry remain deferred.
+   Do not invent HTTP routes, a schema registry, hardcoded tenant URLs, or new
+   environment contracts to fill that gap.
 
 ---
 
