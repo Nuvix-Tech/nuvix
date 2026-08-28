@@ -1,12 +1,15 @@
 # v2 Contract — Teams
 
 > Status: PROPOSED — review before implementation
-> Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`, `@nuvix/db`
+> Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`,
+> `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`,
+> `@nuvix/messaging@2.0.0`
 > Old code (reference only): root `apps/server/src/teams/`
 
-Team management plus the membership invite/accept lifecycle. Backed by
-`@nuvix/db` collections (teams, memberships) inside the project's document
-schema — implementation waits on the new `@nuvix/db` package.
+Team management plus the membership invite/accept lifecycle. Teams and
+memberships live in `@nuvix/db` collections inside the project's document
+schema. The package API is stable; implementation still waits for this
+contract's review and composition-root wiring.
 
 ## Auth posture
 
@@ -125,10 +128,16 @@ Errors (`type` = coarse class, `code` = what SDKs branch on):
 
 ## Implementation notes
 
-- Both services stay pure over `@nuvix/db` docs; route layer owns auth,
-  scopes, and session-type gating via hooks.
+- The request context maps verified auth to roles once and provides a
+  caller-scoped `db.for(...roles)` session. Team services receive only their
+  required `Session` methods; routes never create sessions or package clients.
+- Use the shared messaging gateway for email/SMS invites. It preserves
+  `@nuvix/messaging` per-recipient success/failure results and translates typed
+  package errors centrally.
 - Secret hashing must reuse the same helper as auth tokens (v1:
   `Auth.hash`) — single source of truth for comparison logic.
+- Map DB not-found/conflict failures through the shared translator to the
+  existing `team_*` and `membership_*` public codes.
 - Smoke cases (no live DB): guest gets `403` on all endpoints; malformed
   create bodies get `422`. Full lifecycle cases need integration fixtures.
 

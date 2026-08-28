@@ -2,7 +2,8 @@
 
 > Status: PROPOSED — review before implementation
 > Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`, D29 (password
-> hashing policy), `@nuvix/db`
+> hashing policy), `../architecture/integrations.md`,
+> `@nuvix/db@1.0.0-alpha.2`, `@nuvix/messaging@2.0.0`
 > Old code (reference only): root `apps/server/src/users/`
 
 User administration: lifecycle, profile fields, prefs/labels/status,
@@ -124,7 +125,17 @@ Body: `{ targetId?, providerType, identifier }`.
 
 ## Implementation notes
 
-- Depends on `@nuvix/db` for user docs + identities/targets collections.
+- Resolve the tenant database centrally, map request auth to roles once, and
+  inject only the caller-scoped `Session` methods needed for user,
+  identity, target, and session documents. Routes do not call `Database`
+  document methods or create package clients.
+- Magic-link delivery uses the shared messaging gateway so every recipient's
+  result is retained and typed messaging failures use the common translator.
+- User JWT issuance remains on Nuvix's HS256/HS512 core helper.
+  `@nuvix/messaging` exposes asynchronous `JWT.sign` for RS256/ES256 provider
+  assertions and has no `JWT.encode`; it is not the access-token issuer.
+- Map DB/messaging failures through the shared translator to the existing
+  stable `user_*`/`identity_*` contract codes.
 - Password update must invalidate other sessions (parity with v1 behavior)
   and re-hash with current default cost params.
 - Smoke cases without DB: guest 403s, 422 validation shapes, removed-route

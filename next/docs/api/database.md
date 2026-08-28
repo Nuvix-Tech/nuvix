@@ -1,13 +1,14 @@
 # v2 Contract — Database (Schemas)
 
 > Status: PROPOSED — review before implementation
-> Depends on: `_conventions.md` (D19, D26–D28), `@nuvix/db` (user-owned, in progress)
+> Depends on: `_conventions.md` (D19, D26–D28),
+> `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`
 > Old code (reference only): root `apps/server/src/database/`
 
 Schema lifecycle management for the three schema modes (**document**,
-**managed**, **unmanaged**). This contract covers **schemas CRUD only** —
-collection/attribute/document endpoints are a separate contract gated on the
-new `@nuvix/db` package and are explicitly out of scope here.
+**managed**, **unmanaged**). This contract covers **schemas CRUD only**.
+Collection, attribute, and document endpoints require a separate reviewed
+contract and remain out of scope; package stabilization does not add them here.
 
 ## Auth posture
 
@@ -79,11 +80,11 @@ Errors:
 
 `code` is the machine-readable contract (see `_conventions.md` §3):
 
-| Status | Type               | Code                    | When                        |
-| ------ | ------------------ | ----------------------- | --------------------------- |
-| 409    | `/errors/conflict` | `schema_already_exists` | name already taken          |
-| 404    | `/errors/not-found` | `schema_not_found`     | unknown schema              |
-| 422    | validation         | —                       | bad name / type             |
+| Status | Type                | Code                    | When               |
+| ------ | ------------------- | ----------------------- | ------------------ |
+| 409    | `/errors/conflict`  | `schema_already_exists` | name already taken |
+| 404    | `/errors/not-found` | `schema_not_found`      | unknown schema     |
+| 422    | validation          | —                       | bad name / type    |
 
 ### `PATCH /v2/database/schemas/:name`
 
@@ -102,20 +103,31 @@ schema → `404 /errors/not-found`.
 
 1. **Envelope**: `{ data, meta: { total } }` replaces v1's `{ data, total }`.
 2. **Error format**: RFC-9457 problem+json replaces legacy `Exception`
-   codes — but the *specificity* returns as the stable `code` field:
+   codes — but the _specificity_ returns as the stable `code` field:
    `schema_already_exists`, `schema_not_found` (matching i18n keys
    `errors.database.schemaExists` / `.schemaNotFound`). English `detail`
    remains the fallback; translations never mask it.
-3. **Out of scope (deferred)**: collections, attributes, indexes, documents
-   endpoints — separate contract once `@nuvix/db` API surface stabilizes.
-   Tracked as Phase 3 work; do not implement stubs.
+3. **Out of scope (deferred)**: collections, attributes, indexes, and document
+   endpoints require their own contract. Do not infer or implement stubs from
+   the now-stable package API.
 
 ## Implementation notes
 
-- Service stays pure: query the `system.schemas` registry via the project
-  pool; no Elysia types inside the service layer (same split as avatars).
+- Resolve the tenant schema registry/data source and `Database` through the
+  central composition root. Package schema/collection administration stays on
+  `Database`; never call document CRUD on it.
+- Keep metadata collection creation on the `Database` admin plane. If bootstrap
+  also needs to insert seed documents, its privileged boundary obtains an
+  explicit `db.system()` session that is never exposed to the request scope.
+  Caller-owned document work uses `db.for(...roles)`.
+- Inject only the schema operations this service needs. Keep Elysia and package
+  construction outside the service.
+- Activate generated collection typing once through `Entities` module
+  augmentation when document contracts are added.
 - Route layer owns auth posture + scopes via hook objects; binary-free JSON
   responses can use typed handlers directly.
+- Translate package failures through the shared package-error translator; this
+  contract's `schema_*` codes remain the public API.
 - Smoke cases to add: create/list/get/patch/delete round-trip requires a live
   Postgres — keep harness cases limited to auth-posture rejections (403 for
   guest) until integration fixtures exist.
