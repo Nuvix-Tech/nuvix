@@ -1,6 +1,6 @@
 # Package Integration Architecture
 
-> Status: PROPOSED — implement with Phase 3; package source strategy remains open
+> Status: PROPOSED — implement with Phase 3; packages use exact npm-published versions
 > Scope: `@nuvix/db@1.0.0-alpha.2`, `@nuvix/cache@2.0.0`,
 > `@nuvix/storage@2.0.0`, and `@nuvix/messaging@2.0.0`
 

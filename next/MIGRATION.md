@@ -79,7 +79,7 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D8  | Runtime                        | **Bun-only**, Node dropped                                                                                                                                                                                                                                                              | Unlocks all native APIs                                                                                       |
 | D9  | Templates                      | Keep Handlebars                                                                                                                                                                                                                                                                         | Template-syntax compat for users                                                                              |
 | D10 | API docs                       | `@elysia/openapi` (official 2.x plugin, Scalar UI)                                                                                                                                                                                                                                      | Spec at `/v2/openapi/json`, Scalar UI at `/v2/openapi`. Needs a small Bun patch (Phase 1 notes)               |
-| D11 | Nuvix infrastructure packages  | `@nuvix/db@1.0.0-alpha.2`, `@nuvix/cache@2.0.0`, `@nuvix/storage@2.0.0`, `@nuvix/messaging@2.0.0`; all Bun/ESM-only                                                                                                                                                                     | Final migrated APIs verified upstream; source strategy still open                                             |
+| D11 | Nuvix infrastructure packages  | Exact npm-published versions: `@nuvix/db@1.0.0-alpha.2`, `@nuvix/cache@2.0.0`, `@nuvix/storage@2.0.0`, `@nuvix/messaging@2.0.0`; all Bun/ESM-only                                                                                                                                       | Installed in `@nuvix/server`; no local filesystem links                                                       |
 | D12 | `@nuvix/pg`                    | Skip now; build locally in `next/packages/pg-meta`-adjacent work later                                                                                                                                                                                                                  | See §6                                                                                                        |
 | D13 | **API surface**                | **Full v2 API redesign**                                                                                                                                                                                                                                                                | Paths, payloads, pagination may all change; documented per-module first                                       |
 | D14 | **Errors**                     | **New unified error format**                                                                                                                                                                                                                                                            | Consistent codes, structured details, correct HTTP statuses                                                   |
@@ -189,8 +189,9 @@ long-running connections during AOT dry-run.
 | `@nuvix/storage@2.0.0`    | `Local` keeps its positional root; cloud device constructors use options objects. A central `Storage` registry owns devices. `StorageError.code` drives translation.             |
 | `@nuvix/messaging@2.0.0`  | Sends report every recipient's success/failure. `MessagingError.code` drives translation. `JWT.sign` is async for RS256/ES256 provider assertions; there is no `JWT.encode`.     |
 
-Do not change dependencies until published exact versions versus local links is
-resolved. Package API stabilization does not authorize new endpoints.
+These are exact dependencies of `@nuvix/server` and resolve from npm; local
+filesystem links are not used. Package API stabilization does not authorize new
+endpoints.
 
 ---
 
@@ -307,7 +308,7 @@ next/
 
 - [x] Contracts drafted for review: `docs/api/database.md` (schemas CRUD only — collections/documents require a separate reviewed contract), `docs/api/teams.md` (incl. invite/accept lifecycle), `docs/api/users.md` (**legacy hash-create endpoints dropped per D29** — md5/sha/phpass/scrypt variants not carried over)
 - [x] Verify final migrated package APIs and define reusable integration boundaries (`docs/architecture/integrations.md`)
-- [ ] Resolve published exact versions vs local links; keep dependencies unchanged until then
+- [x] Install exact latest npm-published package versions in `@nuvix/server`; do not use local links
 - [ ] Implement database service on `@nuvix/db` with caller-scoped sessions and explicit system sessions
 - [ ] Teams, Users slices
 - [ ] Schemas slice — minus `@nuvix/pg`-dependent endpoints (deferred list in `DEFERRED_ROUTES.md`)

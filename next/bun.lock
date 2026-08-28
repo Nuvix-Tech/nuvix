@@ -19,7 +19,11 @@
       "version": "2.0.0-alpha.1",
       "dependencies": {
         "@elysia/eden": "2.0.0-beta.5",
+        "@nuvix/cache": "2.0.0",
+        "@nuvix/db": "1.0.0-alpha.2",
         "@nuvix/i18n": "workspace:*",
+        "@nuvix/messaging": "2.0.0",
+        "@nuvix/storage": "2.0.0",
         "@nuvix/utils": "workspace:*",
         "elysia": "2.0.0-beta.6",
         "maxmind": "^5.0.6",
@@ -79,9 +83,17 @@
 
     "@formatjs/intl-localematcher": ["@formatjs/intl-localematcher@0.6.2", "", { "dependencies": { "tslib": "^2.8.0" } }, "sha512-XOMO2Hupl0wdd172Y06h6kLpBz6Dv+J4okPLl4LPtzbr8f66WbIoy4ev98EBuZ6ZK4h5ydTN6XneT4QVpD7cdA=="],
 
+    "@nuvix/cache": ["@nuvix/cache@2.0.0", "", { "peerDependencies": { "@nuvix/telemetry": "*" }, "optionalPeers": ["@nuvix/telemetry"] }, "sha512-BAchHatoo7BN9r5icXog4sTkaEB27I6u82TxVUgntJ66TGw3o/KAAUlbJOk9+BlcrhX/ZWPBR4+b6uRZK4lwWw=="],
+
+    "@nuvix/db": ["@nuvix/db@1.0.0-alpha.2", "", { "bin": { "nuvix-db": "dist/cli/generate-types.js" } }, "sha512-2UCeuspff+HU0IVmSzvMMOiw2CjcfXIfYmOUc8nvhFrtScY//vbxowIhilfFaa784cLu6lqyh7cpibjIL3RtYA=="],
+
     "@nuvix/i18n": ["@nuvix/i18n@workspace:packages/i18n"],
 
+    "@nuvix/messaging": ["@nuvix/messaging@2.0.0", "", { "peerDependencies": { "nodemailer": "^7.0.3" }, "optionalPeers": ["nodemailer"] }, "sha512-BvHZnaFwkrlN0x2MvrbM1XFQr18E9ih2JmVjjX2YVXOtD92V8/b0kTXYawTtA9VO7JrSpWpIy3hUrEbfOmGZxg=="],
+
     "@nuvix/server": ["@nuvix/server@workspace:apps/server"],
+
+    "@nuvix/storage": ["@nuvix/storage@2.0.0", "", {}, "sha512-fdARQ9gD6NNbJaJRt0RyZo5+0ydf1Mi4TSAakFHYvs9mytB++miJI2L1UGVpo7AclQFIO+x8dVMBd/VXNiRK2Q=="],
 
     "@nuvix/utils": ["@nuvix/utils@workspace:packages/utils"],
 
