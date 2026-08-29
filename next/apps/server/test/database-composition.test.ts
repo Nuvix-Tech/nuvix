@@ -1,23 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import type { Session } from '@nuvix/db'
-import type {
-  ProjectAuthContext,
-  ProjectContext,
-  ProjectResolutionInput,
-  ProjectResolver,
-} from '../src/context/project'
+import type { ProjectAuthContext, ProjectContext, ProjectResolver } from '../src/context/project'
 import { createDatabaseComposition } from '../src/infrastructure/database-composition'
 import type { PlatformConnectionMetadataResolver } from '../src/infrastructure/platform-connection-metadata'
 
 const PROJECT_ONE: ProjectContext = {
   id: 'project-1',
-  internalId: 'tenant-1',
   enabled: true,
 }
 
 const PROJECT_TWO: ProjectContext = {
   id: 'project-2',
-  internalId: 'tenant-2',
   enabled: true,
 }
 
@@ -26,7 +19,6 @@ function auth(projectId: string): ProjectAuthContext {
     type: 'session',
     sessionId: `session-${projectId}`,
     userId: `user-${projectId}`,
-    projectId,
     verified: true,
     teams: [],
     labels: [],
@@ -51,7 +43,7 @@ interface HarnessOptions {
 }
 
 function harness(options: HarnessOptions = {}) {
-  const projectInputs: ProjectResolutionInput[] = []
+  const projectInputs: string[] = []
   const metadataProjects: string[] = []
   const constructedConnections: string[] = []
   const sessionRoles = new Map<string, string[][]>()
@@ -62,10 +54,9 @@ function harness(options: HarnessOptions = {}) {
     [PROJECT_TWO.id, PROJECT_TWO],
   ])
   const projectResolver: ProjectResolver = {
-    resolve: async (input) => {
-      projectInputs.push(input)
-      const project = input.requestedProjectId ? projects.get(input.requestedProjectId) : undefined
-      return project ? { auth: auth(project.id), project } : null
+    resolve: async (projectId) => {
+      projectInputs.push(projectId)
+      return projects.get(projectId) ?? null
     },
   }
   const connectionMetadataResolver: PlatformConnectionMetadataResolver = {
@@ -125,11 +116,6 @@ function harness(options: HarnessOptions = {}) {
 describe('database composition', () => {
   test('keeps resolution lazy and exposes only safe request capabilities', async () => {
     const state = harness()
-    const input: ProjectResolutionInput = {
-      auth: { type: 'guest' },
-      requestedProjectId: PROJECT_ONE.id,
-    }
-
     expect(state.metadataProjects).toEqual([])
     expect(Object.keys(state.composition).toSorted()).toEqual(['close', 'requests'])
     expect(Object.keys(state.composition.requests).toSorted()).toEqual([
@@ -140,13 +126,10 @@ describe('database composition', () => {
     expect(Object.keys(state.composition.requests.databaseSessions)).toEqual(['acquire'])
     expect(state.composition.requests).not.toHaveProperty('close')
 
-    const resolution = await state.composition.requests.projects.resolve(input)
+    const resolution = await state.composition.requests.projects.resolve(PROJECT_ONE.id)
 
-    expect(resolution).toEqual({
-      auth: auth(PROJECT_ONE.id),
-      project: PROJECT_ONE,
-    })
-    expect(state.projectInputs).toEqual([input])
+    expect(resolution).toEqual(PROJECT_ONE)
+    expect(state.projectInputs).toEqual([PROJECT_ONE.id])
     expect(state.metadataProjects).toEqual([])
     for (const capability of [state.composition, state.composition.requests]) {
       expect(capability).not.toHaveProperty('registry')

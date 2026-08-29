@@ -5,7 +5,6 @@ import { RequestDatabaseSessions } from '../src/infrastructure/request-database-
 
 const PROJECT: ProjectContext = {
   id: 'project-1',
-  internalId: '17',
   enabled: true,
 }
 
@@ -13,7 +12,6 @@ const AUTH: ProjectAuthContext = {
   type: 'session',
   sessionId: 'session-1',
   userId: 'user-1',
-  projectId: PROJECT.id,
   verified: true,
   teams: [{ teamId: 'team-1', roles: ['viewer'] }],
   labels: ['staff'],

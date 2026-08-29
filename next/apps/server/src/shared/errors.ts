@@ -83,3 +83,9 @@ export class ConflictError extends AppError {
     super(409, { type: '/errors/conflict', detail, ...fields })
   }
 }
+
+export class ServiceUnavailableError extends AppError {
+  constructor(detail = 'Service unavailable', fields?: Omit<ProblemFields, 'type' | 'detail'>) {
+    super(503, { type: '/errors/unavailable', detail, ...fields })
+  }
+}

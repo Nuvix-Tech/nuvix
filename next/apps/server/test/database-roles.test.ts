@@ -5,7 +5,6 @@ import { ForbiddenError } from '../src/shared/errors'
 
 const PROJECT: ProjectContext = {
   id: 'project-1',
-  internalId: '17',
   enabled: true,
 }
 
@@ -22,7 +21,6 @@ describe('database role mapping', () => {
         type: 'session',
         sessionId: 'session-1',
         userId: 'user-1',
-        projectId: PROJECT.id,
         verified: true,
         teams: [
           { teamId: 'team-2', roles: ['viewer', 'owner', 'owner'] },
@@ -51,7 +49,6 @@ describe('database role mapping', () => {
       auth: {
         type: 'jwt',
         userId: 'user-2',
-        projectId: PROJECT.id,
         verified: false,
         scopes: [],
       } satisfies ProjectAuthContext,
@@ -66,7 +63,6 @@ describe('database role mapping', () => {
       type: 'apiKey',
       keyId: 'key-1',
       mode: 'admin',
-      projectId: PROJECT.id,
       scopes: ['schemas.write'],
     }
 
@@ -81,7 +77,6 @@ describe('database role mapping', () => {
     const auth = (teams: readonly TeamClaim[]): ProjectAuthContext => ({
       type: 'jwt',
       userId: 'user-1',
-      projectId: PROJECT.id,
       verified: true,
       scopes: [],
       teams,
@@ -94,18 +89,6 @@ describe('database role mapping', () => {
     expect(forward).toContain('team:team-1/owner')
     expect(forward).toContain('team:team-1/viewer')
     expect(forward.indexOf('team:team-1/owner')).toBeLessThan(forward.indexOf('team:team-1/viewer'))
-  })
-
-  test('rejects credentials bound to another project', () => {
-    const auth: ProjectAuthContext = {
-      type: 'jwt',
-      userId: 'user-1',
-      projectId: 'project-2',
-      verified: false,
-      scopes: [],
-    }
-
-    expect(() => rolesFor(auth, PROJECT)).toThrow(ForbiddenError)
   })
 
   test('rejects disabled projects', () => {
@@ -143,7 +126,6 @@ describe('database role mapping', () => {
     const auth: ProjectAuthContext = {
       type: 'jwt',
       userId: 'user-1',
-      projectId: PROJECT.id,
       verified: true,
       scopes: [],
       ...claims,

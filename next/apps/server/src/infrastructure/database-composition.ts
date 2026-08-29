@@ -59,7 +59,7 @@ export function createDatabaseComposition(
     close: () => registry.closeAll(),
     requests: {
       projects: {
-        resolve: (input) => options.projectResolver.resolve(input),
+        resolve: (projectId) => options.projectResolver.resolve(projectId),
       },
       databaseSessions: {
         acquire: (project, auth) => databaseSessions.acquire(project, auth),

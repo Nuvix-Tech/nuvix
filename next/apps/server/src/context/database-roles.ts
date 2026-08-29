@@ -38,10 +38,6 @@ export function rolesFor(auth: ProjectAuthContext, project: ProjectContext): rea
     return [serialize(RoleName.ANY), serialize(RoleName.GUESTS)]
   }
 
-  if (auth.projectId !== project.id) {
-    throw new ForbiddenError('Credential is not valid for this project')
-  }
-
   const roles = new Set<string>([serialize(RoleName.ANY)])
   if (auth.type === 'apiKey') return [...roles]
 
