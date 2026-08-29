@@ -18,7 +18,8 @@ import { cases, type ParityCase } from './cases'
 
 // Dynamic import AFTER the env defaults above: config fail-fasts at module
 // load, and static imports would hoist past the assignments.
-const { app } = await import('../../src/app')
+const { createApp } = await import('../../src/app')
+const app = await createApp({ isProduction: false })
 
 const V1_BASE = process.env.NUVIX_V1_BASE_URL
 

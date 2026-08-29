@@ -1,5 +1,7 @@
 import { config } from '@nuvix/utils'
-import { app } from './app'
+import { createApp } from './app'
+
+const app = await createApp({ isProduction: config.isProd })
 
 const server = Bun.serve({
   port: config.port,
