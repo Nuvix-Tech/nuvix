@@ -332,7 +332,9 @@ next/
       selection, HMAC-verified session/API-key bearer secrets, expiry/revocation,
       current user/membership claims, portable explicit auth schema; tenant JWTs
       fail closed until signing-key storage lands in Phase 4
-- [ ] Wire the composition owner into live-service startup and shutdown
+- [x] Wire the composition owner into live-service startup and shutdown:
+      injectable app factory, PostgreSQL/SQLite platform runtime, tenant owner,
+      HTTP stop → tenant drain → platform close ordering, idempotent shutdown
 - [ ] Implement database services and reviewed routes on the foundation
 - [ ] Teams, Users slices
 - [ ] Schemas slice — minus `@nuvix/pg`-dependent endpoints (deferred list in `DEFERRED_ROUTES.md`)
