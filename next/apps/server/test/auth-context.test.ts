@@ -5,6 +5,8 @@ import { type AuthContext, authContext } from '../src/context/auth'
 import { signJwt } from '../src/utils/jwt'
 
 const SECRET = 'test-secret'
+const RAW_SESSION_TOKEN = 'raw-bearer-token-sentinel'
+const CANONICAL_SESSION_ID = 'session-record-1'
 
 /** Probe route exposing the resolved auth context. */
 const app = new Elysia({ prefix: '/v2' })
@@ -12,7 +14,10 @@ const app = new Elysia({ prefix: '/v2' })
     authContext({
       jwtSecret: SECRET,
       verifiers: {
-        verifySession: async (id) => (id === 'valid-session' ? { userId: 'user-1' } : null),
+        verifySession: async (token) =>
+          token === RAW_SESSION_TOKEN
+            ? { sessionId: CANONICAL_SESSION_ID, userId: 'user-1' }
+            : null,
         verifyApiKey: async (key) => (key === 'valid-key' ? { keyId: 'key-1' } : null),
       },
     }),
@@ -31,16 +36,32 @@ describe('auth context resolution', () => {
     expect((data!.auth as AuthContext).type).toBe('guest')
   })
 
-  test('valid session header → session context', async () => {
-    const res = await app.handle(
-      new Request('http://x/v2/whoami', h({ 'x-nuvix-session': 'valid-session' })),
+  test('raw session bearer token is exchanged for a canonical session identity', async () => {
+    const verifierInputs: string[] = []
+    const sessionProbe = new Elysia({ prefix: '/v2' })
+      .use(
+        authContext({
+          verifiers: {
+            verifySession: async (token) => {
+              verifierInputs.push(token)
+              return { sessionId: CANONICAL_SESSION_ID, userId: 'user-1' }
+            },
+          },
+        }),
+      )
+      .get('/whoami', ({ auth }) => ({ auth }))
+    const res = await sessionProbe.handle(
+      new Request('http://x/v2/whoami', h({ 'x-nuvix-session': RAW_SESSION_TOKEN })),
     )
     const body = (await res.json()) as { auth: AuthContext }
+    expect(verifierInputs).toEqual([RAW_SESSION_TOKEN])
     expect(body.auth).toEqual({
       type: 'session',
-      sessionId: 'valid-session',
+      sessionId: CANONICAL_SESSION_ID,
       userId: 'user-1',
     })
+    expect(CANONICAL_SESSION_ID).not.toBe(RAW_SESSION_TOKEN)
+    expect(JSON.stringify(body.auth)).not.toContain(RAW_SESSION_TOKEN)
   })
 
   test('invalid session → guest', async () => {
@@ -103,7 +124,7 @@ describe('auth context resolution', () => {
     const res = await app.handle(
       new Request(
         'http://x/v2/whoami',
-        h({ 'x-nuvix-session': 'valid-session', 'x-nuvix-jwt': token }),
+        h({ 'x-nuvix-session': RAW_SESSION_TOKEN, 'x-nuvix-jwt': token }),
       ),
     )
     const body = (await res.json()) as { auth: AuthContext }

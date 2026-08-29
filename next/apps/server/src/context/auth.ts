@@ -21,7 +21,8 @@ export type AuthContext =
 
 /** Injected by later phases; null/unset means credential cannot be trusted. */
 export interface AuthVerifiers {
-  verifySession?: (sessionId: string) => Promise<{ userId: string } | null>
+  /** Exchanges a raw bearer token for canonical, non-secret session and user identities. */
+  verifySession?: (sessionToken: string) => Promise<{ sessionId: string; userId: string } | null>
   verifyApiKey?: (key: string, mode: AuthMode) => Promise<{ keyId: string } | null>
 }
 
@@ -35,11 +36,17 @@ export async function resolveAuth(
   jwtSecret?: string,
 ): Promise<AuthContext> {
   // 1. Session token
-  const sessionId = headers.get(HEADERS.session)
-  if (sessionId) {
+  const sessionToken = headers.get(HEADERS.session)
+  if (sessionToken) {
     if (!verifiers.verifySession) return { type: 'guest' }
-    const session = await verifiers.verifySession(sessionId)
-    return session ? { type: 'session', sessionId, userId: session.userId } : { type: 'guest' }
+    const session = await verifiers.verifySession(sessionToken)
+    return session
+      ? {
+          type: 'session',
+          sessionId: session.sessionId,
+          userId: session.userId,
+        }
+      : { type: 'guest' }
   }
 
   // 2. Short-lived JWT

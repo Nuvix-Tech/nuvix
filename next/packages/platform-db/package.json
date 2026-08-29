@@ -1,0 +1,13 @@
+{
+  "name": "@nuvix/platform-db",
+  "version": "2.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "migrate:platform": "bun run scripts/migrate.ts"
+  }
+}

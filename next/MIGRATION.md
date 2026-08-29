@@ -279,9 +279,10 @@ next/
 - [x] Typed error classes + problem+json envelope (done early in Phase 0 — `apps/server/src/shared/errors.ts` + `plugins/errors.ts`)
 - [x] Auth resolution primitives: JWT util (`utils/jwt.ts`, zero-dep HS256 on `crypto.subtle`), auth context (`context/auth.ts`: guest/session/jwt/apiKey union, pluggable DB-backed verifiers for later phases; precedence session > jwt > key > guest)
 - [x] CORS (`plugins/cors.ts`, hand-rolled), security headers (`plugins/security.ts`), rate limiting (`plugins/rate-limit.ts`, pluggable `Store`; memory impl now, Redis drops in later) — all tested
-- [ ] Context chain: platform connection-metadata lookup and tenant-registry
-      composition, console/admin modes — deferred; the implemented resource factory
-      accepts only an already-resolved PostgreSQL connection value
+- [ ] Context chain: the injected metadata-resolver/tenant-registry composition
+      boundary is implemented; concrete platform persistence/query, HTTP project
+      locator semantics, console/admin modes, and live-service startup wiring remain
+      deferred
 - [x] OpenAPI docs via `@elysia/openapi@2.0.0-beta.1` (D10) — spec at `/v2/openapi/json` (typed from `t` schemas), Scalar UI at `/v2/openapi`. **Requires a Bun patch** (`patches/@elysia+openapi@2.0.0-beta.1.patch`): the published bundle has broken relative `../node_modules/typebox` imports in its `gen` submodule; the patch stubs `Script` (only used by `fromTypes()`, which we don't use). Root `package.json` also carries `elysia` so the patched copy resolves it under Bun's isolated linker. Defaults differ from v1 plugin: spec path is `/openapi/json` (not `/openapi.json`), UI is Scalar (not Swagger).
 
 **Phase 1 notes (verified against elysia 2.0.0-beta.6 source):**
@@ -316,8 +317,12 @@ next/
 - [x] Implement the database foundation: canonical claim-to-role conversion,
       request-only `Session` leases, tenant registry lifecycle, resolved-connection
       resource construction, and safe package-error translation
-- [ ] Compose platform connection-metadata lookup with the tenant registry; the
-      platform owns one PostgreSQL database and its connection metadata per project
+- [x] Compose an injected platform connection-metadata resolver with the tenant
+      registry and expose only safe project/session capabilities to requests plus
+      owner-only shutdown
+- [ ] Implement concrete platform connection-metadata persistence/query and HTTP
+      project locator semantics
+- [ ] Wire the composition owner into live-service startup and shutdown
 - [ ] Implement database services and reviewed routes on the foundation
 - [ ] Teams, Users slices
 - [ ] Schemas slice — minus `@nuvix/pg`-dependent endpoints (deferred list in `DEFERRED_ROUTES.md`)
@@ -401,10 +406,12 @@ v2 makes tenancy **structural**:
                                                      nuvix-dev/postgres
         ▲          ▲           ▲
         └──────────┴───────────┘
-                   │ already-resolved tenant connection
-            ┌──────┴──────┐
-            │ server app  │  every request resolves: API key / token
-            └─────────────┘  → tenant registry → request `Session` lease
+                   │ injected metadata resolver
+            ┌──────┴──────────────────┐
+            │ server process owner    │
+            └──────────┬──────────────┘
+                       │ resolved connection → tenant registry → tenant resource
+                       └ safe project + bound auth → request `Session` lease
 ```
 
 **Rules:**
@@ -414,10 +421,13 @@ v2 makes tenancy **structural**:
    creating its database (via the pg-18 image's auto-schema bootstrap),
    tracking connection metadata in the internal/platform DB.
 3. The **server app never hardcodes tenants or derives connection metadata**.
-   Its database resource boundary consumes an already-resolved, normalized
+   The process-owned composition boundary injects project and platform metadata
+   resolvers. The resource factory receives only an already-resolved, normalized
    PostgreSQL connection value.
 4. The tenant registry owns one raw database resource per project, deduplicates
-   concurrent creation, and leases role-scoped sessions to requests. Its
+   concurrent creation, and supports role-scoped request sessions. Requests see
+   only project resolution plus session acquisition; metadata, raw resources,
+   registry lifecycle controls, and privileged sessions remain owner-internal. Its
    `maxTenants` is an idle-resource cache target, not a hard cap on active
    tenants; in-use resources are never evicted to satisfy it.
 5. Schema/collection model inside a tenant DB is **redesigned freely** (D25) —
@@ -426,9 +436,14 @@ v2 makes tenancy **structural**:
 6. Platform-side features that depend on provisioning (billing, quotas,
    region placement) are **explicitly out of scope for now** — interfaces are
    stubbed so they can be added later without rework.
-7. Platform metadata lookup and composition with the registry remain deferred.
-   Do not invent HTTP routes, a schema registry, hardcoded tenant URLs, or new
-   environment contracts to fill that gap.
+7. The injected resolver → registry → tenant resource → request `Session` flow is
+   implemented and fake-tested. Request leases release idempotently in `finally`;
+   owner shutdown rejects later acquisition, drains active leases, exposes close
+   failures, and owns retries.
+8. Concrete platform persistence/query, HTTP project locator semantics, feature
+   routes, and live-service startup wiring remain deferred. Do not invent routes,
+   a schema registry, hardcoded tenant URLs, or new environment contracts to fill
+   those gaps. Live PostgreSQL/platform integration coverage is not yet claimed.
 
 ---
 

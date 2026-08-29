@@ -1,6 +1,6 @@
 # Package Integration Architecture
 
-> Status: DATABASE FOUNDATION IMPLEMENTED — composition and feature slices pending
+> Status: DATABASE FOUNDATION + DATABASE COMPOSITION BOUNDARY IMPLEMENTED — live wiring and feature slices pending
 > Scope: sibling `@nuvix/db`, `@nuvix/cache`, `@nuvix/storage`, and
 > `@nuvix/messaging` source packages
 
@@ -10,10 +10,10 @@ request scope; services receive only the operations their use case needs.
 ## Dependency flow
 
 ```text
-app.ts (composition root)
+server process (composition owner)
   ├─ config → cache/storage/messaging factories
-  ├─ resolved connection → tenant registry → Database per project
-  ├─ auth role mapper → caller-scoped Session per request
+  ├─ injected metadata resolver → tenant registry → tenant resource
+  ├─ project + auth role mapper → caller-scoped Session lease per request
   └─ package error translator → AppError → problem+json
              │
              ▼
@@ -33,30 +33,57 @@ Rules:
 ## Project database ownership
 
 The platform owns one PostgreSQL database and its connection metadata per
-project. The server consumes only an already-resolved, normalized PostgreSQL
-connection value; `createTenantDatabaseResource(connectionString)` validates
-that value and constructs the adapter, cache driver, and `Database`.
+project. `createDatabaseComposition` is the process-owned database composition
+boundary. It injects a `PlatformConnectionMetadataResolver` into the tenant
+registry's resource factory; the factory resolves and validates one normalized
+PostgreSQL connection value before `createTenantDatabaseResource` constructs
+the adapter, cache driver, and `Database`.
 
-Platform metadata lookup and composition of that resolver with the tenant
-registry are deferred. This foundation does not define HTTP routes, a schema
-registry, hardcoded tenant URLs, or new environment contracts.
+The interface and composition flow are implemented. Concrete platform
+persistence/query logic, HTTP project locator semantics, feature routes, and
+live-service startup wiring remain deferred. This boundary does not define a
+platform storage schema, hardcoded tenant URLs, or new environment contracts.
+
+```text
+injected ProjectResolver ──────────────────────→ safe project + bound auth
+                                                    │
+injected PlatformConnectionMetadataResolver        │ project ID
+              │                                     ▼
+              └→ resolved connection → tenant registry → tenant resource
+                                                        │
+                                      rolesFor(auth, project)
+                                                        ▼
+                                            request Session lease
+```
 
 ## Lifetimes and ownership
 
 | Boundary                          | Lifetime                 | Owner            |
 | --------------------------------- | ------------------------ | ---------------- |
-| Config and factories              | process                  | composition root |
+| Database composition + factories  | process                  | server process   |
 | Messaging adapters/gateway        | process                  | composition root |
 | Storage devices/registry          | process                  | storage factory  |
 | Tenant adapter, cache, `Database` | tenant-resource lifetime | tenant registry  |
 | Role-scoped `Session` lease       | request lifetime         | request scope    |
 | System `Session`                  | internal-job lifetime    | internal job     |
 
-The registry does not resolve platform metadata. Its injected `create(projectId)`
-dependency receives that responsibility at the future composition boundary and
-passes the resolved connection value to the resource factory. Creating a
-`Session` does not create a pool: it shares the owning database's adapter and
-cache.
+The registry remains metadata-neutral: its injected `create(projectId)` calls
+the metadata resolver and passes only the resolved connection value to the
+resource factory. Creating a `Session` does not create a pool; it shares the
+owning tenant resource's adapter and cache.
+
+### Request and owner capabilities
+
+| Consumer              | Capability                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| Request pipeline      | `projects.resolve` and `databaseSessions.acquire`                                                      |
+| Request lease         | role-scoped `session` and idempotent `release`                                                         |
+| Process owner         | `close()`                                                                                              |
+| Composition internals | metadata resolver, registry controls, connection value, raw `Database`, adapter, cache, and `system()` |
+
+`createDatabaseComposition` exposes lifecycle shutdown only on the owner. Its
+`requests` object cannot invalidate, sweep, close, inspect metadata, or obtain a
+raw or privileged resource. Composition internals are never request-visible.
 
 ```ts
 interface RequestDatabaseSessionLease {
@@ -66,8 +93,18 @@ interface RequestDatabaseSessionLease {
 ```
 
 Request code sees this lease, not the underlying `Database`, adapter, cache,
-connection value, or registry lifecycle controls. Every acquisition must release
-in `finally`.
+connection value, or registry lifecycle controls. Every successful acquisition
+must release in `finally`; repeated release calls return the same promise and
+preserve the same cleanup failure.
+
+```ts
+const lease = await databaseSessions.acquire(project, auth);
+try {
+  return await service(lease.session);
+} finally {
+  await lease.release();
+}
+```
 
 ### Tenant registry semantics
 
@@ -83,9 +120,11 @@ in `finally`.
 - `sweep()` and `closeAll()` attempt every eligible close and reject with ordered
   aggregate failures. Detached cleanup reports each failure through
   `onCloseError` because no caller can await it.
-- Shutdown permanently rejects acquisition, waits for active leases, and then
-  closes every resource. A failed `closeAll()` may be called again to retry
-  failed closes.
+- Owner shutdown permanently rejects new acquisition, waits for active request
+  leases to release, and then closes every resource. Concurrent owner `close()`
+  calls share one promise. Close failures remain observable to the owner; a
+  later `close()` retries only resources whose close failed while acquisition
+  remains rejected.
 
 The cache factory constructs `Memory`, `Redis`, or `None` from configuration.
 It passes the structural four-method `CacheDriver` directly to `Database` and
@@ -301,9 +340,13 @@ bun test
   `StorageDevices`; no Elysia app or package client is required.
 - **Contract:** table-test every error mapping, role mapping, per-recipient
   messaging outcome, and storage device selection.
-- **Integration:** verify caller sessions enforce permissions, transactions keep
-  the same auth context, cache drivers satisfy the DB contract, and configured
-  storage devices resolve.
+- **Composition:** fake resolvers and resources verify capability narrowing,
+  lazy metadata lookup, tenant selection, lease draining, close failures, and
+  retry ownership. These tests do not cover live PostgreSQL or a concrete
+  platform metadata service.
+- **Future integration:** verify caller sessions enforce permissions,
+  transactions keep the same auth context, cache drivers satisfy the DB
+  contract, and configured storage devices resolve.
 
 ## Related
 
@@ -315,9 +358,15 @@ bun test
 - `apps/server/src/app.ts` — current application composition point
 - `apps/server/src/context/auth.ts` — typed request authentication context
 - `apps/server/src/context/database-roles.ts` — canonical request role conversion
+- `apps/server/src/context/project.ts` — safe project resolver capability
+- `apps/server/src/infrastructure/database-composition.ts` — process-owned composition boundary
+- `apps/server/src/infrastructure/platform-connection-metadata.ts` — injected metadata resolver adapter
 - `apps/server/src/infrastructure/request-database-sessions.ts` — request capability boundary
 - `apps/server/src/infrastructure/tenant-database-resource.ts` — resolved-connection resource
 - `apps/server/src/infrastructure/tenant-databases.ts` — tenant registry and lifecycle
 - `apps/server/src/infrastructure/package-errors.ts` — safe package-error translation
 - `apps/server/src/shared/errors.ts` — public application error definitions
 - `apps/server/src/plugins/errors.ts` — problem+json serialization
+- `apps/server/test/database-composition.test.ts` — fake-based composition and owner lifecycle tests
+- `apps/server/test/platform-connection-metadata.test.ts` — fake-based metadata boundary tests
+- `apps/server/test/request-database-sessions.test.ts` — request capability and release tests
