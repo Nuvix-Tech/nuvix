@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 import { type CacheDriver, None } from '@nuvix/cache'
-import { Adapter, Database } from '@nuvix/db'
+import { Adapter, Database, SQLiteAdapter } from '@nuvix/db'
+import type { TenantDatabaseTarget } from '../src/infrastructure/platform-persistence-model'
 import {
   createTenantDatabaseResource,
   type TenantDatabaseConstruction,
 } from '../src/infrastructure/tenant-database-resource'
 
 interface FakeAdapter {
-  readonly connectionString: string
+  readonly driver: TenantDatabaseTarget['driver']
+  readonly value: string
   readonly client: { disconnect(): Promise<void> }
 }
 
@@ -19,41 +21,57 @@ interface FakeDatabase {
 function construction(
   options: { readonly disconnect?: () => Promise<void>; readonly none?: () => CacheDriver } = {},
 ): TenantDatabaseConstruction<FakeAdapter, FakeDatabase> {
+  const adapter = (driver: FakeAdapter['driver'], value: string): FakeAdapter => ({
+    driver,
+    value,
+    client: { disconnect: options.disconnect ?? (async () => {}) },
+  })
   return {
-    adapter: (connectionString) => ({
-      connectionString,
-      client: { disconnect: options.disconnect ?? (async () => {}) },
-    }),
-    database: (adapter, cache) => ({ adapter, cache }),
-    client: (adapter) => adapter.client,
+    postgresql: (value) => adapter('postgresql', value),
+    sqlite: (value) => adapter('sqlite', value),
+    database: (selected, cache) => ({ adapter: selected, cache }),
+    client: (selected) => selected.client,
     none: options.none ?? (() => new None()),
   }
 }
 
 describe('tenant database resource factory', () => {
-  test('constructs and owns resources from the resolved connection string', () => {
-    // Arrange
-    const connectionString = 'postgresql://tenant.example.test/resolved'
+  test.each([
+    {
+      target: {
+        driver: 'postgresql',
+        connectionString: 'postgresql://tenant.example.test/resolved',
+      } as const,
+      value: 'postgresql://tenant.example.test/resolved',
+    },
+    {
+      target: { driver: 'sqlite', filename: './data/project.sqlite' } as const,
+      value: './data/project.sqlite',
+    },
+  ])('selects and owns the $target.driver resource', ({ target, value }) => {
     const cache = new None()
 
-    // Act
-    const resource = createTenantDatabaseResource(connectionString, cache, construction())
+    const resource = createTenantDatabaseResource(target, cache, construction())
 
-    // Assert
-    expect({
-      connectionString: resource.adapter.connectionString,
-      ownsAdapter: resource.database.adapter === resource.adapter,
-      ownsCache: resource.cache === cache && resource.database.cache === cache,
-    }).toEqual({ connectionString, ownsAdapter: true, ownsCache: true })
+    expect(resource.adapter).toMatchObject({ driver: target.driver, value })
+    expect(resource.database.adapter).toBe(resource.adapter)
+    expect(resource.database.cache).toBe(cache)
   })
 
-  test('constructs production resources through public package exports', async () => {
-    const resource = createTenantDatabaseResource(
-      'postgresql://user:password@127.0.0.1:5432/tenant',
-    )
+  test.each([
+    [
+      {
+        driver: 'postgresql',
+        connectionString: 'postgresql://user:password@127.0.0.1:5432/tenant',
+      } as const,
+      Adapter,
+    ],
+    [{ driver: 'sqlite', filename: ':memory:' } as const, SQLiteAdapter],
+  ])('constructs public @nuvix/db $target.driver resources', async (target, AdapterClass) => {
+    const resource = createTenantDatabaseResource(target)
 
     try {
-      expect(resource.adapter).toBeInstanceOf(Adapter)
+      expect(resource.adapter).toBeInstanceOf(AdapterClass)
       expect(resource.database).toBeInstanceOf(Database)
       expect(resource.cache).toBeInstanceOf(None)
     } finally {
@@ -61,149 +79,82 @@ describe('tenant database resource factory', () => {
     }
   })
 
-  test('selects the injected default cache when no cache is supplied', () => {
-    // Arrange
+  test('selects the default cache only when none is supplied', () => {
     const defaultCache = new None()
     let selections = 0
-
-    // Act
-    const resource = createTenantDatabaseResource(
-      'postgresql://tenant.example.test/default-cache',
-      undefined,
-      construction({
-        none: () => {
-          selections += 1
-          return defaultCache
-        },
-      }),
-    )
-
-    // Assert
-    expect({
-      selectedCache: resource.cache === defaultCache,
-      databaseCache: resource.database.cache === defaultCache,
-      selections,
-    }).toEqual({ selectedCache: true, databaseCache: true, selections: 1 })
-  })
-
-  test('uses a supplied cache without constructing the default', () => {
-    // Arrange
-    const cache = new None()
-    let defaultSelections = 0
-
-    // Act
-    const resource = createTenantDatabaseResource(
-      'postgresql://tenant.example.test/injected-cache',
-      cache,
-      construction({
-        none: () => {
-          defaultSelections += 1
-          return new None()
-        },
-      }),
-    )
-
-    // Assert
-    expect({
-      selectedCache: resource.cache === cache,
-      defaultSelections,
-    }).toEqual({
-      selectedCache: true,
-      defaultSelections: 0,
+    const dependencies = construction({
+      none: () => {
+        selections += 1
+        return defaultCache
+      },
     })
+
+    const generated = createTenantDatabaseResource(
+      { driver: 'sqlite', filename: ':memory:' },
+      undefined,
+      dependencies,
+    )
+    const suppliedCache = new None()
+    const supplied = createTenantDatabaseResource(
+      { driver: 'sqlite', filename: ':memory:' },
+      suppliedCache,
+      dependencies,
+    )
+
+    expect(generated.cache).toBe(defaultCache)
+    expect(supplied.cache).toBe(suppliedCache)
+    expect(selections).toBe(1)
   })
 
-  test('rejects empty connection values before constructing resources', () => {
-    // Arrange
-    let adapterConstructions = 0
+  test.each([
+    { driver: 'postgresql', connectionString: '' },
+    { driver: 'postgresql', connectionString: 'https://example.test/tenant' },
+    {
+      driver: 'postgresql',
+      connectionString: ' postgresql://example.test/tenant',
+    },
+    { driver: 'sqlite', filename: '' },
+    { driver: 'sqlite', filename: ' ./data/tenant.sqlite' },
+  ] as TenantDatabaseTarget[])('rejects invalid targets before construction', (target) => {
+    let constructions = 0
     const dependencies = construction()
-    const guardedConstruction: TenantDatabaseConstruction<FakeAdapter, FakeDatabase> = {
+    const guarded: TenantDatabaseConstruction<FakeAdapter, FakeDatabase> = {
       ...dependencies,
-      adapter: (connectionString) => {
-        adapterConstructions += 1
-        return dependencies.adapter(connectionString)
+      postgresql: (value) => {
+        constructions += 1
+        return dependencies.postgresql(value)
+      },
+      sqlite: (value) => {
+        constructions += 1
+        return dependencies.sqlite(value)
       },
     }
 
-    // Act
-    const createEmpty = () => createTenantDatabaseResource('', undefined, guardedConstruction)
-    const createWhitespace = () =>
-      createTenantDatabaseResource('   ', undefined, guardedConstruction)
-    const createProjectId = () =>
-      createTenantDatabaseResource('project_123', undefined, guardedConstruction)
-    const createWrongProtocol = () =>
-      createTenantDatabaseResource(
-        'https://tenant.example.test/database',
-        undefined,
-        guardedConstruction,
-      )
-    const createUnnormalized = () =>
-      createTenantDatabaseResource(
-        ' postgresql://tenant.example.test/database ',
-        undefined,
-        guardedConstruction,
-      )
-
-    // Assert
-    expect(createEmpty).toThrow('normalized PostgreSQL URL')
-    expect(createWhitespace).toThrow('normalized PostgreSQL URL')
-    expect(createProjectId).toThrow('normalized PostgreSQL URL')
-    expect(createWrongProtocol).toThrow('normalized PostgreSQL URL')
-    expect(createUnnormalized).toThrow('normalized PostgreSQL URL')
-    expect(adapterConstructions).toBe(0)
+    expect(() => createTenantDatabaseResource(target, undefined, guarded)).toThrow(
+      'Tenant database target is invalid',
+    )
+    expect(constructions).toBe(0)
   })
 
-  test('closes the owned adapter client exactly once', async () => {
-    // Arrange
+  test('closes the selected client once and preserves close failures', async () => {
+    const failure = new Error('disconnect failed')
     let disconnects = 0
     const resource = createTenantDatabaseResource(
-      'postgresql://tenant.example.test/close',
+      { driver: 'sqlite', filename: ':memory:' },
       undefined,
       construction({
         disconnect: async () => {
           disconnects += 1
+          throw failure
         },
       }),
     )
 
-    // Act
-    const firstClose = resource.close()
-    const concurrentClose = resource.close()
-    await firstClose
-    const laterClose = resource.close()
-    await laterClose
+    const first = resource.close()
 
-    // Assert
-    expect({
-      sameConcurrentPromise: concurrentClose === firstClose,
-      sameLaterPromise: laterClose === firstClose,
-      disconnects,
-    }).toEqual({
-      sameConcurrentPromise: true,
-      sameLaterPromise: true,
-      disconnects: 1,
-    })
-  })
-
-  test('preserves a failed close without disconnecting again', async () => {
-    const disconnectError = new Error('disconnect failed')
-    let disconnects = 0
-    const resource = createTenantDatabaseResource(
-      'postgresql://tenant.example.test/failed-close',
-      undefined,
-      construction({
-        disconnect: async () => {
-          disconnects += 1
-          throw disconnectError
-        },
-      }),
-    )
-
-    const firstClose = resource.close()
-
-    expect(resource.close()).toBe(firstClose)
-    await expect(firstClose).rejects.toBe(disconnectError)
-    await expect(resource.close()).rejects.toBe(disconnectError)
+    expect(resource.close()).toBe(first)
+    await expect(first).rejects.toBe(failure)
+    await expect(resource.close()).rejects.toBe(failure)
     expect(disconnects).toBe(1)
   })
 })

@@ -1,69 +1,67 @@
 import type { Session } from '@nuvix/db'
-import type { ProjectResolver } from '../context/project'
-import {
-  createResolverBackedTenantDatabaseResource,
-  type PlatformConnectionMetadataResolver,
-  type TenantDatabaseResourceFactory,
-} from './platform-connection-metadata'
-import { RequestDatabaseSessions } from './request-database-sessions'
+import type { ProjectLocator } from '../context/project-locator'
+import type {
+  ProjectRequestOperation,
+  TenantAuthDocuments,
+  TenantAuthResolver,
+} from '../context/project-request'
+import type { TenantDatabaseTarget } from './platform-persistence-model'
+import { ProjectRequestScope } from './project-request-scope'
 import { createTenantDatabaseResource } from './tenant-database-resource'
+import type { TenantTargetResolver } from './tenant-database-target'
 import {
   TenantDatabaseRegistry,
   type TenantDatabaseRegistryOptions,
   type TenantDatabaseResource,
 } from './tenant-databases'
 
-interface SessionDatabase {
+interface RequestTenantDatabase {
   for(...roles: string[]): Session
+  system(): TenantAuthDocuments
 }
 
-export type DatabaseRegistryOptions = Omit<TenantDatabaseRegistryOptions<SessionDatabase>, 'create'>
+export type DatabaseRegistryOptions = Omit<
+  TenantDatabaseRegistryOptions<RequestTenantDatabase>,
+  'create'
+>
 
 export interface DatabaseCompositionOptions {
-  readonly projectResolver: ProjectResolver
-  readonly connectionMetadataResolver: PlatformConnectionMetadataResolver
-  /** Omit to construct the production tenant resource after metadata resolution. */
-  readonly createResource?: TenantDatabaseResourceFactory<TenantDatabaseResource<SessionDatabase>>
-  /** Includes the required detached-close error reporter; registry defaults remain unchanged. */
+  readonly projectLocator: ProjectLocator
+  readonly tenantTargets: TenantTargetResolver
+  readonly tenantAuth: TenantAuthResolver
+  readonly createResource?: (
+    target: TenantDatabaseTarget,
+  ) =>
+    | TenantDatabaseResource<RequestTenantDatabase>
+    | Promise<TenantDatabaseResource<RequestTenantDatabase>>
   readonly registryOptions: DatabaseRegistryOptions
 }
 
 export interface DatabaseRequestCapabilities {
-  readonly projects: Pick<ProjectResolver, 'resolve'>
-  readonly databaseSessions: Pick<RequestDatabaseSessions, 'acquire'>
+  withProject<Result>(headers: Headers, operation: ProjectRequestOperation<Result>): Promise<Result>
 }
 
 export interface DatabaseComposition {
   readonly requests: DatabaseRequestCapabilities
-  /** Owner-only shutdown; drains request leases and preserves registry close retry semantics. */
   close(): Promise<void>
 }
 
-/** Composes injected project and metadata resolution into least-privilege request capabilities. */
+/** Composes the only allowed project → tenant → auth request sequence. */
 export function createDatabaseComposition(
   options: DatabaseCompositionOptions,
 ): DatabaseComposition {
   const createResource = options.createResource ?? createTenantDatabaseResource
-  const registry = new TenantDatabaseRegistry<SessionDatabase>({
+  const registry = new TenantDatabaseRegistry<RequestTenantDatabase>({
     ...options.registryOptions,
-    create: (projectId) =>
-      createResolverBackedTenantDatabaseResource(
-        projectId,
-        options.connectionMetadataResolver,
-        createResource,
-      ),
+    create: async (projectId) => createResource(await options.tenantTargets.resolve(projectId)),
   })
-  const databaseSessions = new RequestDatabaseSessions(registry)
+  const scope = new ProjectRequestScope(options.projectLocator, registry, options.tenantAuth)
 
-  return {
+  return Object.freeze({
+    requests: Object.freeze({
+      withProject: <Result>(headers: Headers, operation: ProjectRequestOperation<Result>) =>
+        scope.run(headers, operation),
+    }),
     close: () => registry.closeAll(),
-    requests: {
-      projects: {
-        resolve: (projectId) => options.projectResolver.resolve(projectId),
-      },
-      databaseSessions: {
-        acquire: (project, auth) => databaseSessions.acquire(project, auth),
-      },
-    },
-  }
+  })
 }

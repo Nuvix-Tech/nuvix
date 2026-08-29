@@ -323,9 +323,11 @@ next/
 - [x] Define adapter-neutral platform project/target collections and compose the
       PostgreSQL/SQLite platform owner; platform credential bindings were removed
       because authentication is tenant-local
-- [ ] Finish publishable-key project lookup and adapter-neutral tenant-target
+- [x] Finish publishable-key project lookup and adapter-neutral tenant-target
       resolution
-- [ ] Reorder request composition: project → tenant → auth → caller session
+- [x] Reorder request composition: project → tenant → auth → caller session;
+      one scope owns the tenant system-auth capability, caller session, and
+      awaited lease release
 - [ ] Wire the composition owner into live-service startup and shutdown
 - [ ] Implement database services and reviewed routes on the foundation
 - [ ] Teams, Users slices

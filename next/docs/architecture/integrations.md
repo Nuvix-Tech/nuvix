@@ -323,7 +323,7 @@ cd /home/ubuntu/nuvix/next
 bun install --frozen-lockfile
 bun test apps/server/test/database-roles.test.ts \
   apps/server/test/tenant-databases.test.ts \
-  apps/server/test/request-database-sessions.test.ts \
+  apps/server/test/project-request-scope.test.ts \
   apps/server/test/tenant-database-resource.test.ts \
   apps/server/test/package-errors.test.ts
 bun run lint
@@ -357,13 +357,15 @@ bun test
 - `apps/server/src/context/database-roles.ts` — canonical request role conversion
 - `apps/server/src/context/project.ts` — safe project resolver capability
 - `apps/server/src/infrastructure/database-composition.ts` — process-owned composition boundary
-- `apps/server/src/infrastructure/platform-connection-metadata.ts` — injected metadata resolver adapter
-- `apps/server/src/infrastructure/request-database-sessions.ts` — request capability boundary
-- `apps/server/src/infrastructure/tenant-database-resource.ts` — resolved-connection resource
+- `apps/server/src/context/project-locator.ts` — publishable-key project resolution
+- `apps/server/src/context/project-request.ts` — tenant-auth and callback contracts
+- `apps/server/src/infrastructure/project-request-scope.ts` — ordered project/tenant/auth scope
+- `apps/server/src/infrastructure/tenant-database-target.ts` — owner-only target resolution
+- `apps/server/src/infrastructure/tenant-database-resource.ts` — target-selected resource
 - `apps/server/src/infrastructure/tenant-databases.ts` — tenant registry and lifecycle
 - `apps/server/src/infrastructure/package-errors.ts` — safe package-error translation
 - `apps/server/src/shared/errors.ts` — public application error definitions
 - `apps/server/src/plugins/errors.ts` — problem+json serialization
 - `apps/server/test/database-composition.test.ts` — fake-based composition and owner lifecycle tests
-- `apps/server/test/platform-connection-metadata.test.ts` — fake-based metadata boundary tests
-- `apps/server/test/request-database-sessions.test.ts` — request capability and release tests
+- `apps/server/test/project-locator.test.ts` — public locator/error contract tests
+- `apps/server/test/project-request-scope.test.ts` — ordering, auth, and cleanup tests
