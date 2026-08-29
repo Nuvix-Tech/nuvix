@@ -55,6 +55,11 @@ x-nuvix-publishable-key
 
 The publishable key is a locator only. Platform persistence contains no users,
 sessions, memberships, auth scopes, secret API keys, or credential bindings.
+Tenant-local session and secret API-key verifiers store only salted HMAC
+verifiers, reject credential conflicts, expiry, revocation, and disabled users,
+and hydrate current accepted memberships before role construction. Project JWTs
+remain fail-closed until tenant signing-key storage and rotation land in Phase 4;
+there is no process-global project JWT secret.
 
 ## Lifetimes and ownership
 

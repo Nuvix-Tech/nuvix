@@ -3,7 +3,6 @@ import { describe, expect, test } from 'bun:test'
 // app.ts loads config at import time — seed required env first
 process.env.NUVIX_INTERNAL_DATABASE_URL ||= 'postgres://x:x@localhost:5432/x'
 process.env.NUVIX_REDIS_URL ||= 'redis://localhost:6379'
-process.env.NUVIX_JWT_SECRET ||= 'test-secret'
 
 const { createApp } = await import('../src/app')
 const app = await createApp({

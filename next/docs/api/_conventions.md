@@ -146,6 +146,12 @@ The publishable key is a reversible public locator, never authorization. Its
 payload is base64url(`v1:<projectId>`). It is never accepted in a query
 parameter and remains distinct from the secret `x-nuvix-key` credential.
 
+Session, JWT, and secret API-key headers are mutually exclusive. Multiple
+credential mechanisms return `400 auth_credentials_conflict`; malformed,
+unknown, expired, revoked, or wrong-tenant credentials share the generic
+`401 credential_invalid` response. Tenant persistence outages return
+`503 authentication_unavailable` rather than silently degrading to guest.
+
 **Contract rule:** modules reference headers from the shared constants module;
 route handlers never inline names or authenticate before tenant selection.
 

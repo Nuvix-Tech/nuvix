@@ -15,7 +15,11 @@ function harness(
 ) {
   const order: string[] = []
   const roles: string[][] = []
-  const documents = { plane: 'tenant-system' }
+  const documents = {
+    plane: 'tenant-system',
+    find: async () => [],
+    getDocument: async () => ({}) as never,
+  }
   const session = { plane: 'tenant-caller' } as unknown as Session
   const project = { id: 'project_a', enabled: true } as const
   const auth: ProjectAuthContext = {
@@ -54,10 +58,12 @@ function harness(
     },
   }
   const tenantAuth: TenantAuthResolver = {
-    resolve: async (headers, receivedDocuments) => {
+    resolve: async ({ headers, documents: receivedDocuments, project: resolvedProject }) => {
       order.push('auth')
       expect(headers).toBe(HEADERS)
-      expect(receivedDocuments).toBe(documents as never)
+      expect(Object.keys(receivedDocuments).toSorted()).toEqual(['find', 'getDocument'])
+      expect(receivedDocuments).not.toHaveProperty('plane')
+      expect(resolvedProject).toBe(project)
       if (options.authError) throw options.authError
       return auth
     },

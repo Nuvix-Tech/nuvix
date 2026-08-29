@@ -328,6 +328,10 @@ next/
 - [x] Reorder request composition: project → tenant → auth → caller session;
       one scope owns the tenant system-auth capability, caller session, and
       awaited lease release
+- [x] Tenant auth verification foundation: mutually exclusive credential
+      selection, HMAC-verified session/API-key bearer secrets, expiry/revocation,
+      current user/membership claims, portable explicit auth schema; tenant JWTs
+      fail closed until signing-key storage lands in Phase 4
 - [ ] Wire the composition owner into live-service startup and shutdown
 - [ ] Implement database services and reviewed routes on the foundation
 - [ ] Teams, Users slices
@@ -336,6 +340,8 @@ next/
 ### Phase 4 — Account/Auth (highest risk)
 
 - [ ] Contract first: sessions, MFA, recovery, OAuth2, JWT/API-key issuance
+- [ ] Tenant JWT signing-key storage, strict JOSE/claims validation, issuance,
+      and rotation (no process-global project JWT secret)
 - [ ] Password hashing: bcrypt/argon2 only — legacy algos (MD5 etc.) NOT supported per D29
 - [ ] MFA: decide otplib vs hand-rolled RFC-6238 (gate: validated against real factors)
 

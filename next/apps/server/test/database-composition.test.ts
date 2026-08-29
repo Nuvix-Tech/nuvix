@@ -19,8 +19,8 @@ function harness() {
     },
   }
   const tenantAuth: TenantAuthResolver = {
-    resolve: async (headers, documents) => {
-      const projectId = (documents as unknown as { projectId: string }).projectId
+    resolve: async ({ headers, project }) => {
+      const projectId = project.id
       events.push(`auth:${projectId}`)
       return headers.get('x-test-user-project') === projectId
         ? {
@@ -47,7 +47,10 @@ function harness() {
       events.push(`create:${projectId}`)
       return {
         database: {
-          system: () => ({ projectId }) as never,
+          system: () => ({
+            find: async () => [],
+            getDocument: async () => ({}) as never,
+          }),
           for: (...roles: string[]) => ({ projectId, roles }) as unknown as Session,
         },
         close: async () => {

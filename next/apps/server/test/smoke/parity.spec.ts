@@ -10,7 +10,6 @@
  * behavioral drift visible during migration review.
  */
 process.env.NUVIX_INTERNAL_DATABASE_URL ??= 'postgres://localhost:5432/nuvix'
-process.env.NUVIX_JWT_SECRET ??= 'smoke-test-secret'
 process.env.NUVIX_REDIS_URL ??= 'redis://localhost:6379'
 
 import { afterAll, describe, expect, test } from 'bun:test'

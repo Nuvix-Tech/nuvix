@@ -47,7 +47,12 @@ export class ProjectRequestScope {
     let operationError: unknown
 
     try {
-      const auth = await this.auth.resolve(headers, lease.database.system())
+      const system = lease.database.system()
+      const documents: TenantAuthDocuments = Object.freeze({
+        find: system.find.bind(system),
+        getDocument: system.getDocument.bind(system),
+      })
+      const auth = await this.auth.resolve({ headers, project, documents })
       const session = lease.database.for(...rolesFor(auth, project))
       const context: ProjectRequestContext = Object.freeze({
         project,

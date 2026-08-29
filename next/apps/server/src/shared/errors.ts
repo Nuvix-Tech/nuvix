@@ -57,8 +57,8 @@ export class BadRequestError extends AppError {
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(detail = 'Authentication required') {
-    super(401, { type: '/errors/unauthorized', detail })
+  constructor(detail = 'Authentication required', fields?: Omit<ProblemFields, 'type' | 'detail'>) {
+    super(401, { type: '/errors/unauthorized', detail, ...fields })
   }
 }
 

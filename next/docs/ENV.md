@@ -33,9 +33,9 @@ SQLite.
 
 ## Security
 
-| Variable           | Required | Description                                                          |
-| ------------------ | -------- | -------------------------------------------------------------------- |
-| `NUVIX_JWT_SECRET` | yes      | Secret used to sign JWTs/tokens. **Set a real value in production.** |
+Project-facing JWT trust material is tenant-owned and is not configured through
+a process-global secret. Tenant signing-key provisioning and rotation are part
+of the Phase 4 auth slice.
 
 ## Storage
 

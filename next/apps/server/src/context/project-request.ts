@@ -1,11 +1,17 @@
 import type { Session } from '@nuvix/db'
 import type { ProjectAuthContext, ProjectContext } from './project'
 
-export type TenantAuthDocuments = Pick<Session, 'find' | 'findOne' | 'getDocument'>
+export type TenantAuthDocuments = Pick<Session, 'find' | 'getDocument'>
+
+export interface TenantAuthInput {
+  readonly headers: Headers
+  readonly project: ProjectContext
+  readonly documents: TenantAuthDocuments
+}
 
 /** Tenant-bound authentication; called only after the tenant database is acquired. */
 export interface TenantAuthResolver {
-  resolve(headers: Headers, documents: TenantAuthDocuments): Promise<ProjectAuthContext>
+  resolve(input: TenantAuthInput): Promise<ProjectAuthContext>
 }
 
 export interface ProjectRequestContext {

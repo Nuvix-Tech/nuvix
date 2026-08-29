@@ -66,9 +66,6 @@ export const config = {
   /** Redis connection string (queues/cache). */
   redisUrl: required('NUVIX_REDIS_URL'),
 
-  /** Secret used to sign JWTs / tokens. */
-  jwtSecret: required('NUVIX_JWT_SECRET'),
-
   storage: {
     uploadsDir: Bun.env.NUVIX_STORAGE_UPLOADS ?? './storage/uploads',
   },
