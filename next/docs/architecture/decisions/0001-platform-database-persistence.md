@@ -1,205 +1,142 @@
-# ADR 0001: Platform Database Persistence
+# ADR 0001: Adapter-Neutral Platform Persistence
 
-> Status: Decided
+> Status: Decided (amended 2026-08-29)
 > Date: 2026-08-28
 > Owner: Platform
 
 ## Context
 
-Nuvix assigns one PostgreSQL database to each project. The server must resolve a
-project to its tenant database without hardcoding connection values or exposing
-platform infrastructure to requests.
+Nuvix must support both a full PostgreSQL deployment and a minimal SQLite
+deployment. Most platform and tenant behavior is portable, while a small set of
+features depends on capabilities that not every database adapter provides.
 
-Connection URIs are high-impact secrets. Platform persistence therefore needs
-an independently protected storage boundary, rotation support, least-privilege
-database access, and predictable schema changes. This phase needs those controls
-without introducing a key-management service or a provisioning product.
+An earlier implementation introduced raw Bun SQL repositories, a PostgreSQL-only
+platform schema, bespoke SQL migrations, and a one-to-one connection table. A
+later correction required the exact legacy `projects`, `memberships`, `keys`,
+and `projects.database` layout. Both approaches are too restrictive: the first
+bypasses `@nuvix/db`, and the second prevents the v2 platform from evolving its
+collection model.
+
+Subtask 16 remains completed history, but its requirement to reuse the exact
+legacy collection structure is superseded by this amendment.
 
 ## Decision
 
-The PostgreSQL 18 platform database configured by
-`NUVIX_INTERNAL_DATABASE_URL` stores project records and their tenant connection
-metadata.
+Every platform and tenant persistence path uses the public `@nuvix/db` APIs,
+including `Adapter` or `SQLiteAdapter`, `Database`, `Session`, `Doc`, and
+`Query`. Application repositories never receive a Bun SQL client, author SQL,
+or branch into a direct database-driver path.
 
-Each project has at most one connection-metadata row in a separate privileged
-table:
+The process owner selects and configures an adapter from validated deployment
+configuration:
 
-```text
-project (id) 1 ─── 0..1 project_connection
-                       ├─ project_id (unique foreign key)
-                       ├─ key_version
-                       ├─ nonce
-                       └─ ciphertext (encrypted PostgreSQL URI + GCM tag)
+```ts
+const adapter =
+  config.driver === "sqlite"
+    ? new SQLiteAdapter(config.filename)
+    : new Adapter(config.connection);
+
+const database = new Database(adapter.setMeta(metadata), cache, { filters });
 ```
 
-The persistence boundary must:
+The concrete constructor remains inside composition. Platform repository
+capabilities receive a narrow privileged `Session` created by
+`database.system()` and use document operations with `Query` to resolve only
+safe project state and owner-only tenant targets. Authentication records do not
+exist in platform persistence: users, sessions, JWT trust material, memberships,
+scopes, and secret API keys are tenant-owned and are read only after tenant
+selection. Request code receives only safe project identity, normalized auth,
+and role-scoped tenant operations.
 
-1. Encrypt each normalized PostgreSQL URI with AES-256-GCM.
-2. Generate a fresh, cryptographically random 12-byte nonce for every
-   encryption. Nonces are stored with ciphertext and never reused with a key.
-3. Bind ciphertext to the stable project identity as additional authenticated
-   data (AAD). Moving a row to another project must make decryption fail.
-4. Select keys through the [authoritative environment contract](../../ENV.md):
-   `NUVIX_PLATFORM_ENCRYPTION_PRIMARY_KEY_ID` names the active write key, and
-   `NUVIX_PLATFORM_ENCRYPTION_KEYS` is a JSON object mapping key IDs to
-   base64-encoded, exactly 32-byte AES keys. JSON member order has no meaning.
-   Reads select the row's stored `key_version`; they never try every key.
-5. Treat an unknown key version or authentication/tag failure as unavailable
-   metadata. It must fail closed without plaintext fallback or trying unrelated
-   keys.
-6. Return only a normalized connection value to process-owned tenant
-   composition. Requests never receive the row, URI, cipher fields, keyring, SQL
-   client, or resolver controls.
+The v2 platform may define an adapter-neutral collection structure suited to
+its contracts. The legacy `projects`, `memberships`, `keys`, and filtered
+`projects.database` definitions are compatibility inputs and implementation
+examples, not mandatory architecture. A migration or compatibility layer may
+map legacy documents into the new contracts through `@nuvix/db` APIs.
 
-Platform schema changes use versioned, forward-only SQL migrations run only by
-an explicit Bun CLI. API startup never applies migrations. Migration credentials
-may mutate schema; normal API runtime credentials must not require schema
-mutation privileges.
+Collection creation and evolution use public `@nuvix/db` schema operations.
+The adapters may generate dialect-specific SQL internally; Nuvix application
+packages do not own raw SQL repositories, dialect-specific platform tables, or
+bespoke SQL migration runners.
 
-### Keyring validation and rotation
+### Portable feature contract
 
-Both keyring variables are required in every environment that uses platform
-connection metadata. Before accepting traffic, startup must fail if:
+The portable application baseline must run against PostgreSQL `Adapter` and
+`SQLiteAdapter`. Optional behavior is enabled from common adapter capability
+and limit fields, such as `$supportForFulltextIndex`, `$supportForUpdateLock`,
+`$supportForIndexArray`, `$supportForJSONOverlaps`, `$supportForTimeouts`,
+`$supportForBatchOperations`, and `$limitFor*` values.
 
-- either variable is missing or empty;
-- `NUVIX_PLATFORM_ENCRYPTION_KEYS` is not a JSON object with at least one
-  entry, contains a duplicate or empty key ID, or contains a non-string value;
-- any value is not valid base64 that decodes to exactly 32 bytes; or
-- the primary key ID does not exactly match an entry in the keyring.
+Feature policy checks capabilities, not concrete adapter identity. Code must
+not use `instanceof SQLiteAdapter`, adapter names, URL schemes, or equivalent
+dialect checks to decide whether an application feature is available.
 
-There is no default key, implicit first key, plaintext fallback, or attempt to
-continue with a partially valid keyring. A configuration error may name the
-variable and violated rule, but must not include either variable's value, a key,
-decoded bytes, or derived secret material.
-
-Rotation is additive before it is subtractive:
-
-1. Add the new key under a new ID while retaining every referenced old key.
-2. Set `NUVIX_PLATFORM_ENCRYPTION_PRIMARY_KEY_ID` to the new ID and deploy.
-   New writes use it; old rows remain decryptable by their stored key version.
-3. Re-encrypt old rows through a controlled operation.
-4. Remove an old key only after no persisted row references its ID.
-
-Removing a referenced key makes those rows unavailable and is an operator
-error; decryption must fail closed rather than trying another key.
-
-## Why this is best now
-
-- **Limits exposure:** separating the privileged one-to-one row keeps routine
-  project reads and future serialization paths away from connection secrets.
-- **Detects substitution and tampering:** AES-GCM authenticates the value, while
-  project AAD prevents valid ciphertext from being reassigned across projects.
-- **Supports rotation without a new service:** key versions permit staged
-  re-encryption using deployment-managed environment secrets.
-- **Makes write selection deterministic:** a separate primary key ID is
-  explicit across JSON parsers and deployment tools; object order never decides
-  which key encrypts new data.
-- **Rejects unsafe partial configuration:** validating the complete keyring
-  before readiness prevents latent failures and accidental use of malformed or
-  short AES keys.
-- **Keeps startup deterministic:** explicit migrations separate deploy-time
-  schema authority from serving traffic and allow least-privileged runtime
-  credentials.
-- **Fits the current boundary:** the existing resolver-to-registry flow can
-  consume one connection value without gaining provisioning or key-management
-  responsibilities.
-
-## Rejected alternatives
-
-| Alternative                                      | Benefit                                   | Why rejected now                                                                                                                                                            |
-| ------------------------------------------------ | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Store plaintext URIs                             | Simplest reads and debugging              | A platform database read or backup would immediately disclose tenant credentials.                                                                                           |
-| Store connection fields on the project row       | Fewer joins                               | Broadens secret access to ordinary project queries and increases accidental serialization risk.                                                                             |
-| Use an external KMS                              | Central key policy and audit capabilities | Adds an operational dependency, availability path, and integration scope before current deployment needs justify it. The versioned envelope leaves room to adopt one later. |
-| Run migrations during API startup                | Convenient local boot                     | Gives runtime credentials DDL authority, couples availability to migration success, and risks concurrent startup races.                                                     |
-| Use reversible encryption without authentication | Smaller envelope                          | Cannot reliably detect ciphertext modification or project substitution.                                                                                                     |
+When a required capability is absent, optional routes or controls are disabled
+or return a stable unsupported-feature result. They must not silently weaken
+authorization, isolation, durability, or validation. Ordinary document CRUD,
+project resolution, tenant-target resolution, tenant-local authentication, and
+request-scoped sessions remain available on the portable baseline.
 
 ## Security invariants
 
-- Plaintext URIs and encryption keys exist only inside the privileged persistence
-  and process-composition path; they are never returned by an API or request
-  capability.
-- Logs, metrics, and public errors never include plaintext URIs, ciphertext,
-  nonces, either keyring environment value, keys, decoded or derived key
-  material, key versions tied to a record, or resolver/decryption causes.
-- Encryption keys are 256-bit secrets supplied through environment
-  configuration; they are never stored in the platform database or source.
-- Every encryption uses a new random 12-byte nonce and the stable project
-  identity as AAD.
-- Missing keys, malformed envelopes, and failed GCM authentication fail closed.
-  They do not fall back to plaintext, another project, or an arbitrary key.
-- Database access follows least privilege: request code has no platform SQL
-  capability, API runtime credentials have only required data privileges, and
-  schema mutation is reserved for the migration CLI.
-- Deleting or disabling a project must not make its connection metadata
-  available through another project; lifecycle and final deletion behavior is a
-  future provisioning decision.
+- Request code never receives the platform `Database`, system `Session`,
+  adapter, connection or target metadata, filters, or resolver controls.
+- Tenant target secrets are decoded only inside process-owned composition and
+  only for the lifetime required to construct the tenant resource.
+- Logs and public errors never include target metadata, credentials, internal
+  sequences, concrete driver causes, or repository/filter causes.
+- Unknown, disabled, malformed, unsupported, or inaccessible data fails closed.
+- Capability gating never bypasses a security check; required security features
+  must be portable or the affected operation must be unavailable.
+- Schema and document operations go through `@nuvix/db`; application code does
+  not issue raw SQL or maintain a parallel persistence path.
+
+## Rationale
+
+- `@nuvix/db` provides one document and schema contract over PostgreSQL and
+  SQLite while keeping dialect details in adapters.
+- A minimal installation can avoid a PostgreSQL service without losing the
+  portable Nuvix core.
+- Capability-based policy describes what an adapter can do and continues to
+  work when more adapters are added.
+- A v2-specific collection model can evolve without coupling persistence to one
+  dialect or freezing the legacy model indefinitely.
+- Narrow sessions retain authorization, query validation, caching, casting,
+  filters, and least-privilege boundaries.
+
+## Rejected and superseded alternatives
+
+| Alternative                                           | Why not used                                                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Raw Bun SQL repositories                              | Bypass `@nuvix/db` and couple application persistence to a driver and dialect.                                    |
+| PostgreSQL-only platform schema and migrations        | Prevent a minimal SQLite installation and create a parallel persistence plane.                                    |
+| Mandate the exact legacy collection layout            | Prevents v2 model evolution; legacy structures are compatibility inputs instead.                                  |
+| Gate features by adapter class or driver name         | Couples policy to known implementations rather than actual capabilities.                                          |
+| Emulate every unsupported feature in application code | Increases correctness risk; optional features should be predictably unavailable when safe parity is not possible. |
+| Expose `Database.system()` to requests                | Allows authorization bypass and cross-project platform access.                                                    |
 
 ## Consequences
 
-### Positive
+Platform contracts, collection definitions, indexes, and required queries must
+fit the portable capability baseline. Cross-adapter tests run the same contract
+against real PostgreSQL and SQLite fixtures. Tests also verify stable disabled
+or unsupported behavior for optional features.
 
-- Database-level tenant isolation remains compatible with safe, lazy connection
-  resolution.
-- Backups do not contain plaintext tenant URIs.
-- Key rotation can preserve reads while records are deliberately re-encrypted.
-- Failed tamper checks stop connection attempts before tenant resources are
-  created.
-
-### Negative
-
-- Reads require a privileged lookup and authenticated decryption.
-- Operators must retain every key version still referenced by stored rows.
-- Losing a referenced key makes its connection metadata unrecoverable.
-- Forward-only migrations require explicit deployment ordering and operational
-  discipline.
-
-### Risks and controls
-
-| Risk                                   | Control                                                                          |
-| -------------------------------------- | -------------------------------------------------------------------------------- |
-| Nonce reuse                            | Generate a fresh random 12-byte nonce for every write.                           |
-| Partial key rotation                   | Store `key_version`; keep old keys until no rows reference them.                 |
-| Ambiguous active key                   | Select it only by `NUVIX_PLATFORM_ENCRYPTION_PRIMARY_KEY_ID`; ignore JSON order. |
-| Invalid keyring configuration          | Validate the full contract and fail before accepting traffic.                    |
-| Ciphertext or row substitution         | Authenticate with AES-GCM and project identity as AAD.                           |
-| Secret leakage during failure handling | Redact values and underlying resolver/decryption causes.                         |
-| Schema drift                           | Run the explicit migration CLI before deploying code that requires a new schema. |
+Deployment configuration selects the platform adapter and may select a
+different adapter per tenant. Resource ownership and request capability shape
+do not change with the selected adapter. Legacy data import and PostgreSQL-only
+enhancements remain explicit compatibility or optional-feature work.
 
 ## Scope and non-goals
 
-This decision covers platform persistence for project-to-database connection
-metadata, encryption, key-version selection, and migration ownership. It does
-not add:
-
-- hostname or custom-domain project routing;
-- an external KMS;
-- startup migrations;
-- a project provisioning API or UI;
-- tenant creation or database lifecycle automation;
-- database CRUD or other feature routes;
-- billing, quotas, or region placement; or
-- a final project-deletion and secret-destruction workflow.
-
-## Revisit triggers
-
-Reconsider this decision when:
-
-- compliance or deployment policy requires centralized KMS/HSM custody,
-  per-key audit logs, or automatic key revocation;
-- environment key distribution becomes unsafe or operationally unmanageable;
-- connection metadata needs multiple active credentials, regions, replicas, or
-  providers per project, invalidating the one-to-one model;
-- rotation volume requires an automated re-encryption service;
-- provisioning and deletion workflows define stronger lifecycle guarantees; or
-- migration frequency or fleet size requires a dedicated migration coordinator.
-
-Any replacement must preserve authenticated encryption, project binding,
-request capability isolation, redacted failures, and least-privileged runtime
-credentials.
+This decision does not require feature parity for capabilities an adapter does
+not provide, add hostname routing, project provisioning, tenant creation,
+database CRUD routes, or a new application-owned SQL migration system. Health
+and OpenAPI routes remain unscoped.
 
 ## Related
 
-- [`../integrations.md`](../integrations.md) — request and tenant composition boundaries
-- [`../../ENV.md`](../../ENV.md) — platform database environment contract
-- [`../../../MIGRATION.md`](../../../MIGRATION.md) — rewrite and multi-tenancy decisions
+- [`0002-project-resolution-contract.md`](0002-project-resolution-contract.md)
+- [`0003-process-resource-lifecycle.md`](0003-process-resource-lifecycle.md)
+- [`../integrations.md`](../integrations.md)
+- [`../../../MIGRATION.md`](../../../MIGRATION.md)

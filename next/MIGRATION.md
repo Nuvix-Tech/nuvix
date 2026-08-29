@@ -88,7 +88,7 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D17 | **Tests**                      | `bun test`                                                                                                                                                                                                                                                                              | Zero-dep, native                                                                                              |
 | D18 | **Workspace names**            | Simple internal names (`@nuvix/next-core`, `@nuvix/next-utils`, …)                                                                                                                                                                                                                      | Rename-friendly during rewrite                                                                                |
 | D19 | **Web standards**              | RFC 9457 Problem Details (`application/problem+json`) for ALL errors; standard HTTP semantics, caching, status codes throughout                                                                                                                                                         | Elysia 2 has native `problem()` support — use it, don't invent an envelope                                    |
-| D20 | **Multi-tenancy**              | First-class: **each tenant (project) gets its own database**; platform provisions project creation & DB lifecycle                                                                                                                                                                       | Old code was partially multi-tenant; v2 makes it structural. See §6b                                          |
+| D20 | **Multi-tenancy**              | First-class: **each tenant (project) gets its own database**; a public publishable key selects the project before tenant-local authentication                                                                                                                                           | Locator is not authorization; see §6b                                                                         |
 | D21 | **Images**                     | `Bun.Image` replaces `sharp`                                                                                                                                                                                                                                                            | Native, faster, zero deps. Linux serves JPEG/PNG/WebP/GIF/BMP. SVG→PNG still needs `@resvg/resvg-js` (open Q) |
 | D22 | **Scheduling**                 | `Bun.cron` replaces `@nestjs/schedule` / cron loops                                                                                                                                                                                                                                     | OS-level scheduled jobs, built-in                                                                             |
 | D23 | **Auth model**                 | Design auth module **token-ready**: short-lived access tokens (~1 min) + refresh tokens (Clerk-style) as target state; DB sessions may ship first but must not be baked into architecture                                                                                               | See Open Questions #5                                                                                         |
@@ -106,6 +106,7 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D35 | **GeoIP graceful degradation** | Bundled dbip `.mmdb`; missing asset → no-op provider (lookups `null`), `/v2/locale` serves unknown-IP shape, warn once at boot — never fails startup                                                                                                                                    | Full DNS-pinned SSRF guards + Redis-cached lookups deferred to hardening pass                                 |
 | D36 | **Avatar caching**             | Static avatars/QR: `Cache-Control: public, max-age=86400, immutable`; favicon proxy: `max-age=3600` NOT immutable (remote content changes); favicon gets SSRF guard (http(s) only, private-host literals rejected, image/* content-type required) — v1 had no cache header and no guard | QR `Content-Disposition: inline` by default, `attachment` with `download=true`                                |
 | D37 | **Package integration**        | One composition root; explicit DI through narrow interfaces; caller-scoped DB sessions; explicit system sessions; shared error translator, messaging gateway, and storage/cache factories                                                                                               | See `docs/architecture/integrations.md`; routes never construct or coordinate infrastructure                  |
+| D38 | **Project locator**            | `x-nuvix-publishable-key`: `pk_test_` / `pk_live_` + canonical base64url(`v1:<projectId>`). Public and reversible, never authorization. Resolve project → tenant DB → tenant-local auth                                                                                                 | `x-nuvix-key` remains the distinct secret API-key header                                                      |
 
 ### Elysia 2 API notes (code against THESE from day one)
 
@@ -279,10 +280,9 @@ next/
 - [x] Typed error classes + problem+json envelope (done early in Phase 0 — `apps/server/src/shared/errors.ts` + `plugins/errors.ts`)
 - [x] Auth resolution primitives: JWT util (`utils/jwt.ts`, zero-dep HS256 on `crypto.subtle`), auth context (`context/auth.ts`: guest/session/jwt/apiKey union, pluggable DB-backed verifiers for later phases; precedence session > jwt > key > guest)
 - [x] CORS (`plugins/cors.ts`, hand-rolled), security headers (`plugins/security.ts`), rate limiting (`plugins/rate-limit.ts`, pluggable `Store`; memory impl now, Redis drops in later) — all tested
-- [ ] Context chain: the injected metadata-resolver/tenant-registry composition
-      boundary is implemented; concrete platform persistence/query, HTTP project
-      locator semantics, console/admin modes, and live-service startup wiring remain
-      deferred
+- [ ] Context chain: platform/tenant ownership foundations are implemented;
+      publishable-key project lookup → tenant acquisition → tenant-local auth and
+      live-service startup wiring remain
 - [x] OpenAPI docs via `@elysia/openapi@2.0.0-beta.1` (D10) — spec at `/v2/openapi/json` (typed from `t` schemas), Scalar UI at `/v2/openapi`. **Requires a Bun patch** (`patches/@elysia+openapi@2.0.0-beta.1.patch`): the published bundle has broken relative `../node_modules/typebox` imports in its `gen` submodule; the patch stubs `Script` (only used by `fromTypes()`, which we don't use). Root `package.json` also carries `elysia` so the patched copy resolves it under Bun's isolated linker. Defaults differ from v1 plugin: spec path is `/openapi/json` (not `/openapi.json`), UI is Scalar (not Swagger).
 
 **Phase 1 notes (verified against elysia 2.0.0-beta.6 source):**
@@ -320,8 +320,12 @@ next/
 - [x] Compose an injected platform connection-metadata resolver with the tenant
       registry and expose only safe project/session capabilities to requests plus
       owner-only shutdown
-- [ ] Implement concrete platform connection-metadata persistence/query and HTTP
-      project locator semantics
+- [x] Define adapter-neutral platform project/target collections and compose the
+      PostgreSQL/SQLite platform owner; platform credential bindings were removed
+      because authentication is tenant-local
+- [ ] Finish publishable-key project lookup and adapter-neutral tenant-target
+      resolution
+- [ ] Reorder request composition: project → tenant → auth → caller session
 - [ ] Wire the composition owner into live-service startup and shutdown
 - [ ] Implement database services and reviewed routes on the foundation
 - [ ] Teams, Users slices
@@ -406,12 +410,12 @@ v2 makes tenancy **structural**:
                                                      nuvix-dev/postgres
         ▲          ▲           ▲
         └──────────┴───────────┘
-                   │ injected metadata resolver
-            ┌──────┴──────────────────┐
+                    │ publishable project locator
+             ┌──────┴──────────────────┐
             │ server process owner    │
             └──────────┬──────────────┘
                        │ resolved connection → tenant registry → tenant resource
-                       └ safe project + bound auth → request `Session` lease
+                       └ tenant-local auth → request `Session` lease
 ```
 
 **Rules:**
@@ -421,9 +425,9 @@ v2 makes tenancy **structural**:
    creating its database (via the pg-18 image's auto-schema bootstrap),
    tracking connection metadata in the internal/platform DB.
 3. The **server app never hardcodes tenants or derives connection metadata**.
-   The process-owned composition boundary injects project and platform metadata
-   resolvers. The resource factory receives only an already-resolved, normalized
-   PostgreSQL connection value.
+   A public `x-nuvix-publishable-key` decodes to the public project ID and is
+   only a locator. The process-owned boundary resolves the enabled project and
+   owner-only PostgreSQL/SQLite target before acquiring the tenant resource.
 4. The tenant registry owns one raw database resource per project, deduplicates
    concurrent creation, and supports role-scoped request sessions. Requests see
    only project resolution plus session acquisition; metadata, raw resources,
@@ -440,10 +444,12 @@ v2 makes tenancy **structural**:
    implemented and fake-tested. Request leases release idempotently in `finally`;
    owner shutdown rejects later acquisition, drains active leases, exposes close
    failures, and owns retries.
-8. Concrete platform persistence/query, HTTP project locator semantics, feature
-   routes, and live-service startup wiring remain deferred. Do not invent routes,
-   a schema registry, hardcoded tenant URLs, or new environment contracts to fill
-   those gaps. Live PostgreSQL/platform integration coverage is not yet claimed.
+8. Authentication happens only after tenant acquisition. Users, sessions, JWT
+   trust material, memberships, scopes, and secret API keys are tenant-owned;
+   platform persistence has no credential-binding collection.
+9. HTTP project-scope composition, feature routes, and live-service startup
+   wiring remain. Do not invent hardcoded tenant URLs or treat the publishable
+   key as authorization. Live cross-adapter integration coverage is not yet claimed.
 
 ---
 
@@ -459,12 +465,12 @@ Tracked here so nothing gets decided silently:
 4. ✅ **Legacy compat** → dropped entirely: no legacy data migration, no MD5/legacy password algos, no session survival across cutover (D29)
 5. ✅ **SVG avatars** → keep `@resvg/resvg-js` for now; revisit a zero-dep custom SVG rasterizer later
 6. ✅ **Auth at launch** → token-ready design (D23); final call on shipping tokens vs sessions at Phase 4 gate
+7. ✅ **Project locator / auth headers** → `x-nuvix-publishable-key` selects a tenant; `x-nuvix-session`, `x-nuvix-jwt`, and secret `x-nuvix-key` authenticate inside it (D38)
 
 **Still open:**
 
-7. **TOTP** — hand-rolled RFC-6238 on `crypto.subtle` vs keep otplib. _(Phase 4)_
-8. **Realtime/WebSocket** — Elysia 2's generator-based `.ws()`; in v2 core scope or post-v2? _(after Phase 3)_
-9. **Auth header names** — keep `x-nuvix-session`/`x-nuvix-key` or rename in v2. _(Phase 1, contract design)_
+8. **TOTP** — hand-rolled RFC-6238 on `crypto.subtle` vs keep otplib. _(Phase 4)_
+9. **Realtime/WebSocket** — Elysia 2's generator-based `.ws()`; in v2 core scope or post-v2? _(after Phase 3)_
 
 ---
 

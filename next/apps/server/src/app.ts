@@ -53,6 +53,7 @@ export const app = new Elysia({ prefix: '/v2' })
       allowedHeaders: [
         'content-type',
         'authorization',
+        'x-nuvix-publishable-key',
         'x-nuvix-session',
         'x-nuvix-jwt',
         'x-nuvix-key',

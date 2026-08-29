@@ -12,8 +12,8 @@ request scope; services receive only the operations their use case needs.
 ```text
 server process (composition owner)
   ├─ config → cache/storage/messaging factories
-  ├─ injected metadata resolver → tenant registry → tenant resource
-  ├─ project + auth role mapper → caller-scoped Session lease per request
+  ├─ publishable key → project lookup → tenant target → tenant resource
+  ├─ tenant-local auth → role mapper → caller-scoped Session lease
   └─ package error translator → AppError → problem+json
              │
              ▼
@@ -32,12 +32,10 @@ Rules:
 
 ## Project database ownership
 
-The platform owns one PostgreSQL database and its connection metadata per
-project. `createDatabaseComposition` is the process-owned database composition
-boundary. It injects a `PlatformConnectionMetadataResolver` into the tenant
-registry's resource factory; the factory resolves and validates one normalized
-PostgreSQL connection value before `createTenantDatabaseResource` constructs
-the adapter, cache driver, and `Database`.
+The platform registry stores safe project state and one owner-only PostgreSQL or
+SQLite target per project. The process-owned composition decodes the public
+publishable key, resolves an enabled project, resolves its target, and lets the
+tenant registry construct/cache the adapter, cache driver, and `Database`.
 
 The interface and composition flow are implemented. Concrete platform
 persistence/query logic, HTTP project locator semantics, feature routes, and
@@ -45,16 +43,18 @@ live-service startup wiring remain deferred. This boundary does not define a
 platform storage schema, hardcoded tenant URLs, or new environment contracts.
 
 ```text
-injected ProjectResolver ──────────────────────→ safe project + bound auth
-                                                    │
-injected PlatformConnectionMetadataResolver        │ project ID
-              │                                     ▼
-              └→ resolved connection → tenant registry → tenant resource
-                                                        │
-                                      rolesFor(auth, project)
-                                                        ▼
-                                            request Session lease
+x-nuvix-publishable-key
+  → decode public project ID
+  → platform project lookup (enabled state only)
+  → owner-only tenant target lookup
+  → tenant registry / tenant Database
+  → tenant-local session | JWT | secret API-key verification
+  → rolesFor(auth)
+  → caller-scoped Session lease
 ```
+
+The publishable key is a locator only. Platform persistence contains no users,
+sessions, memberships, auth scopes, secret API keys, or credential bindings.
 
 ## Lifetimes and ownership
 
@@ -76,7 +76,7 @@ owning tenant resource's adapter and cache.
 
 | Consumer              | Capability                                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------------------ |
-| Request pipeline      | `projects.resolve` and `databaseSessions.acquire`                                                      |
+| Request pipeline      | One ordered `withProjectRequest` operation scope                                                       |
 | Request lease         | role-scoped `session` and idempotent `release`                                                         |
 | Process owner         | `close()`                                                                                              |
 | Composition internals | metadata resolver, registry controls, connection value, raw `Database`, adapter, cache, and `system()` |
@@ -98,9 +98,11 @@ must release in `finally`; repeated release calls return the same promise and
 preserve the same cleanup failure.
 
 ```ts
-const lease = await databaseSessions.acquire(project, auth);
+const lease = await tenantDatabases.acquire(project.id);
 try {
-  return await service(lease.session);
+  const auth = await tenantAuth.resolve(lease.database, headers);
+  const session = lease.database.for(...rolesFor(auth));
+  return await service(session);
 } finally {
   await lease.release();
 }
@@ -151,17 +153,10 @@ interface StorageDevices {
 immutable `Session` from `db.for(...roles)`.
 
 ```ts
-type RoleMapper = (
-  auth: AuthContext,
-  project: ProjectContext,
-) => readonly string[];
+type RoleMapper = (auth: AuthContext) => readonly string[];
 
-function requestSession(
-  db: Database,
-  auth: AuthContext,
-  project: ProjectContext,
-) {
-  return db.for(...rolesFor(auth, project));
+function requestSession(db: Database, auth: AuthContext) {
+  return db.for(...rolesFor(auth));
 }
 
 type TeamDocuments = Pick<
@@ -181,7 +176,9 @@ membership-role, and label roles. One confirmed team membership may contribute
 multiple roles; duplicate claims are deduplicated and output is deterministic.
 Every untrusted user ID, team ID, membership role, and label must be non-empty,
 NFC-normalized, and limited to letters, marks, numbers, `.`, `_`, or `-` before
-serialization. Invalid or cross-project claims fail closed as forbidden.
+serialization. Invalid claims fail closed as forbidden. Cross-project
+credentials never reach role mapping because verification occurs only inside
+the already-selected tenant.
 Routes and services must not assemble role strings or call `db.for` themselves.
 Generated collection typing is activated once through the generated `Entities`
 module augmentation, not re-declared per service.

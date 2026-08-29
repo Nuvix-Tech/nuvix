@@ -39,6 +39,7 @@ describe('cors', () => {
     )
     expect(res.status).toBe(204)
     expect(res.headers.get('access-control-allow-methods')).toContain('POST')
+    expect(res.headers.get('access-control-allow-headers')).toContain('x-nuvix-publishable-key')
   })
 })
 

@@ -1,75 +1,73 @@
 # ADR 0002: Project Resolution Contract
 
 **Date**: 2026-08-28
-**Status**: Decided
+**Status**: Decided (project-first amendment 2026-08-29)
 **Owner**: Nuvix Platform
 
 ## Context
 
-Project-scoped `/v2` requests need an explicit tenant locator without trusting
-client input as authorization. Public failures must help legitimate clients fix
-requests while avoiding project-state disclosure.
+Project-scoped `/v2` requests need a browser-safe tenant locator. Authentication
+cannot run before the tenant is known because users, sessions, JWT trust
+material, memberships, scopes, and API keys belong to the tenant database.
+The locator therefore must select a project without acting as authorization.
 
 ## Decision
 
-### Resolution contract
+### Publishable-key contract
 
-- Every project-scoped `/v2` request requires the `x-nuvix-project` header.
-- The header contains the public project identifier. It is an untrusted locator,
-  not proof of access.
-- The server resolves the project from the platform registry. When an
-  authenticated credential is present, it independently verifies that the
-  credential is bound to that project.
-- Upstream authentication establishes that a session, JWT subject, or API key
-  is authentic. It does not establish project access. The platform registry
-  separately records current bindings in the least-privilege
-  `project_credential_bindings` relation and matches the authenticated identity
-  to the requested project's internal key without exposing that key.
-- The session boundary is exactly
-  `verifySession(rawSessionToken) -> { sessionId, userId } | null`:
-  `rawSessionToken` is secret verifier input only, `sessionId` is the stable,
-  non-secret canonical session-record ID, and `userId` is the authenticated
-  user ID. Only the two returned identities may enter `AuthContext` or a
-  project-binding lookup. The raw header token must never be persisted in
-  `project_credential_bindings`, retained in request context, included in SQL
-  text, or sent as a project repository query parameter.
-- A binding is valid only while both the project and binding are enabled, the
-  binding has not been revoked, and its optional expiry is still in the future.
-  Session bindings additionally match their authenticated user subject; API-key
-  bindings additionally match their authenticated mode. JWT binding uses the
-  verified user subject and does not trust an optional session claim as project
-  authority.
-- A guest with a valid locator may resolve safe metadata for an enabled project.
-  For authenticated callers, resolution additionally requires a valid
-  credential-to-project binding.
-- Resolution selects project context; it does not authorize the route. Downstream
-  route policy and canonical database roles, including guest roles, determine
-  what the caller may access.
-- Health and OpenAPI routes are not project-scoped and do not require the header.
+- Every project-scoped `/v2` request requires
+  `x-nuvix-publishable-key`.
+- Format: `pk_test_<payload>` or `pk_live_<payload>`. The payload is canonical,
+  unpadded base64url of the ASCII string `v1:<public-project-id>`.
+- `test` keys are accepted in development/test deployments; `live` keys are
+  accepted in production. A mismatch is malformed input.
+- The key is public, reversible, unsigned, and intentionally safe to ship in a
+  browser. It contains no secret, role, scope, user identity, or authority.
+- `x-nuvix-key` remains the distinct **secret API-key authentication** header.
+- The decoded project ID—not the complete key—is used for platform lookup and
+  tenant-registry identity. Raw publishable keys are not persisted.
+
+### Resolution order
+
+1. Strictly parse the publishable key and decode its public project ID.
+2. Resolve an enabled project through the platform registry.
+3. Resolve its owner-only tenant target and acquire the tenant database.
+4. Verify session/JWT/secret API-key credentials **inside that tenant**.
+5. Derive tenant-local claims and canonical database roles.
+6. Run the handler with safe project/auth context and a caller-scoped session.
+
+There is no platform credential-binding collection. A credential issued by
+project B presented with project A's publishable key is looked up only in A and
+fails authentication there; it cannot redirect selection to B. A publishable
+key without another credential produces guest context and grants only what the
+selected tenant's guest roles and route policy permit.
+
+All platform and tenant persistence uses public `@nuvix/db` APIs. If the
+portable security-critical lookup cannot run, the request fails closed; no
+adapter-specific SQL fallback is allowed. Health and OpenAPI routes remain
+unscoped and require no publishable key.
 
 ```http
 GET /v2/database/schemas HTTP/1.1
 Host: api.example.test
-x-nuvix-project: project_demo
+x-nuvix-publishable-key: pk_test_djE6cHJvamVjdF9kZW1v
 ```
 
-This guest request may resolve `project_demo`, but the database schemas route
-then rejects it under its admin-only authorization policy. Guest-accessible
-routes instead proceed with canonical guest database roles. For authenticated
-requests, the resolver must check the credential binding separately; matching
-client-supplied values cannot substitute for that verification.
+This key decodes to `project_demo`. The request may resolve that tenant as a
+guest, but the database schemas route then rejects it under its admin-only
+policy. Guest-accessible routes instead proceed with canonical guest roles.
 
 ### Public errors
 
 Responses follow the API's RFC 9457 `application/problem+json` convention.
 Clients branch on `code`, not `detail`.
 
-| Condition                                         | Status | Code                |
-| ------------------------------------------------- | -----: | ------------------- |
-| Header missing                                    |    400 | `project_required`  |
-| Header malformed                                  |    400 | `project_invalid`   |
-| Project unknown or disabled                       |    404 | `project_not_found` |
-| Authenticated credential bound to another project |    403 | `project_forbidden` |
+| Condition                                    | Status | Code                       |
+| -------------------------------------------- | -----: | -------------------------- |
+| Publishable-key header missing               |    400 | `publishable_key_required` |
+| Prefix, environment, encoding, or ID invalid |    400 | `publishable_key_invalid`  |
+| Decoded project unknown or disabled          |    404 | `project_not_found`        |
+| Tenant target unavailable/corrupt            |    503 | `project_unavailable`      |
 
 ```json
 {
@@ -82,38 +80,35 @@ Clients branch on `code`, not `detail`.
 ```
 
 Unknown and disabled projects intentionally produce the same public response.
-`project_forbidden` is limited to an authenticated credential-to-project
-mismatch; guest denial by a protected route uses that route's authorization
-error instead.
-Public details and logs must not expose resolver causes, registry state, or
-credential-binding data.
+Invalid tenant-local credentials follow the auth contract and do not become a
+project-resolution error. Public details and logs must not expose registry
+state, tenant targets, raw keys, or credential lookup causes.
 
 ### Request capability boundary
 
 Resolved request context may expose only the minimum safe public project data
 and verified authorization claims needed by handlers. It must not expose:
 
-- internal UUIDs;
+- raw publishable keys or internal UUIDs;
 - platform, connection, or encryption metadata;
-- SQL clients or `Database.system()`;
+- raw database clients or `Database.system()`;
 - infrastructure adapters or registry controls;
 - privileged database sessions.
 
 ### Phase exclusions
 
-- No hostname or custom-domain project routing.
+- No hostname, query-parameter, or custom-domain project routing.
 - No project provisioning API or UI.
 - No tenant creation or database CRUD routes as part of resolution.
 
 ## Why This Was Chosen
 
-An explicit header is predictable across local, self-hosted, proxy, and managed
-deployments. Project selection is separate from authorization because guest
-requests still need tenant context, while each route defines whether guests may
-act. Canonical guest database roles preserve data-layer enforcement after a
-guest resolves an enabled project. For authenticated callers, independent
-binding verification prevents a valid credential from selecting another tenant
-merely by changing the locator.
+An explicit publishable key is predictable across local, self-hosted, proxy, and
+managed deployments and can be safely embedded in frontend applications.
+Project selection is separate from authorization because guest requests still
+need tenant context. Tenant-local credential verification naturally prevents a
+credential from selecting another tenant: selection is already complete before
+authentication begins.
 
 The error policy is balanced/private: clients receive actionable errors for
 missing or malformed input and an explicit forbidden result for an authenticated
@@ -123,15 +118,17 @@ the contract to an unhelpful single error.
 
 ## Alternatives Considered
 
-| Alternative                                          | Benefit                  | Why rejected                                                                                                                                  |
-| ---------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trust the project header                             | Simple routing           | Treats attacker-controlled input as authorization.                                                                                            |
-| Trust a project claim without a separate lookup      | Fewer checks             | Cannot independently confirm current binding or disabled state.                                                                               |
-| Separate binding table per credential type           | Type-specific columns    | Duplicates lifecycle policy and makes repository/schema drift more likely. A constrained common relation keeps one auditable lookup contract. |
-| Return distinct unknown and disabled errors          | Easier diagnosis         | Reveals project existence and operational state.                                                                                              |
-| Return one error for every resolution failure        | Maximum privacy          | Prevents clients from correcting missing or malformed input and obscures authenticated authorization failures.                                |
-| Resolve from hostname or custom domain               | Header-free client calls | Adds DNS, certificate, proxy, and domain-ownership concerns outside this phase.                                                               |
-| Expose registry or database capabilities to handlers | Flexible implementation  | Breaks least privilege and risks metadata or cross-tenant access.                                                                             |
+| Alternative                                          | Benefit                  | Why rejected                                                                                                        |
+| ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Send a bare project ID                               | Simple routing           | Misses an environment/version marker and has a weaker public SDK contract.                                          |
+| Sign the publishable key                             | Detects tampering        | Adds secret rotation and false authority to a value that still must be treated as public input.                     |
+| Infer project from an auth credential                | One header               | Reverses the required order and prevents guest tenant selection.                                                    |
+| Store platform credential bindings                   | Central lookup           | Duplicates tenant auth state and makes authentication precede tenant selection.                                     |
+| Use raw SQL for registry or binding lookups          | Direct control           | Bypasses the adapter-neutral `@nuvix/db` boundary and prevents the same resolution contract from running on SQLite. |
+| Return distinct unknown and disabled errors          | Easier diagnosis         | Reveals project existence and operational state.                                                                    |
+| Return one error for every resolution failure        | Maximum privacy          | Prevents clients from correcting missing or malformed input and obscures authenticated authorization failures.      |
+| Resolve from hostname or custom domain               | Header-free client calls | Adds DNS, certificate, proxy, and domain-ownership concerns outside this phase.                                     |
+| Expose registry or database capabilities to handlers | Flexible implementation  | Breaks least privilege and risks metadata or cross-tenant access.                                                   |
 
 ## Impact
 

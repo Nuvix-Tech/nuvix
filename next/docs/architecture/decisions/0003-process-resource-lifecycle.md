@@ -1,13 +1,14 @@
 # ADR 0003: Process Resource Lifecycle
 
 **Date**: 2026-08-28
-**Status**: Decided
+**Status**: Decided (amended 2026-08-29)
 **Owner**: Nuvix server platform
 
 ## Context
 
-The v2 server needs live platform SQL and per-tenant database resources, while
-tests need an application that opens neither sockets nor databases. Feature code
+The v2 server needs a live internal `@nuvix/db` resource and per-tenant database
+resources backed by PostgreSQL or SQLite, while tests need an application that
+opens neither sockets nor databases. Feature code
 must be able to run an operation with a role-scoped database session without
 placing that session or its lease in global request context.
 
@@ -18,33 +19,42 @@ and may change before a stable 2.x release.
 
 ### Application factory
 
-`createApp` accepts explicit, request-safe auth and project dependencies plus a
-database operation-scope capability. It constructs framework routing only and
-performs no live resource construction at module import.
+`createApp` accepts one project-request scope capability. That capability
+decodes the publishable key, resolves the project, acquires its tenant, performs
+tenant-local authentication, and creates the caller-scoped database session in
+that order. It constructs framework routing only and performs no live resource
+construction at module import.
 
 Project and database context applies only to project-scoped `/v2` route groups.
 `/v2/health`, `/v2/openapi`, and `/v2/openapi/json` remain unscoped and must not
 invoke project or database dependencies.
 
 ```ts
-const app = createApp({ auth, projects, withDatabaseSession });
+const app = createApp({ withProjectRequest });
 ```
 
 ### Process ownership
 
 The process entrypoint is the sole owner of:
 
-- platform SQL;
+- the selected internal platform adapter (`Adapter` or `SQLiteAdapter`),
+  `Database`, cache, capability policy, and system `Session`;
 - tenant database composition;
 - the HTTP server; and
 - `SIGINT` and `SIGTERM` registration.
+
+Adapter selection is validated deployment configuration. Optional feature
+availability is derived from common `$supportFor*` and `$limitFor*` values, not
+from concrete adapter identity. Composition exposes only enabled narrow
+operations; it does not expose the selected driver as request policy.
 
 It composes live resources before calling `Bun.serve`. If HTTP startup fails, it
 closes every resource already constructed without masking the startup failure.
 Construction failure follows the same rule in reverse acquisition order.
 
 The runtime boundary exposes only the app and an idempotent `close()` operation.
-It never imports or invokes the migration runner.
+It never imports or invokes a v2-specific migration runner; internal collection
+setup remains owned by the canonical platform setup flow.
 
 ### Ordered, idempotent shutdown
 
@@ -57,14 +67,14 @@ Shutdown always attempts these stages in order:
 2. Await HTTP server termination and in-flight HTTP work.
 3. Close tenant composition: reject acquisition, drain active request leases,
    then close tenant resources.
-4. Close platform SQL.
+4. Close the selected internal platform adapter and cache resources.
 
 ```ts
 shutdownPromise ??= settleInOrder([
   stopHttpIntake,
   awaitHttpTermination,
   closeTenantComposition,
-  closePlatformSql,
+  closePlatformDatabase,
 ]);
 ```
 
@@ -75,25 +85,32 @@ Any shutdown failure sets a failing process exit status.
 
 ### Awaited database operation scope
 
-Global request context contains safe auth and project values, not a pre-acquired
-`Session`. Feature code uses one shared operation-scope helper. The helper
-acquires a role-scoped lease, runs the supplied operation, and awaits the lease's
-idempotent `release` in `finally` before the response can complete.
+Feature code uses one shared project-request scope. The scope first resolves the
+public project locator, then acquires the tenant lease, verifies credentials
+through a narrow tenant-owned auth capability, derives roles, and creates a
+caller-scoped `Session`. Routes receive only safe project/auth values and the
+scoped operation capability; raw credentials and privileged auth access do not
+escape. The scope awaits idempotent release in `finally` before the response can
+complete.
 
 ```ts
-return withDatabaseSession(project, auth, async (session) => {
-  return service(session);
+return withProjectRequest(headers, async ({ project, auth, session }) => {
+  return service({ project, auth, documents: session });
 });
 ```
 
 The helper owns the complete lifecycle:
 
 ```ts
-const lease = await databaseSessions.acquire(project, auth);
+const locator = parsePublishableKey(headers);
+const project = await projects.resolve(locator.projectId);
+const lease = await tenantDatabases.acquire(project.id);
 let operationError: unknown;
 
 try {
-  return await operation(lease.session);
+  const auth = await tenantAuth.resolve(lease.database, headers);
+  const session = lease.database.for(...rolesFor(auth, project));
+  return await operation({ project, auth, session });
 } catch (error) {
   operationError = error;
   throw error;
@@ -123,46 +140,50 @@ best-effort audit or statistics side effects.
 
 ### Capability confinement
 
-| Boundary               | Exposed capability                                          |
-| ---------------------- | ----------------------------------------------------------- |
-| App factory            | Safe auth/project dependencies and database operation scope |
-| Global request context | Safe project and auth values only                           |
-| Operation callback     | Role-scoped `Session` or narrower `Pick<Session>`           |
-| Runtime owner          | App and idempotent `close()`                                |
-| Process entrypoint     | HTTP server and signal handling                             |
+| Boundary           | Exposed capability                                               |
+| ------------------ | ---------------------------------------------------------------- |
+| App factory        | One project-request scope                                        |
+| Request callback   | Safe project/auth + role-scoped `Session` or narrower capability |
+| Runtime owner      | App and idempotent `close()`                                     |
+| Process entrypoint | HTTP server and signal handling                                  |
 
-Global request context and feature code never receive the lease, its `release`,
-plaintext or encrypted connection metadata, internal UUIDs, SQL clients,
-repositories, keyrings, resolver causes, registry controls, adapters, raw
-`Database`, or `Database.system()`. Keeping these values behind the operation
-scope prevents routes and services from widening authorization, changing
-lifecycle state, retaining a session beyond one operation, or bypassing tenant
-isolation.
+Feature code never receives the lease, its `release`, raw publishable/auth keys,
+plaintext or encrypted connection metadata, internal UUIDs, raw database
+clients, resolver causes, registry controls, adapters, raw `Database`, or either
+the platform or tenant privileged session. Keeping these values behind the
+project-request scope prevents routes and services from widening authorization,
+changing lifecycle state, retaining a session beyond one operation, or
+bypassing tenant isolation.
 
 ## Rationale
 
 - Explicit injection keeps the app deterministic and testable without live
-  PostgreSQL or sockets.
+  PostgreSQL, SQLite, or sockets.
+- Adapter-neutral composition allows the same portable application contract to
+  run in a full PostgreSQL deployment or a minimal SQLite deployment.
+- Capability policy disables or rejects optional unsupported behavior without
+  concrete adapter checks or silent fallback.
 - One process owner makes startup rollback and shutdown ordering unambiguous.
 - One awaited operation scope centralizes acquisition and release, prevents a
   session from escaping, and makes cleanup part of request completion.
 - Narrow capabilities enforce least privilege structurally instead of relying
   on route discipline.
 - Stopping intake before draining leases prevents new work from racing resource
-  closure; closing platform SQL last keeps metadata access available while
-  tenant owners drain.
+  closure; closing the internal platform database last keeps metadata access
+  available while tenant owners drain.
 
 ## Alternatives considered
 
-| Alternative                                  | Benefit                      | Why rejected                                                                                                                                            |
-| -------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Construct resources at module import         | Less startup wiring          | Imports gain hidden side effects, tests open live resources, and ownership and failure cleanup become ambiguous.                                        |
-| Expose raw infrastructure in request context | Maximum route flexibility    | Routes could inspect secrets, call `Database.system()`, or mutate registry and shutdown state.                                                          |
-| Pre-acquire a session into request context   | Simple handler access        | Every scoped request holds a lease even when unused, and the session can escape the operation that owns its cleanup.                                    |
-| Release with Elysia `defer`                  | Central post-response hook   | The response completes before release, so cleanup failures cannot be composed with operation failures and shutdown accounting becomes ambiguous.        |
-| Handle leases directly in each route         | Explicit local control       | Every route must reproduce acquisition, `finally`, idempotency, and dual-failure behavior.                                                              |
-| Run migrations during API startup            | Convenient deployment        | Runtime credentials would need schema privileges, startup would mutate state, and replicas could race. Migrations remain an explicit Bun CLI operation. |
-| Copy Elysia 1.x lifecycle APIs               | Existing examples are common | Elysia 2 renamed and changed lifecycle registration; 1.x hooks can silently provide the wrong scope or behavior.                                        |
+| Alternative                                   | Benefit                      | Why rejected                                                                                                                                     |
+| --------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Construct resources at module import          | Less startup wiring          | Imports gain hidden side effects, tests open live resources, and ownership and failure cleanup become ambiguous.                                 |
+| Expose raw infrastructure in request context  | Maximum route flexibility    | Routes could inspect secrets, call `Database.system()`, or mutate registry and shutdown state.                                                   |
+| Pre-acquire a session into request context    | Simple handler access        | Every scoped request holds a lease even when unused, and the session can escape the operation that owns its cleanup.                             |
+| Release with Elysia `defer`                   | Central post-response hook   | The response completes before release, so cleanup failures cannot be composed with operation failures and shutdown accounting becomes ambiguous. |
+| Handle leases directly in each route          | Explicit local control       | Every route must reproduce acquisition, `finally`, idempotency, and dual-failure behavior.                                                       |
+| Add v2-specific migrations during API startup | Convenient deployment        | Forks canonical internal collection setup, gives runtime code schema authority, and permits replica races.                                       |
+| Branch on concrete adapter identity           | Easy feature switches        | Couples policy to known drivers; common capability and limit fields describe actual support and extend to future adapters.                       |
+| Copy Elysia 1.x lifecycle APIs                | Existing examples are common | Elysia 2 renamed and changed lifecycle registration; 1.x hooks can silently provide the wrong scope or behavior.                                 |
 
 ## Elysia 2 beta caveats
 
@@ -183,17 +204,17 @@ isolation.
 
 ## Impact and exclusions
 
-**Positive**: tests can inject fakes; resource authority is auditable; cleanup
-and shutdown failures remain observable.
+**Positive**: tests can inject fakes; PostgreSQL and SQLite share one lifecycle;
+resource authority is auditable; cleanup and shutdown failures remain observable.
 
 **Trade-off**: composition and failure aggregation require more explicit code.
 
-This decision does not add hostname or custom-domain routing, startup
+This decision does not add hostname or custom-domain routing, v2-specific
 migrations, external KMS integration, project provisioning API/UI, tenant
-creation, or database CRUD routes. API startup requires no migration-only
-credential. Health and OpenAPI remain outside project scope. Logs and public
-errors never include encryption keys, connection URIs, ciphertext, or resolver
-causes.
+creation, or database CRUD routes. Health and OpenAPI remain outside project scope. Logs and public
+errors never include encryption keys, connection URIs, SQLite filenames,
+ciphertext, concrete driver causes, or resolver causes. Optional unsupported
+features return stable documented results and do not weaken core behavior.
 
 ## Revisit triggers
 
@@ -210,8 +231,9 @@ Revisit this decision when any of the following occurs:
 - Graceful-shutdown deadlines require forced cancellation after bounded drain.
 - A request needs a new infrastructure operation that cannot be represented by
   a narrow capability.
-- Platform SQL must close before tenant resources; such a change requires proof
-  that tenant draining no longer depends on platform metadata.
+- The internal platform database must close before tenant resources; such a
+  change requires proof that tenant draining no longer depends on platform
+  metadata.
 
 ## Related
 
