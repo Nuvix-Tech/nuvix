@@ -3,6 +3,7 @@ import type { Session } from '@nuvix/db'
 import type { ProjectAuthContext } from '../src/context/project'
 import type { ProjectLocator } from '../src/context/project-locator'
 import type { TenantAuthResolver } from '../src/context/project-request'
+import type { SchemaService } from '../src/database/service'
 import { ProjectRequestScope } from '../src/infrastructure/project-request-scope'
 
 const HEADERS = new Headers({
@@ -21,6 +22,23 @@ function harness(
     getDocument: async () => ({}) as never,
   }
   const session = { plane: 'tenant-caller' } as unknown as Session
+  const schemas: SchemaService = Object.freeze({
+    list: async () => {
+      order.push('schema')
+      return { data: [], meta: { total: 0 } }
+    },
+    get: async (name) => ({ name, description: null, type: 'managed' }),
+    create: async (input) => ({
+      ...input,
+      description: input.description ?? null,
+    }),
+    update: async (name, description) => ({
+      name,
+      description: description ?? null,
+      type: 'managed',
+    }),
+    remove: async () => {},
+  })
   const project = { id: 'project_a', enabled: true } as const
   const auth: ProjectAuthContext = {
     type: 'session',
@@ -40,6 +58,7 @@ function harness(
       order.push(`tenant:${projectId}`)
       return {
         database: {
+          schemas,
           system: () => {
             order.push('system')
             return documents as never
@@ -74,6 +93,7 @@ function harness(
     order,
     roles,
     scope: new ProjectRequestScope(projects, databases, tenantAuth),
+    schemas,
     session,
   }
 }
@@ -84,8 +104,12 @@ describe('project request scope', () => {
 
     const result = await state.scope.run(HEADERS, async (context) => {
       state.order.push('handler')
-      expect(Object.keys(context).toSorted()).toEqual(['auth', 'project', 'session'])
+      expect(Object.keys(context).toSorted()).toEqual(['auth', 'project', 'schemas', 'session'])
       expect(context.session).toBe(state.session)
+      expect(context.schemas).toBe(state.schemas)
+      expect(Object.isFrozen(context.schemas)).toBe(true)
+      expect(Object.keys(context.schemas)).toEqual(['list', 'get', 'create', 'update', 'remove'])
+      await context.schemas.list()
       return 'ok'
     })
 
@@ -97,6 +121,7 @@ describe('project request scope', () => {
       'auth',
       'roles',
       'handler',
+      'schema',
       'release',
     ])
     expect(state.roles).toEqual([

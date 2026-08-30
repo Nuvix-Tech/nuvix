@@ -3,22 +3,29 @@ import { DatabaseException } from '@nuvix/db'
 import {
   createDocumentSchemaBootstrap,
   type DocumentSchemaAdmin,
+  type DocumentSchemaAdminFactory,
 } from '../src/database/document-schema'
 
 function harness(create?: DocumentSchemaAdmin['create']) {
-  const names: Array<string | undefined> = []
-  const admin: DocumentSchemaAdmin = {
-    create:
-      create ??
-      (async (name) => {
-        names.push(name)
-      }),
+  const created: Array<string | undefined> = []
+  const selected: string[] = []
+  const admins: DocumentSchemaAdminFactory = {
+    forSchema: (schema) => {
+      selected.push(schema)
+      return {
+        create:
+          create ??
+          (async (name) => {
+            created.push(name)
+          }),
+      }
+    },
   }
 
   return {
-    admin,
-    bootstrap: createDocumentSchemaBootstrap(admin),
-    names,
+    bootstrap: createDocumentSchemaBootstrap(admins),
+    created,
+    selected,
   }
 }
 
@@ -28,7 +35,8 @@ describe('document schema bootstrap', () => {
 
     await state.bootstrap.initialize({ name: 'appdata', type: 'document' })
 
-    expect(state.names).toEqual(['appdata'])
+    expect(state.selected).toEqual(['appdata'])
+    expect(state.created).toEqual(['appdata'])
     expect(Object.keys(state.bootstrap)).toEqual(['initialize'])
     expect(state.bootstrap).not.toHaveProperty('database')
     expect(state.bootstrap).not.toHaveProperty('system')
@@ -58,7 +66,8 @@ describe('document schema bootstrap', () => {
 
       await state.bootstrap.initialize({ name: 'appdata', type })
 
-      expect(state.names).toEqual([])
+      expect(state.selected).toEqual([])
+      expect(state.created).toEqual([])
     },
   )
 })

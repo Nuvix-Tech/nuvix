@@ -5,6 +5,12 @@ import {
   type Database as PostgresDatabase,
 } from '@nuvix/pg'
 import { SQL } from 'bun'
+import { createSchemaCatalog, type SchemaCatalog } from '../database/catalog'
+import {
+  createDocumentSchemaBootstrap,
+  type DocumentSchemaAdmin,
+} from '../database/document-schema'
+import { createSchemaService, type SchemaService } from '../database/service'
 import type { TenantDatabaseTarget } from './platform-persistence-model'
 import type { TenantDatabaseResource as RegistryTenantDatabaseResource } from './tenant-databases'
 
@@ -22,6 +28,12 @@ export interface TenantDatabaseConstruction<
   readonly postgresql: (sql: SqlResource) => AdapterResource
   readonly database: (adapter: AdapterResource, cache: CacheDriver) => DatabaseResource
   readonly postgres: (sql: SqlResource) => PostgresResource
+  readonly catalog: (postgres: PostgresResource) => SchemaCatalog
+  readonly documentAdmin: (
+    sql: SqlResource,
+    cache: CacheDriver,
+    schema: string,
+  ) => DocumentSchemaAdmin
   readonly none: () => CacheDriver
 }
 
@@ -33,6 +45,7 @@ export interface TenantDatabaseResource<
   readonly adapter: AdapterResource
   readonly cache: CacheDriver
   readonly postgres: PostgresResource
+  readonly schemas: SchemaService
 }
 
 const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<SQL, Adapter, Database, PostgresDatabase> = {
@@ -40,6 +53,8 @@ const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<SQL, Adapter, Database, P
   postgresql: (sql) => new Adapter(sql),
   database: (adapter, cache) => new Database(adapter, cache),
   postgres: (sql) => createPostgresDatabase(sql),
+  catalog: (postgres) => createSchemaCatalog(postgres),
+  documentAdmin: (sql, cache, schema) => new Database(new Adapter(sql).setMeta({ schema }), cache),
   none: () => new None(),
 }
 
@@ -105,6 +120,11 @@ export function createTenantDatabaseResource(
   const selectedCache = cache ?? dependencies.none()
   const database = dependencies.database(adapter, selectedCache)
   const postgres = dependencies.postgres(sql)
+  const catalog = dependencies.catalog(postgres)
+  const bootstrap = createDocumentSchemaBootstrap({
+    forSchema: (schema) => dependencies.documentAdmin(sql, selectedCache, schema),
+  })
+  const schemas = createSchemaService({ catalog, bootstrap })
   let closePromise: Promise<void> | undefined
 
   return {
@@ -112,6 +132,7 @@ export function createTenantDatabaseResource(
     cache: selectedCache,
     database,
     postgres,
+    schemas,
     close: () => {
       closePromise ??= Promise.resolve().then(() => sql.close())
       return closePromise

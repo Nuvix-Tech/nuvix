@@ -2,11 +2,13 @@ import { describe, expect, test } from 'bun:test'
 import type { Session } from '@nuvix/db'
 import type { ProjectLocator } from '../src/context/project-locator'
 import type { TenantAuthResolver } from '../src/context/project-request'
+import type { SchemaService } from '../src/database/service'
 import { createDatabaseComposition } from '../src/infrastructure/database-composition'
 import type { TenantDatabaseTarget } from '../src/infrastructure/platform-persistence-model'
 
 function harness() {
   const events: string[] = []
+  const resourceSchemas = new Map<string, SchemaService>()
   const targets = new Map<string, TenantDatabaseTarget>([
     ['project_a', { driver: 'postgresql', connectionString: 'postgresql://example.test/a' }],
     ['project_b', { driver: 'postgresql', connectionString: 'postgresql://example.test/b' }],
@@ -45,6 +47,25 @@ function harness() {
     createResource: async (target) => {
       const projectId = target.connectionString.endsWith('/a') ? 'project_a' : 'project_b'
       events.push(`create:${projectId}`)
+      const schemas: SchemaService = Object.freeze({
+        list: async () => ({ data: [], meta: { total: 0 } }),
+        get: async (name: string) => ({
+          name,
+          description: null,
+          type: 'managed' as const,
+        }),
+        create: async (input: Parameters<SchemaService['create']>[0]) => ({
+          ...input,
+          description: input.description ?? null,
+        }),
+        update: async (name: string, description?: string | null) => ({
+          name,
+          description: description ?? null,
+          type: 'managed' as const,
+        }),
+        remove: async () => {},
+      })
+      resourceSchemas.set(projectId, schemas)
       return {
         database: {
           system: () => ({
@@ -53,6 +74,7 @@ function harness() {
           }),
           for: (...roles: string[]) => ({ projectId, roles }) as unknown as Session,
         },
+        schemas,
         close: async () => {
           events.push(`close:${projectId}`)
         },
@@ -60,7 +82,7 @@ function harness() {
     },
     registryOptions: { onCloseError: () => {} },
   })
-  return { composition, events }
+  return { composition, events, resourceSchemas }
 }
 
 const headers = (projectId: string, credentialProject = projectId) =>
@@ -77,10 +99,18 @@ describe('database composition', () => {
       headers('project_a'),
       (value) => value,
     )
+    const expectedSchemas = state.resourceSchemas.get('project_a')
+    if (!expectedSchemas) throw new Error('Expected project_a schema capability')
 
     expect(context.project.id).toBe('project_a')
     expect(context.auth.type).toBe('session')
     expect((context.session as unknown as { projectId: string }).projectId).toBe('project_a')
+    expect(Object.keys(context.schemas)).toEqual(['list', 'get', 'create', 'update', 'remove'])
+    expect(Object.isFrozen(context.schemas)).toBe(true)
+    expect(context.schemas).toBe(expectedSchemas)
+    expect(context).not.toHaveProperty('database')
+    expect(context).not.toHaveProperty('registry')
+    expect(context).not.toHaveProperty('close')
     expect(state.events).toEqual([
       'project:project_a',
       'target:project_a',
@@ -106,14 +136,45 @@ describe('database composition', () => {
   test('deduplicates tenant construction and closes through owner capability', async () => {
     const state = harness()
 
-    await Promise.all([
-      state.composition.requests.withProject(headers('project_b'), async () => undefined),
-      state.composition.requests.withProject(headers('project_b'), async () => undefined),
+    const services = await Promise.all([
+      state.composition.requests.withProject(
+        headers('project_b'),
+        async (context) => context.schemas,
+      ),
+      state.composition.requests.withProject(
+        headers('project_b'),
+        async (context) => context.schemas,
+      ),
     ])
-    await state.composition.close()
+    await Promise.all([state.composition.close(), state.composition.close()])
 
+    expect(services[0]).toBe(services[1])
     expect(state.events.filter((event) => event === 'create:project_b')).toHaveLength(1)
     expect(state.events.filter((event) => event === 'close:project_b')).toHaveLength(1)
     expect(Object.keys(state.composition.requests)).toEqual(['withProject'])
+  })
+
+  test('keeps schema capability identity tenant-local', async () => {
+    const state = harness()
+
+    const [projectA, projectB] = await Promise.all([
+      state.composition.requests.withProject(
+        headers('project_a'),
+        async (context) => context.schemas,
+      ),
+      state.composition.requests.withProject(
+        headers('project_b'),
+        async (context) => context.schemas,
+      ),
+    ])
+    const expectedProjectA = state.resourceSchemas.get('project_a')
+    const expectedProjectB = state.resourceSchemas.get('project_b')
+    if (!expectedProjectA || !expectedProjectB) {
+      throw new Error('Expected tenant-local schema capabilities')
+    }
+
+    expect(projectA).not.toBe(projectB)
+    expect(projectA).toBe(expectedProjectA)
+    expect(projectB).toBe(expectedProjectB)
   })
 })

@@ -7,10 +7,12 @@ import type {
   TenantAuthDocuments,
   TenantAuthResolver,
 } from '../context/project-request'
+import type { SchemaService } from '../database/service'
 import type { TenantDatabases } from './tenant-databases'
 
 interface RequestTenantDatabase {
   for(...roles: string[]): Session
+  readonly schemas: SchemaService
   system(): TenantAuthDocuments
 }
 
@@ -58,6 +60,7 @@ export class ProjectRequestScope {
         project,
         auth,
         session,
+        schemas: lease.database.schemas,
       })
       return await operation(context)
     } catch (error) {

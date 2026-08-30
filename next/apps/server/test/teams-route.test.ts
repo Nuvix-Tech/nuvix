@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { Session } from '@nuvix/db'
 import { Elysia } from 'elysia'
 import type { ProjectAuthContext } from '../src/context/project'
+import type { SchemaService } from '../src/database/service'
 import type { DatabaseRequestCapabilities } from '../src/infrastructure/database-composition'
 import { problemErrors } from '../src/plugins/errors'
 import { teamRoutes } from '../src/teams/route'
@@ -24,6 +25,7 @@ function probe(auth: ProjectAuthContext) {
         project: { id: 'project_a', enabled: true },
         auth,
         session: {} as Session,
+        schemas: Object.freeze({}) as SchemaService,
       }),
   }
   const service = {

@@ -5,19 +5,29 @@ import type {
   TenantAuthDocuments,
   TenantAuthResolver,
 } from '../context/project-request'
+import type { SchemaService } from '../database/service'
 import type { TenantDatabaseTarget } from './platform-persistence-model'
 import { ProjectRequestScope } from './project-request-scope'
 import { createTenantDatabaseResource } from './tenant-database-resource'
 import type { TenantTargetResolver } from './tenant-database-target'
 import {
+  type TenantDatabaseResource as RegistryTenantDatabaseResource,
   TenantDatabaseRegistry,
   type TenantDatabaseRegistryOptions,
-  type TenantDatabaseResource,
 } from './tenant-databases'
 
-interface RequestTenantDatabase {
+interface TenantDatabaseAdmin {
   for(...roles: string[]): Session
   system(): TenantAuthDocuments
+}
+
+interface RequestTenantDatabase extends TenantDatabaseAdmin {
+  readonly schemas: SchemaService
+}
+
+interface CompositionTenantDatabaseResource
+  extends RegistryTenantDatabaseResource<TenantDatabaseAdmin> {
+  readonly schemas: SchemaService
 }
 
 export type DatabaseRegistryOptions = Omit<
@@ -31,9 +41,7 @@ export interface DatabaseCompositionOptions {
   readonly tenantAuth: TenantAuthResolver
   readonly createResource?: (
     target: TenantDatabaseTarget,
-  ) =>
-    | TenantDatabaseResource<RequestTenantDatabase>
-    | Promise<TenantDatabaseResource<RequestTenantDatabase>>
+  ) => CompositionTenantDatabaseResource | Promise<CompositionTenantDatabaseResource>
   readonly registryOptions: DatabaseRegistryOptions
 }
 
@@ -46,6 +54,21 @@ export interface DatabaseComposition {
   close(): Promise<void>
 }
 
+function requestResource(
+  resource: CompositionTenantDatabaseResource,
+): RegistryTenantDatabaseResource<RequestTenantDatabase> {
+  const database = resource.database
+
+  return {
+    database: Object.freeze({
+      for: database.for.bind(database),
+      schemas: resource.schemas,
+      system: database.system.bind(database),
+    }),
+    close: resource.close.bind(resource),
+  }
+}
+
 /** Composes the only allowed project → tenant → auth request sequence. */
 export function createDatabaseComposition(
   options: DatabaseCompositionOptions,
@@ -53,7 +76,8 @@ export function createDatabaseComposition(
   const createResource = options.createResource ?? createTenantDatabaseResource
   const registry = new TenantDatabaseRegistry<RequestTenantDatabase>({
     ...options.registryOptions,
-    create: async (projectId) => createResource(await options.tenantTargets.resolve(projectId)),
+    create: async (projectId) =>
+      requestResource(await createResource(await options.tenantTargets.resolve(projectId))),
   })
   const scope = new ProjectRequestScope(options.projectLocator, registry, options.tenantAuth)
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { type CacheDriver, None } from '@nuvix/cache'
 import { Adapter, Database } from '@nuvix/db'
+import type { SchemaCatalog, SchemaRecord } from '../src/database/catalog'
 import type { TenantDatabaseTarget } from '../src/infrastructure/platform-persistence-model'
 import {
   createTenantDatabaseResource,
@@ -30,8 +31,34 @@ function construction(
     readonly close?: () => Promise<void>
     readonly none?: () => CacheDriver
     readonly onSql?: (sql: FakeSql) => void
+    readonly onDocumentAdmin?: (input: {
+      readonly cache: CacheDriver
+      readonly createdName: string | undefined
+      readonly schema: string
+      readonly sql: FakeSql
+    }) => void
   } = {},
 ): TenantDatabaseConstruction<FakeSql, FakeAdapter, FakeDatabase, FakePostgres> {
+  const schemas = new Map<string, SchemaRecord>()
+  const catalog: SchemaCatalog = {
+    list: async (type) =>
+      [...schemas.values()].filter((schema) => type === undefined || schema.type === type),
+    get: async (name) => schemas.get(name),
+    create: async (input) => {
+      schemas.set(input.name, { ...input })
+    },
+    update: async (name, description) => {
+      const schema = schemas.get(name)
+      if (!schema) return undefined
+      const updated = { ...schema, description }
+      schemas.set(name, updated)
+      return updated
+    },
+    remove: async (name) => {
+      schemas.delete(name)
+    },
+  }
+
   return {
     sql: (value) => ({ value, close: options.close ?? (async () => {}) }),
     postgresql: (sql) => {
@@ -43,6 +70,12 @@ function construction(
       options.onSql?.(sql)
       return { sql }
     },
+    catalog: () => catalog,
+    documentAdmin: (sql, cache, schema) => ({
+      create: async (createdName) => {
+        options.onDocumentAdmin?.({ cache, createdName, schema, sql })
+      },
+    }),
     none: options.none ?? (() => new None()),
   }
 }
@@ -68,6 +101,44 @@ describe('PostgreSQL tenant database resource factory', () => {
     expect(sharedSql).toEqual([resource.adapter.sql, resource.adapter.sql])
     expect(resource.database.adapter).toBe(resource.adapter)
     expect(resource.database.cache).toBe(cache)
+    expect(Object.keys(resource.schemas)).toEqual(['list', 'get', 'create', 'update', 'remove'])
+    expect(Object.isFrozen(resource.schemas)).toBe(true)
+  })
+
+  test('bootstraps document metadata through an isolated schema admin on the owner SQL', async () => {
+    const calls: Array<{
+      readonly cache: CacheDriver
+      readonly createdName: string | undefined
+      readonly schema: string
+      readonly sql: FakeSql
+    }> = []
+    const cache = new None()
+    const resource = createTenantDatabaseResource(
+      TARGET,
+      cache,
+      construction({ onDocumentAdmin: (input) => calls.push(input) }),
+    )
+
+    await Promise.all([
+      resource.schemas.create({ name: 'documents_a', type: 'document' }),
+      resource.schemas.create({ name: 'documents_b', type: 'document' }),
+      resource.schemas.create({ name: 'managed', type: 'managed' }),
+    ])
+
+    expect(calls).toEqual([
+      {
+        cache,
+        createdName: 'documents_a',
+        schema: 'documents_a',
+        sql: resource.adapter.sql,
+      },
+      {
+        cache,
+        createdName: 'documents_b',
+        schema: 'documents_b',
+        sql: resource.adapter.sql,
+      },
+    ])
   })
 
   test('constructs production resources through public @nuvix/db exports', async () => {
@@ -81,6 +152,7 @@ describe('PostgreSQL tenant database resource factory', () => {
       expect(resource.database).toBeInstanceOf(Database)
       expect(resource.cache).toBeInstanceOf(None)
       expect(typeof resource.postgres.table).toBe('function')
+      expect(Object.keys(resource.schemas)).toEqual(['list', 'get', 'create', 'update', 'remove'])
       expect('sql' in resource).toBe(false)
       expect('client' in resource).toBe(false)
     } finally {

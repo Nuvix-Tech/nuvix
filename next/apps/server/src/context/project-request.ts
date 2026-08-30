@@ -1,4 +1,5 @@
 import type { Session } from '@nuvix/db'
+import type { SchemaService } from '../database/service'
 import type { ProjectAuthContext, ProjectContext } from './project'
 
 export type TenantAuthDocuments = Pick<Session, 'find' | 'getDocument'>
@@ -18,6 +19,7 @@ export interface ProjectRequestContext {
   readonly project: ProjectContext
   readonly auth: ProjectAuthContext
   readonly session: Session
+  readonly schemas: SchemaService
 }
 
 export type ProjectRequestOperation<Result> = (
