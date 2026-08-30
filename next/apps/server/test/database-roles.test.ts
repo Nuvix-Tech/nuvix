@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { rolesFor } from '../src/context/database-roles'
+import { API_SCOPE_ROLE_PREFIX, apiScopeLabel, rolesFor } from '../src/context/database-roles'
 import type { ProjectAuthContext, ProjectContext, TeamClaim } from '../src/context/project'
 import { ForbiddenError } from '../src/shared/errors'
 
@@ -66,7 +66,10 @@ describe('database role mapping', () => {
       scopes: ['schemas.write'],
     }
 
-    expect(rolesFor(auth, PROJECT)).toEqual(['any', 'label:_nuvix.scope.schemas.write'])
+    const label = apiScopeLabel('schemas.write')
+    expect(label).toMatch(/^nxs[a-f0-9]{32}$/)
+    expect(label).toHaveLength(35)
+    expect(rolesFor(auth, PROJECT)).toEqual(['any', `label:${label}`])
   })
 
   test('orders disjoint roles from duplicate team claims canonically', () => {
@@ -124,7 +127,7 @@ describe('database role mapping', () => {
     },
     {
       name: 'reserved API scope label',
-      claims: { labels: ['_nuvix.scope.teams.write'] },
+      claims: { labels: [`${API_SCOPE_ROLE_PREFIX}reserved`] },
     },
   ])('rejects $name', ({ claims }) => {
     const auth: ProjectAuthContext = {

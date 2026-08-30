@@ -149,7 +149,7 @@ describe('PostgreSQL tenant database resource factory', () => {
 
     try {
       expect(resource.adapter).toBeInstanceOf(Adapter)
-      expect(resource.adapter.$schema).toBe('public')
+      expect(resource.adapter.$schema).toBe('core')
       expect(resource.adapter.$namespace).toBe('nx')
       expect(resource.database).toBeInstanceOf(Database)
       expect(resource.cache).toBeInstanceOf(None)

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { Permission, Role } from '@nuvix/db'
-import { API_SCOPE_ROLE_PREFIX, rolesFor } from '../src/context/database-roles'
+import { apiScopeLabel, rolesFor } from '../src/context/database-roles'
 import { createTenantAuthCollectionDefinitions } from '../src/context/tenant-auth-schema'
 import {
   createTeamCollectionDefinition,
@@ -21,7 +21,7 @@ describe('teams persistence permissions', () => {
 
     expect(definition.permissions).toEqual([
       Permission.create(Role.users()),
-      Permission.create(Role.label(`${API_SCOPE_ROLE_PREFIX}teams.write`)),
+      Permission.create(Role.label(apiScopeLabel('teams.write'))),
     ])
   })
 
@@ -38,8 +38,8 @@ describe('teams persistence permissions', () => {
 
     expect(roles).toEqual([
       'any',
-      'label:_nuvix.scope.teams.read',
-      'label:_nuvix.scope.teams.write',
+      `label:${apiScopeLabel('teams.read')}`,
+      `label:${apiScopeLabel('teams.write')}`,
     ])
   })
 

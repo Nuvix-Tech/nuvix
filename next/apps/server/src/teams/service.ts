@@ -1,5 +1,5 @@
 import { Doc, ID, Permission, Query, Role } from '@nuvix/db'
-import { API_SCOPE_ROLE_PREFIX } from '../context/database-roles'
+import { apiScopeLabel } from '../context/database-roles'
 import type { ProjectAuthContext } from '../context/project'
 import { TENANT_AUTH_MODEL } from '../context/tenant-auth-model'
 import { translatePackageError } from '../infrastructure/package-errors'
@@ -93,11 +93,11 @@ async function operation<Result>(name: string, run: () => Promise<Result>): Prom
 function teamPermissions(teamId: string) {
   return [
     Permission.read(Role.team(teamId)),
-    Permission.read(Role.label(`${API_SCOPE_ROLE_PREFIX}teams.read`)),
+    Permission.read(Role.label(apiScopeLabel('teams.read'))),
     Permission.update(Role.team(teamId, 'owner')),
-    Permission.update(Role.label(`${API_SCOPE_ROLE_PREFIX}teams.write`)),
+    Permission.update(Role.label(apiScopeLabel('teams.write'))),
     Permission.delete(Role.team(teamId, 'owner')),
-    Permission.delete(Role.label(`${API_SCOPE_ROLE_PREFIX}teams.write`)),
+    Permission.delete(Role.label(apiScopeLabel('teams.write'))),
   ]
 }
 

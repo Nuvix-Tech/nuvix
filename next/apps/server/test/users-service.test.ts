@@ -138,7 +138,7 @@ describe('users service', () => {
 
     const missing = await service.get(state.documents, 'missing').catch((error) => error)
     const reserved = await service
-      .updateLabels(state.documents, 'missing', ['_nuvix.scope.users.read'])
+      .updateLabels(state.documents, 'missing', ['nxsreserved'])
       .catch((error) => error)
 
     expect((missing as { fields: { code?: string } }).fields.code).toBe('user_not_found')

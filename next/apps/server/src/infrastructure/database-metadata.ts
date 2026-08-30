@@ -20,7 +20,7 @@ export const DATABASE_METADATA = Object.freeze({
   }),
   tenant: Object.freeze({
     postgresql: Object.freeze({
-      schema: 'public',
+      schema: 'core',
       sharedTables: false,
       namespace: 'nx',
     } satisfies DatabaseMetadata),

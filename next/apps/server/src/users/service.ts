@@ -1,4 +1,5 @@
 import { Doc, ID, Permission, Query, Role } from '@nuvix/db'
+import { API_SCOPE_ROLE_PREFIX } from '../context/database-roles'
 import type { ProjectAuthContext } from '../context/project'
 import { TENANT_AUTH_MODEL } from '../context/tenant-auth-model'
 import { translatePackageError } from '../infrastructure/package-errors'
@@ -42,7 +43,6 @@ export interface UserFilters {
 }
 
 const LABEL_PATTERN = /^[\p{L}\p{M}\p{N}._-]{1,64}$/u
-const RESERVED_LABEL_PREFIX = '_nuvix.scope.'
 const MAX_PREFS_BYTES = 65_536
 
 export function authorizeUsers(
@@ -102,7 +102,7 @@ function normalizedLabels(input: readonly string[]): string[] {
     if (
       label !== label.normalize('NFC') ||
       !LABEL_PATTERN.test(label) ||
-      label.startsWith(RESERVED_LABEL_PREFIX)
+      label.startsWith(API_SCOPE_ROLE_PREFIX)
     ) {
       throw new BadRequestError('Invalid user labels')
     }

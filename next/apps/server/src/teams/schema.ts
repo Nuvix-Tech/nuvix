@@ -1,5 +1,5 @@
 import { AttributeType, type Database, Doc, Permission, Role } from '@nuvix/db'
-import { API_SCOPE_ROLE_PREFIX } from '../context/database-roles'
+import { apiScopeLabel } from '../context/database-roles'
 import { TEAM_MODEL, type TeamModel } from './model'
 
 export type TeamCollectionDefinition = Parameters<Database['createCollection']>[0]
@@ -36,7 +36,7 @@ export function createTeamCollectionDefinition(
     indexes: [],
     permissions: [
       Permission.create(Role.users()),
-      Permission.create(Role.label(`${API_SCOPE_ROLE_PREFIX}teams.write`)),
+      Permission.create(Role.label(apiScopeLabel('teams.write'))),
     ],
     documentSecurity: true,
   }

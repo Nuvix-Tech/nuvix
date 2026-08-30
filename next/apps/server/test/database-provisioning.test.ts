@@ -81,7 +81,7 @@ describe('database metadata', () => {
         sqlite: { schema: 'main', sharedTables: false, namespace: 'platform' },
       },
       tenant: {
-        postgresql: { schema: 'public', sharedTables: false, namespace: 'nx' },
+        postgresql: { schema: 'core', sharedTables: false, namespace: 'nx' },
       },
     })
     expect(

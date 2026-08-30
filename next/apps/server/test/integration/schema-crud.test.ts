@@ -37,7 +37,7 @@ live('schema CRUD on nuvix/postgres:18.1', () => {
       }
       throw error
     }
-  })
+  }, 60_000)
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -53,7 +53,7 @@ live('schema CRUD on nuvix/postgres:18.1', () => {
     if (resource) await resource.close().catch((error: unknown) => failures.push(error))
     if (postgres) await postgres.close().catch((error: unknown) => failures.push(error))
     if (failures.length > 0) throw new AggregateError(failures, 'Live PostgreSQL cleanup failed')
-  })
+  }, 60_000)
 
   test('round-trips managed schema CRUD with reserved-schema exclusion and stable errors', async () => {
     if (!resource) throw new Error('PostgreSQL test resource was not initialized')

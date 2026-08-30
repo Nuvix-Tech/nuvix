@@ -1,5 +1,5 @@
 import { AttributeType, type Database, Doc, IndexType, Permission, Role } from '@nuvix/db'
-import { API_SCOPE_ROLE_PREFIX } from './database-roles'
+import { apiScopeLabel } from './database-roles'
 import { TENANT_AUTH_MODEL, type TenantAuthModel } from './tenant-auth-model'
 
 export type TenantAuthCollectionDefinition = Parameters<Database['createCollection']>[0]
@@ -78,10 +78,10 @@ export function createTenantAuthCollectionDefinitions(
         index('phone_verified', IndexType.Key, [fields.users.phoneVerified]),
       ],
       permissions: [
-        Permission.create(Role.label(`${API_SCOPE_ROLE_PREFIX}users.write`)),
-        Permission.read(Role.label(`${API_SCOPE_ROLE_PREFIX}users.read`)),
-        Permission.read(Role.label(`${API_SCOPE_ROLE_PREFIX}users.write`)),
-        Permission.update(Role.label(`${API_SCOPE_ROLE_PREFIX}users.write`)),
+        Permission.create(Role.label(apiScopeLabel('users.write'))),
+        Permission.read(Role.label(apiScopeLabel('users.read'))),
+        Permission.read(Role.label(apiScopeLabel('users.write'))),
+        Permission.update(Role.label(apiScopeLabel('users.write'))),
       ],
       documentSecurity: true,
     },
@@ -125,8 +125,8 @@ export function createTenantAuthCollectionDefinitions(
       ],
       permissions: [
         Permission.create(Role.users()),
-        Permission.create(Role.label(`${API_SCOPE_ROLE_PREFIX}teams.write`)),
-        Permission.read(Role.label(`${API_SCOPE_ROLE_PREFIX}users.read`)),
+        Permission.create(Role.label(apiScopeLabel('teams.write'))),
+        Permission.read(Role.label(apiScopeLabel('users.read'))),
       ],
       documentSecurity: true,
     },
