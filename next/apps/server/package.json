@@ -14,6 +14,7 @@
     "@nuvix/db": "file:../../../../database",
     "@nuvix/i18n": "workspace:*",
     "@nuvix/messaging": "file:../../../../messaging",
+    "@nuvix/pg": "file:../../../../pg-ts",
     "@nuvix/storage": "file:../../../../storage",
     "@nuvix/utils": "workspace:*",
     "elysia": "2.0.0-beta.6",

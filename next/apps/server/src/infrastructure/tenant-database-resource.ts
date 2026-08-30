@@ -1,29 +1,45 @@
 import { type CacheDriver, None } from '@nuvix/cache'
 import { Adapter, Database } from '@nuvix/db'
+import {
+  createDatabase as createPostgresDatabase,
+  type Database as PostgresDatabase,
+} from '@nuvix/pg'
+import { SQL } from 'bun'
 import type { TenantDatabaseTarget } from './platform-persistence-model'
 import type { TenantDatabaseResource as RegistryTenantDatabaseResource } from './tenant-databases'
 
-export interface TenantDatabaseClient {
-  disconnect(): Promise<void>
+export interface TenantSqlOwner {
+  close(): Promise<void>
 }
 
-export interface TenantDatabaseConstruction<AdapterResource, DatabaseResource> {
-  readonly postgresql: (connectionString: string) => AdapterResource
+export interface TenantDatabaseConstruction<
+  SqlResource extends TenantSqlOwner,
+  AdapterResource,
+  DatabaseResource,
+  PostgresResource,
+> {
+  readonly sql: (connectionString: string) => SqlResource
+  readonly postgresql: (sql: SqlResource) => AdapterResource
   readonly database: (adapter: AdapterResource, cache: CacheDriver) => DatabaseResource
-  readonly client: (adapter: AdapterResource) => TenantDatabaseClient
+  readonly postgres: (sql: SqlResource) => PostgresResource
   readonly none: () => CacheDriver
 }
 
-export interface TenantDatabaseResource<DatabaseResource = Database, AdapterResource = Adapter>
-  extends RegistryTenantDatabaseResource<DatabaseResource> {
+export interface TenantDatabaseResource<
+  DatabaseResource = Database,
+  AdapterResource = Adapter,
+  PostgresResource = PostgresDatabase,
+> extends RegistryTenantDatabaseResource<DatabaseResource> {
   readonly adapter: AdapterResource
   readonly cache: CacheDriver
+  readonly postgres: PostgresResource
 }
 
-const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<Adapter, Database> = {
-  postgresql: (connectionString) => new Adapter(connectionString),
+const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<SQL, Adapter, Database, PostgresDatabase> = {
+  sql: (connectionString) => new SQL(connectionString),
+  postgresql: (sql) => new Adapter(sql),
   database: (adapter, cache) => new Database(adapter, cache),
-  client: (adapter) => adapter.$client,
+  postgres: (sql) => createPostgresDatabase(sql),
   none: () => new None(),
 }
 
@@ -57,11 +73,21 @@ export function createTenantDatabaseResource(
   target: TenantDatabaseTarget,
   cache?: CacheDriver,
 ): TenantDatabaseResource
-export function createTenantDatabaseResource<AdapterResource, DatabaseResource>(
+export function createTenantDatabaseResource<
+  SqlResource extends TenantSqlOwner,
+  AdapterResource,
+  DatabaseResource,
+  PostgresResource,
+>(
   target: TenantDatabaseTarget,
   cache: CacheDriver | undefined,
-  construction: TenantDatabaseConstruction<AdapterResource, DatabaseResource>,
-): TenantDatabaseResource<DatabaseResource, AdapterResource>
+  construction: TenantDatabaseConstruction<
+    SqlResource,
+    AdapterResource,
+    DatabaseResource,
+    PostgresResource
+  >,
+): TenantDatabaseResource<DatabaseResource, AdapterResource, PostgresResource>
 export function createTenantDatabaseResource(
   input: TenantDatabaseTarget,
   cache?: CacheDriver,
@@ -69,21 +95,25 @@ export function createTenantDatabaseResource(
 ) {
   const target = validate(input)
   const dependencies = (construction ?? DEFAULT_CONSTRUCTION) as TenantDatabaseConstruction<
+    TenantSqlOwner,
+    unknown,
     unknown,
     unknown
   >
-  const adapter = dependencies.postgresql(target.connectionString)
+  const sql = dependencies.sql(target.connectionString)
+  const adapter = dependencies.postgresql(sql)
   const selectedCache = cache ?? dependencies.none()
   const database = dependencies.database(adapter, selectedCache)
-  const client = dependencies.client(adapter)
+  const postgres = dependencies.postgres(sql)
   let closePromise: Promise<void> | undefined
 
   return {
     adapter,
     cache: selectedCache,
     database,
+    postgres,
     close: () => {
-      closePromise ??= Promise.resolve().then(() => client.disconnect())
+      closePromise ??= Promise.resolve().then(() => sql.close())
       return closePromise
     },
   }

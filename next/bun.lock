@@ -23,6 +23,7 @@
         "@nuvix/db": "file:../../../../database",
         "@nuvix/i18n": "workspace:*",
         "@nuvix/messaging": "file:../../../../messaging",
+        "@nuvix/pg": "file:../../../../pg-ts",
         "@nuvix/storage": "file:../../../../storage",
         "@nuvix/utils": "workspace:*",
         "elysia": "2.0.0-beta.6",
@@ -398,6 +399,8 @@
     "@nuvix/server/@nuvix/db": ["@nuvix/db@file:../../database", { "devDependencies": { "@nuvix/cache": "^2.0.0", "@types/bun": "^1.4.0", "tsc-alias": "1.9.2", "typescript": "^5.8.3" }, "bin": { "nuvix-db": "dist/cli/generate-types.js" } }],
 
     "@nuvix/server/@nuvix/messaging": ["@nuvix/messaging@file:../../messaging", { "devDependencies": { "@types/bun": "^1.1.42", "@types/nodemailer": "^6.4.17", "oxlint": "^1.0.0", "typescript": "^5.7.2" }, "peerDependencies": { "nodemailer": "^7.0.3" }, "optionalPeers": ["nodemailer"] }],
+
+    "@nuvix/server/@nuvix/pg": ["@nuvix/pg@file:../../pg-ts", { "devDependencies": { "@types/bun": "1.4.0", "typescript": "7.0.2" } }],
 
     "@nuvix/server/@nuvix/storage": ["@nuvix/storage@file:../../storage", { "devDependencies": { "@types/bun": "^1.2.0", "oxlint": "^1.0.0", "typescript": "^5.6.0" } }],
 

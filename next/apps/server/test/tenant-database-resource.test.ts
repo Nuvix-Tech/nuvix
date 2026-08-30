@@ -8,8 +8,7 @@ import {
 } from '../src/infrastructure/tenant-database-resource'
 
 interface FakeAdapter {
-  readonly value: string
-  readonly client: { disconnect(): Promise<void> }
+  readonly sql: FakeSql
 }
 
 interface FakeDatabase {
@@ -17,16 +16,33 @@ interface FakeDatabase {
   readonly cache: CacheDriver
 }
 
+interface FakePostgres {
+  readonly sql: FakeSql
+}
+
+interface FakeSql {
+  readonly value: string
+  close(): Promise<void>
+}
+
 function construction(
-  options: { readonly disconnect?: () => Promise<void>; readonly none?: () => CacheDriver } = {},
-): TenantDatabaseConstruction<FakeAdapter, FakeDatabase> {
+  options: {
+    readonly close?: () => Promise<void>
+    readonly none?: () => CacheDriver
+    readonly onSql?: (sql: FakeSql) => void
+  } = {},
+): TenantDatabaseConstruction<FakeSql, FakeAdapter, FakeDatabase, FakePostgres> {
   return {
-    postgresql: (value) => ({
-      value,
-      client: { disconnect: options.disconnect ?? (async () => {}) },
-    }),
+    sql: (value) => ({ value, close: options.close ?? (async () => {}) }),
+    postgresql: (sql) => {
+      options.onSql?.(sql)
+      return { sql }
+    },
     database: (adapter, cache) => ({ adapter, cache }),
-    client: (adapter) => adapter.client,
+    postgres: (sql) => {
+      options.onSql?.(sql)
+      return { sql }
+    },
     none: options.none ?? (() => new None()),
   }
 }
@@ -39,10 +55,17 @@ const TARGET: TenantDatabaseTarget = {
 describe('PostgreSQL tenant database resource factory', () => {
   test('constructs and owns the resolved PostgreSQL resource', () => {
     const cache = new None()
+    const sharedSql: FakeSql[] = []
 
-    const resource = createTenantDatabaseResource(TARGET, cache, construction())
+    const resource = createTenantDatabaseResource(
+      TARGET,
+      cache,
+      construction({ onSql: (sql) => sharedSql.push(sql) }),
+    )
 
-    expect(resource.adapter.value).toBe(TARGET.connectionString)
+    expect(resource.adapter.sql.value).toBe(TARGET.connectionString)
+    expect(resource.postgres.sql).toBe(resource.adapter.sql)
+    expect(sharedSql).toEqual([resource.adapter.sql, resource.adapter.sql])
     expect(resource.database.adapter).toBe(resource.adapter)
     expect(resource.database.cache).toBe(cache)
   })
@@ -57,6 +80,9 @@ describe('PostgreSQL tenant database resource factory', () => {
       expect(resource.adapter).toBeInstanceOf(Adapter)
       expect(resource.database).toBeInstanceOf(Database)
       expect(resource.cache).toBeInstanceOf(None)
+      expect(typeof resource.postgres.table).toBe('function')
+      expect('sql' in resource).toBe(false)
+      expect('client' in resource).toBe(false)
     } finally {
       await resource.close()
     }
@@ -92,11 +118,11 @@ describe('PostgreSQL tenant database resource factory', () => {
   ])('rejects unsupported or invalid targets before construction', (target) => {
     let constructions = 0
     const dependencies = construction()
-    const guarded: TenantDatabaseConstruction<FakeAdapter, FakeDatabase> = {
+    const guarded: TenantDatabaseConstruction<FakeSql, FakeAdapter, FakeDatabase, FakePostgres> = {
       ...dependencies,
-      postgresql: (value) => {
+      sql: (value) => {
         constructions += 1
-        return dependencies.postgresql(value)
+        return dependencies.sql(value)
       },
     }
 
@@ -113,15 +139,15 @@ describe('PostgreSQL tenant database resource factory', () => {
     expect(constructions).toBe(0)
   })
 
-  test('closes the selected client once and preserves close failures', async () => {
-    const failure = new Error('disconnect failed')
-    let disconnects = 0
+  test('closes the SQL owner once and preserves close failures', async () => {
+    const failure = new Error('close failed')
+    let closes = 0
     const resource = createTenantDatabaseResource(
       TARGET,
       undefined,
       construction({
-        disconnect: async () => {
-          disconnects += 1
+        close: async () => {
+          closes += 1
           throw failure
         },
       }),
@@ -132,6 +158,6 @@ describe('PostgreSQL tenant database resource factory', () => {
     expect(resource.close()).toBe(first)
     await expect(first).rejects.toBe(failure)
     await expect(resource.close()).rejects.toBe(failure)
-    expect(disconnects).toBe(1)
+    expect(closes).toBe(1)
   })
 })
