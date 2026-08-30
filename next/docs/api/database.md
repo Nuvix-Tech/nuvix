@@ -1,6 +1,6 @@
 # v2 Contract — Database (Schemas)
 
-> Status: IMPLEMENTATION IN PROGRESS — dependency, catalog, contracts, and document bootstrap implemented; routes pending
+> Status: IMPLEMENTED — schema CRUD routes, service, catalog, and document bootstrap complete
 > Depends on: `_conventions.md` (D19, D26–D28),
 > `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`,
 > `@nuvix/pg@2.0.0`

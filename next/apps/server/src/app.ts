@@ -5,6 +5,7 @@ import { avatarRoutes } from './avatars/route'
 import { type AvatarService, createAvatarService } from './avatars/service'
 import { createGeoIP, type GeoIP } from './context/geoip'
 import { getTranslator, localeContext } from './context/locale'
+import { schemaRoutes } from './database/route'
 import type { DatabaseRequestCapabilities } from './infrastructure/database-composition'
 import { localeRoutes } from './locale/route'
 import { cors } from './plugins/cors'
@@ -89,6 +90,7 @@ export async function createApp(options: AppOptions = {}) {
     .use(localeContext(localeOptions))
     .use(localeRoutes(geoip, localeOptions))
     .use(avatarRoutes(avatars))
+    .use(schemaRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(teamRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(userRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(health)

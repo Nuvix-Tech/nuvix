@@ -196,6 +196,20 @@ export const cases: ParityCase[] = [
     problemCode: 'unknown_avatar_code',
   },
 
+  // ── Database schemas ──────────────────────────────────────────────────
+  // The default smoke app deliberately has no tenant database composition.
+  // This proves the reviewed route is mounted and fails closed without
+  // claiming that fake-backed CRUD is live PostgreSQL coverage.
+  {
+    name: 'schema routes fail closed without project services',
+    path: '/v2/database/schemas',
+    status: 503,
+    contentType: 'application/problem+json',
+    problemType: '/errors/unavailable',
+    problemCode: 'project_unavailable',
+    v1Path: null,
+  },
+
   // ── Error semantics ───────────────────────────────────────────────────
   {
     name: 'unknown route returns RFC-9457 problem+json',
