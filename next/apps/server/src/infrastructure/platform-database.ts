@@ -17,6 +17,7 @@ import {
   type DatabaseCapabilitySource,
   deriveDatabaseCapabilities,
 } from './database-capabilities'
+import { DATABASE_METADATA } from './database-metadata'
 
 interface DatabaseClient {
   disconnect(): Promise<void>
@@ -71,19 +72,11 @@ type PublicAdapter = Adapter | SQLiteAdapter
 
 const DEFAULT_CONSTRUCTION: PlatformDatabaseConstruction<PublicAdapter, Database, Session> = {
   postgresql: (connectionString) => {
-    const adapter = new Adapter(connectionString).setMeta({
-      schema: 'internal',
-      sharedTables: false,
-      namespace: 'platform',
-    })
+    const adapter = new Adapter(connectionString).setMeta(DATABASE_METADATA.platform.postgresql)
     return { adapter, client: adapter.$client }
   },
   sqlite: (filename) => {
-    const adapter = new SQLiteAdapter(filename).setMeta({
-      schema: 'main',
-      sharedTables: false,
-      namespace: 'platform',
-    })
+    const adapter = new SQLiteAdapter(filename).setMeta(DATABASE_METADATA.platform.sqlite)
     return { adapter, client: adapter.$client }
   },
   cache: () => new None(),

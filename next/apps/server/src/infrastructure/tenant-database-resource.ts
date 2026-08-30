@@ -11,6 +11,7 @@ import {
   type DocumentSchemaAdmin,
 } from '../database/document-schema'
 import { createSchemaService, type SchemaService } from '../database/service'
+import { DATABASE_METADATA } from './database-metadata'
 import type { TenantDatabaseTarget } from './platform-persistence-model'
 import type { TenantDatabaseResource as RegistryTenantDatabaseResource } from './tenant-databases'
 
@@ -48,20 +49,20 @@ export interface TenantDatabaseResource<
   readonly schemas: SchemaService
 }
 
-const TENANT_DATABASE_META = Object.freeze({
-  schema: 'public',
-  sharedTables: false,
-  namespace: 'nx',
-})
-
 const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<SQL, Adapter, Database, PostgresDatabase> = {
   sql: (connectionString) => new SQL(connectionString),
-  postgresql: (sql) => new Adapter(sql).setMeta(TENANT_DATABASE_META),
+  postgresql: (sql) => new Adapter(sql).setMeta(DATABASE_METADATA.tenant.postgresql),
   database: (adapter, cache) => new Database(adapter, cache),
   postgres: (sql) => createPostgresDatabase(sql),
   catalog: (postgres) => createSchemaCatalog(postgres),
   documentAdmin: (sql, cache, schema) =>
-    new Database(new Adapter(sql).setMeta({ ...TENANT_DATABASE_META, schema }), cache),
+    new Database(
+      new Adapter(sql).setMeta({
+        ...DATABASE_METADATA.tenant.postgresql,
+        schema,
+      }),
+      cache,
+    ),
   none: () => new None(),
 }
 
