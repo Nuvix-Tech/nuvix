@@ -79,8 +79,8 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D8  | Runtime                        | **Bun-only**, Node dropped                                                                                                                                                                                                                                                              | Unlocks all native APIs                                                                                       |
 | D9  | Templates                      | Keep Handlebars                                                                                                                                                                                                                                                                         | Template-syntax compat for users                                                                              |
 | D10 | API docs                       | `@elysia/openapi` (official 2.x plugin, Scalar UI)                                                                                                                                                                                                                                      | Spec at `/v2/openapi/json`, Scalar UI at `/v2/openapi`. Needs a small Bun patch (Phase 1 notes)               |
-| D11 | Nuvix infrastructure packages  | Bun/ESM-only sibling source checkouts linked from `@nuvix/server`: `file:../../../../database`, `file:../../../../cache`, `file:../../../../storage`, and `file:../../../../messaging`                                                                                                  | Build siblings before installing/validating `next`; see `docs/architecture/integrations.md`                   |
-| D12 | `@nuvix/pg`                    | Skip now; build locally in `next/packages/pg-meta`-adjacent work later                                                                                                                                                                                                                  | See §6                                                                                                        |
+| D11 | Nuvix infrastructure packages  | Bun/ESM-only sibling source checkouts linked from `@nuvix/server`: `file:../../../../database`, `file:../../../../pg-ts`, `file:../../../../cache`, `file:../../../../storage`, and `file:../../../../messaging`                                                                        | Build siblings before installing/validating `next`; see `docs/architecture/integrations.md`                   |
+| D12 | `@nuvix/pg`                    | Use Bun-native `@nuvix/pg@2.0.0` from the `pg-ts` sibling checkout                                                                                                                                                                                                                      | Infrastructure-only PostgreSQL tenant capability; immutable builders and caller-owned Bun SQL                 |
 | D13 | **API surface**                | **Full v2 API redesign**                                                                                                                                                                                                                                                                | Paths, payloads, pagination may all change; documented per-module first                                       |
 | D14 | **Errors**                     | **New unified error format**                                                                                                                                                                                                                                                            | Consistent codes, structured details, correct HTTP statuses                                                   |
 | D15 | **Code layout**                | Vertical slices (feature folders)                                                                                                                                                                                                                                                       | Co-located route/schema/service/test                                                                          |
@@ -92,7 +92,7 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D21 | **Images**                     | `Bun.Image` replaces `sharp`                                                                                                                                                                                                                                                            | Native, faster, zero deps. Linux serves JPEG/PNG/WebP/GIF/BMP. SVG→PNG still needs `@resvg/resvg-js` (open Q) |
 | D22 | **Scheduling**                 | `Bun.cron` replaces `@nestjs/schedule` / cron loops                                                                                                                                                                                                                                     | OS-level scheduled jobs, built-in                                                                             |
 | D23 | **Auth model**                 | Design auth module **token-ready**: short-lived access tokens (~1 min) + refresh tokens (Clerk-style) as target state; DB sessions may ship first but must not be baked into architecture                                                                                               | See Open Questions #5                                                                                         |
-| D24 | **Tenant/project engine**      | PostgreSQL 18 only via custom image [nuvix-dev/postgres](https://github.com/nuvix-dev/postgres) (auto-schema extensions)                                                                                                                                                                | Projects depend on PostgreSQL schemas/triggers; no SQLite tenant mode                                         |
+| D24 | **Tenant/project engine**      | PostgreSQL 18 only via deployable image `nuvix/postgres:18.1` ([source](https://github.com/nuvix-dev/postgres))                                                                                                                                                                         | Projects depend on PostgreSQL schemas/triggers; no SQLite tenant mode                                         |
 | D25 | **Schema/collections**         | Free to redesign collection/schema model during rewrite                                                                                                                                                                                                                                 | Old schema is reference, not contract                                                                         |
 | D26 | **API prefix**                 | `/v2`                                                                                                                                                                                                                                                                                   | All server routes mounted under `/v2`                                                                         |
 | D27 | **Pagination**                 | Cursor-based primary; offset allowed where cursors impractical. Every list response carries a `meta` object                                                                                                                                                                             | Meta shape defined in `_conventions.md`                                                                       |
@@ -166,27 +166,22 @@ long-running connections during AOT dry-run.
 
 ### Kept (justified)
 
-| Package                                                           | Why                                                                           |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `handlebars`                                                      | User template syntax compat (D9)                                              |
-| `bullmq`                                                          | Queue engine w/ Bun adapter (D4)                                              |
-| `maxmind`                                                         | GeoIP; no Bun native equivalent                                               |
-| `@resvg/resvg-js`                                                 | SVG→PNG rendering — `Bun.Image` has no SVG support (pending Open Question #7) |
-| `@nuvix/db`, `@nuvix/cache`, `@nuvix/storage`, `@nuvix/messaging` | Local sibling source packages; integrated through D37 boundaries              |
-| `@nuvix/audit`, `@nuvix/telemetry`                                | Nuvix libraries retained; versions selected when their phases begin           |
-| `elysia@next`, `@elysia/openapi`                                  | New foundation                                                                |
-
-### Deferred
-
-| Package     | Plan                                    |
-| ----------- | --------------------------------------- |
-| `@nuvix/pg` | Build locally inside `next/` later (§6) |
+| Package                                                                        | Why                                                                           |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `handlebars`                                                                   | User template syntax compat (D9)                                              |
+| `bullmq`                                                                       | Queue engine w/ Bun adapter (D4)                                              |
+| `maxmind`                                                                      | GeoIP; no Bun native equivalent                                               |
+| `@resvg/resvg-js`                                                              | SVG→PNG rendering — `Bun.Image` has no SVG support (pending Open Question #7) |
+| `@nuvix/db`, `@nuvix/pg`, `@nuvix/cache`, `@nuvix/storage`, `@nuvix/messaging` | Local sibling source packages; integrated through D37 boundaries              |
+| `@nuvix/audit`, `@nuvix/telemetry`                                             | Nuvix libraries retained; versions selected when their phases begin           |
+| `elysia@next`, `@elysia/openapi`                                               | New foundation                                                                |
 
 ### Final migrated package contracts
 
 | Package            | Integration contract                                                                                                                                                                          |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@nuvix/db`        | Infrastructure owns raw `Database` resources. Requests receive only role-scoped `Session` leases from `db.for(...roles)` and never receive `db.system()`. Generated types augment `Entities`. |
+| `@nuvix/pg`        | Infrastructure binds an immutable PostgreSQL facade to the tenant-owned Bun `SQL`. Services receive narrow catalog capabilities; routes never receive SQL or the facade.                      |
 | `@nuvix/cache`     | `Cache` is the application facade; `Memory`, `Redis`, and `None` are drivers. DB depends only on structural `CacheDriver` methods: `get`, `set`, `flushByTags`, `flush`.                      |
 | `@nuvix/storage`   | `Local` keeps its positional root; cloud device constructors use options objects. A central `Storage` registry owns devices. `StorageError.code` drives translation.                          |
 | `@nuvix/messaging` | Sends report every recipient's success/failure. `MessagingError.code` drives translation. `JWT.sign` is async for RS256/ES256 provider assertions; there is no `JWT.encode`.                  |
@@ -340,7 +335,8 @@ next/
 - [ ] Teams, Users slices — Teams core CRUD/preferences implemented; public
       memberships/logs deferred; Users core identity/profile administration
       implemented, auth/session/MFA/targets/usage/logs/deletion deferred
-- [ ] Schemas slice — minus `@nuvix/pg`-dependent endpoints (deferred list in `DEFERRED_ROUTES.md`)
+- [ ] Schemas CRUD slice — implementation in progress on `@nuvix/pg@2.0.0`;
+      collection, attribute, index, and document contracts remain separate
 
 ### Phase 4 — Account/Auth (highest risk)
 
@@ -367,10 +363,10 @@ next/
 - [ ] Platform slices (projects, keys, templates, auth-settings, metadata)
 - [ ] pg-meta introspection over `Bun.sql`
 
-### Phase 8 — Local `@nuvix/pg` replacement (D12)
+### Phase 8 — Advanced PostgreSQL data layer (D12)
 
-- [ ] Design `DataSource` surface from ACTUAL usage (query builder, joins, raw SQL, metadata, logs)
-- [ ] Implement on `Bun.sql` in `packages/` ; re-enable deferred endpoints
+- [x] Integrate Bun-native `@nuvix/pg@2.0.0` with caller-owned tenant SQL
+- [ ] Adapt advanced query, join, metadata, and log use cases to immutable builders
 - [ ] Full API surface audit vs `docs/api/*`
 
 ### Phase 9 — Tests & cutover
@@ -382,7 +378,7 @@ next/
 
 ---
 
-## 6. `@nuvix/pg` Deferral Strategy
+## 6. `@nuvix/pg` Integration Strategy
 
 Old usage sites (reference only):
 
@@ -394,13 +390,18 @@ schemas.service.ts (Raw SQL), database.service.ts     ← data services
 platform metadata.service.ts                           ← platform
 ```
 
-**Rules during Phases 1–7:**
+**Rules:**
 
-- No `@nuvix/pg` imports anywhere in `next/`.
-- Endpoints requiring it are excluded from their module's v2 contract and
-  tracked in `DEFERRED_ROUTES.md`.
-- `packages/utils` query builders define a minimal `DataSource` interface so
-  the future local implementation drops in without touching call sites.
+- `@nuvix/pg@2.0.0` is a Bun/ESM-only sibling dependency at
+  `file:../../../../pg-ts`; it requires Bun 1.4 and TypeScript 7 declarations.
+- The tenant resource creates one Bun `SQL` owner, shares it with `@nuvix/db`
+  and `@nuvix/pg`, and closes it exactly once. Neither package owns a borrowed
+  client.
+- `@nuvix/pg` stays inside PostgreSQL tenant infrastructure. Routes receive
+  narrow services, never SQL, the query facade, adapters, or lifecycle methods.
+- Builders are immutable and new code uses explicit `.execute()` boundaries.
+- Old mutable `DataSource`, `db.qb`, manual transaction, and AST code is
+  reference material only and must be adapted rather than copied.
 
 ---
 
@@ -420,7 +421,8 @@ v2 makes tenancy **structural**:
         ▼          ▼           ▼           ▼
    tenant DB A  tenant DB B  tenant DB C  …          ← one Postgres database
    (pg 18)      (pg 18)      (pg 18)                 per project, custom image
-                                                     nuvix-dev/postgres
+                                                     image: nuvix/postgres:18.1
+                                                     source: nuvix-dev/postgres
         ▲          ▲           ▲
         └──────────┴───────────┘
                     │ publishable project locator
@@ -449,8 +451,8 @@ v2 makes tenancy **structural**:
    `maxTenants` is an idle-resource cache target, not a hard cap on active
    tenants; in-use resources are never evicted to satisfy it.
 5. Schema/collection model inside a tenant DB is **redesigned freely** (D25) —
-   the pg-18 image's auto-schema features are the foundation; consult
-   github.com/nuvix-dev/postgres when designing.
+   the `nuvix/postgres:18.1` image's auto-schema features are the foundation;
+   consult the `nuvix-dev/postgres` source repository when designing.
 6. Platform-side features that depend on provisioning (billing, quotas,
    region placement) are **explicitly out of scope for now** — interfaces are
    stubbed so they can be added later without rework.
@@ -508,5 +510,5 @@ Tracked here so nothing gets decided silently:
       `reflect-metadata`, `rxjs`, `ioredis`, `pg`, `argon2`, `bcrypt`
 - [ ] Bun-only runtime; file/crypto/net operations use Bun natives
 - [ ] Fresh `bun test` suite green (unit + integration + e2e)
-- [ ] `DEFERRED_ROUTES.md` empty after Phase 8
+- [ ] Every deferred route has an explicit reviewed contract or removal decision
 - [ ] Root monorepo deleted after explicit final review

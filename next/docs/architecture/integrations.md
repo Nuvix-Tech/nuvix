@@ -1,8 +1,8 @@
 # Package Integration Architecture
 
-> Status: DATABASE FOUNDATION + DATABASE COMPOSITION BOUNDARY IMPLEMENTED — live wiring and feature slices pending
-> Scope: sibling `@nuvix/db`, `@nuvix/cache`, `@nuvix/storage`, and
-> `@nuvix/messaging` source packages
+> Status: DATABASE FOUNDATION + LIVE COMPOSITION IMPLEMENTED — schema CRUD integration in progress
+> Scope: sibling `@nuvix/db`, `@nuvix/pg`, `@nuvix/cache`, `@nuvix/storage`,
+> and `@nuvix/messaging` source packages
 
 One composition root owns package construction and lifecycle. Routes consume a
 request scope; services receive only the operations their use case needs.
@@ -27,7 +27,7 @@ Rules:
   database, cache, storage, or messaging clients.
 - Do not add wrappers that only rename package methods. A boundary must narrow
   capabilities, normalize results, select a provider/device, or translate errors.
-- All four packages are Bun/ESM-only. Keep package versions and source selection
+- All five packages are Bun/ESM-only. Keep package versions and source selection
   outside feature modules.
 
 ## Project database ownership
@@ -35,8 +35,9 @@ Rules:
 The platform registry (itself PostgreSQL or SQLite) stores safe project state
 and one owner-only PostgreSQL target per project. The process-owned composition
 decodes the publishable key, resolves the target, and lets the tenant registry
-construct/cache a PostgreSQL `Adapter`, cache driver, and `Database`. Project
-databases are provisioned from the custom `nuvix-dev/postgres` image.
+construct/cache a PostgreSQL `Adapter`, `@nuvix/pg` facade, cache driver, and
+`Database`. Project databases use the deployable `nuvix/postgres:18.1` image;
+its source repository is `nuvix-dev/postgres`.
 
 The interface and composition flow are implemented. Concrete platform
 persistence/query logic, HTTP project locator semantics, feature routes, and
@@ -64,19 +65,21 @@ there is no process-global project JWT secret.
 
 ## Lifetimes and ownership
 
-| Boundary                          | Lifetime                 | Owner            |
-| --------------------------------- | ------------------------ | ---------------- |
-| Database composition + factories  | process                  | server process   |
-| Messaging adapters/gateway        | process                  | composition root |
-| Storage devices/registry          | process                  | storage factory  |
-| Tenant adapter, cache, `Database` | tenant-resource lifetime | tenant registry  |
-| Role-scoped `Session` lease       | request lifetime         | request scope    |
-| System `Session`                  | internal-job lifetime    | internal job     |
+| Boundary                                                | Lifetime                 | Owner            |
+| ------------------------------------------------------- | ------------------------ | ---------------- |
+| Database composition + factories                        | process                  | server process   |
+| Messaging adapters/gateway                              | process                  | composition root |
+| Storage devices/registry                                | process                  | storage factory  |
+| Tenant Bun `SQL`, adapter, cache, `Database`, PG facade | tenant-resource lifetime | tenant registry  |
+| Role-scoped `Session` lease                             | request lifetime         | request scope    |
+| System `Session`                                        | internal-job lifetime    | internal job     |
 
 The registry remains metadata-neutral: its injected `create(projectId)` calls
 the metadata resolver and passes only the resolved connection value to the
-resource factory. Creating a `Session` does not create a pool; it shares the
-owning tenant resource's adapter and cache.
+resource factory. The factory creates one caller-owned Bun `SQL`, shares that
+same client with `@nuvix/db` and `@nuvix/pg`, and closes it exactly once. Creating
+a `Session` does not create a pool; it shares the owning tenant resource's
+adapter and cache.
 
 ### Request and owner capabilities
 
@@ -282,6 +285,7 @@ the checkout layout is required:
 ├── cache/
 ├── database/
 ├── messaging/
+├── pg-ts/
 ├── storage/
 └── nuvix/
     └── next/
@@ -293,6 +297,7 @@ first because it supplies the database cache contract:
 ```bash
 cd /home/ubuntu/cache && bun install --frozen-lockfile && bun run build
 cd /home/ubuntu/database && bun install --frozen-lockfile && bun run build
+cd /home/ubuntu/pg-ts && bun install --frozen-lockfile && bun run build
 cd /home/ubuntu/storage && bun install --frozen-lockfile && bun run build
 cd /home/ubuntu/messaging && bun install --frozen-lockfile && bun run build
 cd /home/ubuntu/nuvix/next && bun install
@@ -305,6 +310,7 @@ commit the resulting `bun.lock`, and then verify the frozen install:
 
 ```bash
 cd /home/ubuntu/database && bun run build
+cd /home/ubuntu/pg-ts && bun run build
 cd /home/ubuntu/nuvix/next && bun install
 cd /home/ubuntu/nuvix/next && bun install --frozen-lockfile
 ```
@@ -316,12 +322,18 @@ Do not use an `@nuvix/db` `patchedDependencies` entry, patch artifact, deep
 import, declaration shim, generated `dist` edit, or `node_modules` edit. The
 unrelated Elysia OpenAPI patch remains valid.
 
+`@nuvix/pg@2.0.0` requires Bun 1.4+, ESM, and TypeScript 7 declarations. Its
+facade is bound with `createDatabase(sql)` to an existing Bun `SQL`; builders
+are immutable and new calls use `.execute()`. It never creates or closes the
+tenant pool.
+
 Validate each sibling and the consumer workspace:
 
 ```bash
 cd /home/ubuntu/cache && bun run typecheck && bun test
 cd /home/ubuntu/database && bun run typecheck
 cd /home/ubuntu/database && bun test tests/doc.test.ts tests/auth.test.ts tests/generate-types.test.ts
+cd /home/ubuntu/pg-ts && bun run typecheck && bun test && bun run test:types
 cd /home/ubuntu/storage && bun run typecheck && bun test
 cd /home/ubuntu/messaging && bun run typecheck && bun test
 

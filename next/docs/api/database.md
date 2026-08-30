@@ -1,8 +1,9 @@
 # v2 Contract — Database (Schemas)
 
-> Status: PROPOSED — review before implementation
+> Status: IMPLEMENTATION IN PROGRESS — dependency, catalog, contracts, and document bootstrap implemented; routes pending
 > Depends on: `_conventions.md` (D19, D26–D28),
-> `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`
+> `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`,
+> `@nuvix/pg@2.0.0`
 > Old code (reference only): root `apps/server/src/database/`
 
 Schema lifecycle management for the three schema modes (**document**,
@@ -11,8 +12,9 @@ Collection, attribute, and document endpoints require a separate reviewed
 contract and remain out of scope; package stabilization does not add them here.
 
 This API operates on the project's PostgreSQL 18 database provisioned from the
-custom Nuvix PostgreSQL image. There is no SQLite project-database variant;
-SQLite support applies only to the platform/control-plane registry.
+`nuvix/postgres:18.1` image (source repository: `nuvix-dev/postgres`). There is
+no SQLite project-database variant; SQLite support applies only to the
+platform/control-plane registry.
 
 ## Auth posture
 
@@ -80,6 +82,10 @@ description)`; PostgreSQL DDL triggers handle policy scaffolding for
   `schemas` registry row is deleted again (rollback to avoid inconsistency)
   and the original error surfaces.
 
+The released image implements `system.create_schema` as an upsert and may
+change an existing schema's type. The service must therefore perform an
+explicit existence check and return `schema_already_exists` before invoking it.
+
 Errors:
 
 `code` is the machine-readable contract (see `_conventions.md` §3):
@@ -117,15 +123,17 @@ schema → `404 /errors/not-found`.
 
 ## Implementation notes
 
-- Resolve the tenant schema registry/data source and `Database` through the
-  central composition root. Package schema/collection administration stays on
-  `Database`; never call document CRUD on it.
+- Resolve the tenant schema catalog and `Database` through the central
+  composition root. `@nuvix/pg` owns catalog queries and fixed custom-image SQL;
+  `@nuvix/db` owns document metadata administration. Never call document CRUD
+  on the admin `Database`.
 - Keep metadata collection creation on the `Database` admin plane. If bootstrap
   also needs to insert seed documents, its privileged boundary obtains an
   explicit `db.system()` session that is never exposed to the request scope.
   Caller-owned document work uses `db.for(...roles)`.
 - Inject only the schema operations this service needs. Keep Elysia and package
-  construction outside the service.
+  construction outside the service. Routes must not receive Bun `SQL`, the
+  PostgreSQL facade, adapters, or privileged database sessions.
 - Activate generated collection typing once through `Entities` module
   augmentation when document contracts are added.
 - Route layer owns auth posture + scopes via hook objects; binary-free JSON
