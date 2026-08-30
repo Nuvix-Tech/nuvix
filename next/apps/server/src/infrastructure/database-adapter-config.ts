@@ -1,4 +1,4 @@
-export type DatabaseAdapterConfiguration =
+export type PlatformDatabaseConfiguration =
   | {
       readonly driver: 'postgresql'
       readonly connectionString: string
@@ -17,9 +17,9 @@ function normalized(value: unknown): value is string {
 }
 
 /** Validates adapter selection without reflecting sensitive input in errors. */
-export function validateDatabaseAdapterConfiguration(
-  configuration: DatabaseAdapterConfiguration,
-): DatabaseAdapterConfiguration {
+export function validatePlatformDatabaseConfiguration(
+  configuration: PlatformDatabaseConfiguration,
+): PlatformDatabaseConfiguration {
   if (configuration.driver === 'sqlite') {
     if (!normalized(configuration.filename)) throw new TypeError(INVALID_CONFIGURATION)
     return { driver: 'sqlite', filename: configuration.filename }

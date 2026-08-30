@@ -10,6 +10,10 @@ Schema lifecycle management for the three schema modes (**document**,
 Collection, attribute, and document endpoints require a separate reviewed
 contract and remain out of scope; package stabilization does not add them here.
 
+This API operates on the project's PostgreSQL 18 database provisioned from the
+custom Nuvix PostgreSQL image. There is no SQLite project-database variant;
+SQLite support applies only to the platform/control-plane registry.
+
 ## Auth posture
 
 Admin-only: `AuthType.ADMIN` sessions and API keys (`KEY`) are accepted;

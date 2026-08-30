@@ -92,7 +92,7 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D21 | **Images**                     | `Bun.Image` replaces `sharp`                                                                                                                                                                                                                                                            | Native, faster, zero deps. Linux serves JPEG/PNG/WebP/GIF/BMP. SVG→PNG still needs `@resvg/resvg-js` (open Q) |
 | D22 | **Scheduling**                 | `Bun.cron` replaces `@nestjs/schedule` / cron loops                                                                                                                                                                                                                                     | OS-level scheduled jobs, built-in                                                                             |
 | D23 | **Auth model**                 | Design auth module **token-ready**: short-lived access tokens (~1 min) + refresh tokens (Clerk-style) as target state; DB sessions may ship first but must not be baked into architecture                                                                                               | See Open Questions #5                                                                                         |
-| D24 | **Database engine**            | PostgreSQL 18 via custom image [nuvix-dev/postgres](https://github.com/nuvix-dev/postgres) (auto-schema extensions)                                                                                                                                                                     | Reference for schema/collection redesign                                                                      |
+| D24 | **Tenant/project engine**      | PostgreSQL 18 only via custom image [nuvix-dev/postgres](https://github.com/nuvix-dev/postgres) (auto-schema extensions)                                                                                                                                                                | Projects depend on PostgreSQL schemas/triggers; no SQLite tenant mode                                         |
 | D25 | **Schema/collections**         | Free to redesign collection/schema model during rewrite                                                                                                                                                                                                                                 | Old schema is reference, not contract                                                                         |
 | D26 | **API prefix**                 | `/v2`                                                                                                                                                                                                                                                                                   | All server routes mounted under `/v2`                                                                         |
 | D27 | **Pagination**                 | Cursor-based primary; offset allowed where cursors impractical. Every list response carries a `meta` object                                                                                                                                                                             | Meta shape defined in `_conventions.md`                                                                       |
@@ -107,6 +107,7 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D36 | **Avatar caching**             | Static avatars/QR: `Cache-Control: public, max-age=86400, immutable`; favicon proxy: `max-age=3600` NOT immutable (remote content changes); favicon gets SSRF guard (http(s) only, private-host literals rejected, image/* content-type required) — v1 had no cache header and no guard | QR `Content-Disposition: inline` by default, `attachment` with `download=true`                                |
 | D37 | **Package integration**        | One composition root; explicit DI through narrow interfaces; caller-scoped DB sessions; explicit system sessions; shared error translator, messaging gateway, and storage/cache factories                                                                                               | See `docs/architecture/integrations.md`; routes never construct or coordinate infrastructure                  |
 | D38 | **Project locator**            | `x-nuvix-publishable-key`: `pk_test_` / `pk_live_` + canonical base64url(`v1:<projectId>`). Public and reversible, never authorization. Resolve project → tenant DB → tenant-local auth                                                                                                 | `x-nuvix-key` remains the distinct secret API-key header                                                      |
+| D39 | **Platform database engine**   | PostgreSQL or SQLite through public `@nuvix/db`                                                                                                                                                                                                                                         | The control plane stores portable documents and does not require custom project PostgreSQL features           |
 
 ### Elysia 2 API notes (code against THESE from day one)
 
@@ -323,8 +324,8 @@ next/
 - [x] Define adapter-neutral platform project/target collections and compose the
       PostgreSQL/SQLite platform owner; platform credential bindings were removed
       because authentication is tenant-local
-- [x] Finish publishable-key project lookup and adapter-neutral tenant-target
-      resolution
+- [x] Finish publishable-key project lookup and PostgreSQL-only tenant-target
+      resolution through the PostgreSQL/SQLite-portable platform registry
 - [x] Reorder request composition: project → tenant → auth → caller session;
       one scope owns the tenant system-auth capability, caller session, and
       awaited lease release
@@ -439,7 +440,8 @@ v2 makes tenancy **structural**:
 3. The **server app never hardcodes tenants or derives connection metadata**.
    A public `x-nuvix-publishable-key` decodes to the public project ID and is
    only a locator. The process-owned boundary resolves the enabled project and
-   owner-only PostgreSQL/SQLite target before acquiring the tenant resource.
+   owner-only PostgreSQL target before acquiring the tenant resource. The
+   platform registry itself may use PostgreSQL or SQLite.
 4. The tenant registry owns one raw database resource per project, deduplicates
    concurrent creation, and supports role-scoped request sessions. Requests see
    only project resolution plus session acquisition; metadata, raw resources,
@@ -461,7 +463,8 @@ v2 makes tenancy **structural**:
    platform persistence has no credential-binding collection.
 9. HTTP project-scope composition, feature routes, and live-service startup
    wiring remain. Do not invent hardcoded tenant URLs or treat the publishable
-   key as authorization. Live cross-adapter integration coverage is not yet claimed.
+   key as authorization. Platform cross-adapter and custom-PostgreSQL tenant
+   integration coverage is not yet claimed.
 
 ---
 

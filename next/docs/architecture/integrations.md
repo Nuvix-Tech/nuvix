@@ -32,10 +32,11 @@ Rules:
 
 ## Project database ownership
 
-The platform registry stores safe project state and one owner-only PostgreSQL or
-SQLite target per project. The process-owned composition decodes the public
-publishable key, resolves an enabled project, resolves its target, and lets the
-tenant registry construct/cache the adapter, cache driver, and `Database`.
+The platform registry (itself PostgreSQL or SQLite) stores safe project state
+and one owner-only PostgreSQL target per project. The process-owned composition
+decodes the publishable key, resolves the target, and lets the tenant registry
+construct/cache a PostgreSQL `Adapter`, cache driver, and `Database`. Project
+databases are provisioned from the custom `nuvix-dev/postgres` image.
 
 The interface and composition flow are implemented. Concrete platform
 persistence/query logic, HTTP project locator semantics, feature routes, and

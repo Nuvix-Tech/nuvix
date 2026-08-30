@@ -37,7 +37,7 @@ const timestamp = (id: string, required: boolean) =>
 const index = (id: string, type: IndexType, attributes: readonly string[]) =>
   new Doc({ $id: id, key: id, type, attributes: [...attributes] })
 
-/** Portable tenant-auth schema; credentials stay inaccessible to caller sessions. */
+/** Tenant-auth schema expressed through public @nuvix/db APIs for PostgreSQL tenants. */
 export function createTenantAuthCollectionDefinitions(
   model: TenantAuthModel = TENANT_AUTH_MODEL,
 ): readonly TenantAuthCollectionDefinition[] {

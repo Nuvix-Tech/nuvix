@@ -2,14 +2,14 @@ import { type AppOptions, createApp, type NuvixApp } from '../app'
 import { createProjectLocator } from '../context/project-locator'
 import type { PublishableKeyEnvironment } from '../context/publishable-key'
 import { createTenantAuthResolver } from '../context/tenant-auth'
-import type { DatabaseAdapterConfiguration } from './database-adapter-config'
+import type { PlatformDatabaseConfiguration } from './database-adapter-config'
 import { createDatabaseComposition, type DatabaseRegistryOptions } from './database-composition'
 import { createPlatformDatabase } from './platform-database'
 import { createPlatformProjectLookup } from './platform-projects'
 import { createTenantTargetResolver } from './tenant-database-target'
 
 export interface PlatformRuntimeOptions {
-  readonly database: DatabaseAdapterConfiguration
+  readonly database: PlatformDatabaseConfiguration
   readonly publishableKeyEnvironment: PublishableKeyEnvironment
   readonly app?: AppOptions
   readonly tenantRegistry?: Pick<DatabaseRegistryOptions, 'idleMs' | 'maxTenants'>

@@ -25,6 +25,13 @@ therefore needs no PostgreSQL service. Both modes use `@nuvix/db`; optional
 features are enabled from adapter capabilities and may be unavailable on
 SQLite.
 
+## Tenant databases
+
+Every project database is PostgreSQL 18 provisioned from the custom
+`nuvix-dev/postgres` image. Tenant targets are platform-owned PostgreSQL
+connection metadata and are unrelated to `NUVIX_INTERNAL_DATABASE_DRIVER`.
+SQLite is supported for the platform/control plane only.
+
 ## Redis
 
 | Variable          | Required | Description                            |

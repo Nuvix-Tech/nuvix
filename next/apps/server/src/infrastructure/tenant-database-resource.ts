@@ -1,5 +1,5 @@
 import { type CacheDriver, None } from '@nuvix/cache'
-import { Adapter, Database, SQLiteAdapter } from '@nuvix/db'
+import { Adapter, Database } from '@nuvix/db'
 import type { TenantDatabaseTarget } from './platform-persistence-model'
 import type { TenantDatabaseResource as RegistryTenantDatabaseResource } from './tenant-databases'
 
@@ -9,25 +9,19 @@ export interface TenantDatabaseClient {
 
 export interface TenantDatabaseConstruction<AdapterResource, DatabaseResource> {
   readonly postgresql: (connectionString: string) => AdapterResource
-  readonly sqlite: (filename: string) => AdapterResource
   readonly database: (adapter: AdapterResource, cache: CacheDriver) => DatabaseResource
   readonly client: (adapter: AdapterResource) => TenantDatabaseClient
   readonly none: () => CacheDriver
 }
 
-type PublicAdapter = Adapter | SQLiteAdapter
-
-export interface TenantDatabaseResource<
-  DatabaseResource = Database,
-  AdapterResource = PublicAdapter,
-> extends RegistryTenantDatabaseResource<DatabaseResource> {
+export interface TenantDatabaseResource<DatabaseResource = Database, AdapterResource = Adapter>
+  extends RegistryTenantDatabaseResource<DatabaseResource> {
   readonly adapter: AdapterResource
   readonly cache: CacheDriver
 }
 
-const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<PublicAdapter, Database> = {
+const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<Adapter, Database> = {
   postgresql: (connectionString) => new Adapter(connectionString),
-  sqlite: (filename) => new SQLiteAdapter(filename),
   database: (adapter, cache) => new Database(adapter, cache),
   client: (adapter) => adapter.$client,
   none: () => new None(),
@@ -39,20 +33,24 @@ function normalized(value: unknown): value is string {
   )
 }
 
-function validate(target: TenantDatabaseTarget): TenantDatabaseTarget {
-  if (target.driver === 'sqlite') {
-    if (!normalized(target.filename)) throw new TypeError('Tenant database target is invalid')
-    return target
+function validate(value: unknown): TenantDatabaseTarget {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('driver' in value) ||
+    value.driver !== 'postgresql' ||
+    !('connectionString' in value) ||
+    !normalized(value.connectionString)
+  ) {
+    throw new TypeError('Tenant database target is invalid')
   }
-
-  if (!normalized(target.connectionString)) throw new TypeError('Tenant database target is invalid')
   try {
-    const protocol = new URL(target.connectionString).protocol
+    const protocol = new URL(value.connectionString).protocol
     if (protocol !== 'postgres:' && protocol !== 'postgresql:') throw new Error('protocol')
   } catch {
     throw new TypeError('Tenant database target is invalid')
   }
-  return target
+  return { driver: 'postgresql', connectionString: value.connectionString }
 }
 
 export function createTenantDatabaseResource(
@@ -74,10 +72,7 @@ export function createTenantDatabaseResource(
     unknown,
     unknown
   >
-  const adapter =
-    target.driver === 'postgresql'
-      ? dependencies.postgresql(target.connectionString)
-      : dependencies.sqlite(target.filename)
+  const adapter = dependencies.postgresql(target.connectionString)
   const selectedCache = cache ?? dependencies.none()
   const database = dependencies.database(adapter, selectedCache)
   const client = dependencies.client(adapter)

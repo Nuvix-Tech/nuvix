@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { type CacheDriver, None } from '@nuvix/cache'
-import { Adapter, Database, SQLiteAdapter } from '@nuvix/db'
+import { Adapter, Database } from '@nuvix/db'
 import type { TenantDatabaseTarget } from '../src/infrastructure/platform-persistence-model'
 import {
   createTenantDatabaseResource,
@@ -8,7 +8,6 @@ import {
 } from '../src/infrastructure/tenant-database-resource'
 
 interface FakeAdapter {
-  readonly driver: TenantDatabaseTarget['driver']
   readonly value: string
   readonly client: { disconnect(): Promise<void> }
 }
@@ -21,57 +20,41 @@ interface FakeDatabase {
 function construction(
   options: { readonly disconnect?: () => Promise<void>; readonly none?: () => CacheDriver } = {},
 ): TenantDatabaseConstruction<FakeAdapter, FakeDatabase> {
-  const adapter = (driver: FakeAdapter['driver'], value: string): FakeAdapter => ({
-    driver,
-    value,
-    client: { disconnect: options.disconnect ?? (async () => {}) },
-  })
   return {
-    postgresql: (value) => adapter('postgresql', value),
-    sqlite: (value) => adapter('sqlite', value),
-    database: (selected, cache) => ({ adapter: selected, cache }),
-    client: (selected) => selected.client,
+    postgresql: (value) => ({
+      value,
+      client: { disconnect: options.disconnect ?? (async () => {}) },
+    }),
+    database: (adapter, cache) => ({ adapter, cache }),
+    client: (adapter) => adapter.client,
     none: options.none ?? (() => new None()),
   }
 }
 
-describe('tenant database resource factory', () => {
-  test.each([
-    {
-      target: {
-        driver: 'postgresql',
-        connectionString: 'postgresql://tenant.example.test/resolved',
-      } as const,
-      value: 'postgresql://tenant.example.test/resolved',
-    },
-    {
-      target: { driver: 'sqlite', filename: './data/project.sqlite' } as const,
-      value: './data/project.sqlite',
-    },
-  ])('selects and owns the $target.driver resource', ({ target, value }) => {
+const TARGET: TenantDatabaseTarget = {
+  driver: 'postgresql',
+  connectionString: 'postgresql://tenant.example.test/project_a',
+}
+
+describe('PostgreSQL tenant database resource factory', () => {
+  test('constructs and owns the resolved PostgreSQL resource', () => {
     const cache = new None()
 
-    const resource = createTenantDatabaseResource(target, cache, construction())
+    const resource = createTenantDatabaseResource(TARGET, cache, construction())
 
-    expect(resource.adapter).toMatchObject({ driver: target.driver, value })
+    expect(resource.adapter.value).toBe(TARGET.connectionString)
     expect(resource.database.adapter).toBe(resource.adapter)
     expect(resource.database.cache).toBe(cache)
   })
 
-  test.each([
-    [
-      {
-        driver: 'postgresql',
-        connectionString: 'postgresql://user:password@127.0.0.1:5432/tenant',
-      } as const,
-      Adapter,
-    ],
-    [{ driver: 'sqlite', filename: ':memory:' } as const, SQLiteAdapter],
-  ])('constructs public @nuvix/db $target.driver resources', async (target, AdapterClass) => {
-    const resource = createTenantDatabaseResource(target)
+  test('constructs production resources through public @nuvix/db exports', async () => {
+    const resource = createTenantDatabaseResource({
+      driver: 'postgresql',
+      connectionString: 'postgresql://user:password@127.0.0.1:5432/tenant',
+    })
 
     try {
-      expect(resource.adapter).toBeInstanceOf(AdapterClass)
+      expect(resource.adapter).toBeInstanceOf(Adapter)
       expect(resource.database).toBeInstanceOf(Database)
       expect(resource.cache).toBeInstanceOf(None)
     } finally {
@@ -89,17 +72,9 @@ describe('tenant database resource factory', () => {
       },
     })
 
-    const generated = createTenantDatabaseResource(
-      { driver: 'sqlite', filename: ':memory:' },
-      undefined,
-      dependencies,
-    )
+    const generated = createTenantDatabaseResource(TARGET, undefined, dependencies)
     const suppliedCache = new None()
-    const supplied = createTenantDatabaseResource(
-      { driver: 'sqlite', filename: ':memory:' },
-      suppliedCache,
-      dependencies,
-    )
+    const supplied = createTenantDatabaseResource(TARGET, suppliedCache, dependencies)
 
     expect(generated.cache).toBe(defaultCache)
     expect(supplied.cache).toBe(suppliedCache)
@@ -113,9 +88,8 @@ describe('tenant database resource factory', () => {
       driver: 'postgresql',
       connectionString: ' postgresql://example.test/tenant',
     },
-    { driver: 'sqlite', filename: '' },
-    { driver: 'sqlite', filename: ' ./data/tenant.sqlite' },
-  ] as TenantDatabaseTarget[])('rejects invalid targets before construction', (target) => {
+    { driver: 'sqlite', filename: './secret/tenant.sqlite' },
+  ])('rejects unsupported or invalid targets before construction', (target) => {
     let constructions = 0
     const dependencies = construction()
     const guarded: TenantDatabaseConstruction<FakeAdapter, FakeDatabase> = {
@@ -124,15 +98,18 @@ describe('tenant database resource factory', () => {
         constructions += 1
         return dependencies.postgresql(value)
       },
-      sqlite: (value) => {
-        constructions += 1
-        return dependencies.sqlite(value)
-      },
     }
 
-    expect(() => createTenantDatabaseResource(target, undefined, guarded)).toThrow(
-      'Tenant database target is invalid',
-    )
+    const failure = (() => {
+      try {
+        createTenantDatabaseResource(target as unknown as TenantDatabaseTarget, undefined, guarded)
+      } catch (error) {
+        return error
+      }
+    })()
+
+    expect((failure as Error).message).toBe('Tenant database target is invalid')
+    expect(String(failure)).not.toContain('secret')
     expect(constructions).toBe(0)
   })
 
@@ -140,7 +117,7 @@ describe('tenant database resource factory', () => {
     const failure = new Error('disconnect failed')
     let disconnects = 0
     const resource = createTenantDatabaseResource(
-      { driver: 'sqlite', filename: ':memory:' },
+      TARGET,
       undefined,
       construction({
         disconnect: async () => {

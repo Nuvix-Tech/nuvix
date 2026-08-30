@@ -9,8 +9,8 @@ import {
   SQLiteAdapter,
 } from '@nuvix/db'
 import {
-  type DatabaseAdapterConfiguration,
-  validateDatabaseAdapterConfiguration,
+  type PlatformDatabaseConfiguration,
+  validatePlatformDatabaseConfiguration,
 } from './database-adapter-config'
 import {
   type DatabaseCapabilities,
@@ -131,7 +131,7 @@ export async function createPlatformDatabase<
   DatabaseResource = Database,
   SessionResource extends PlatformLookupSession = Session,
 >(
-  input: DatabaseAdapterConfiguration,
+  input: PlatformDatabaseConfiguration,
   options: PlatformDatabaseOptions = {},
   construction: PlatformDatabaseConstruction<
     AdapterResource,
@@ -143,7 +143,7 @@ export async function createPlatformDatabase<
     SessionResource
   >,
 ): Promise<PlatformDatabaseOwner> {
-  const configuration = validateDatabaseAdapterConfiguration(input)
+  const configuration = validatePlatformDatabaseConfiguration(input)
   let cache: OwnedCacheDriver | undefined
   let client: DatabaseClient | undefined
 

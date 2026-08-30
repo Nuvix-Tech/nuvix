@@ -6,8 +6,8 @@
 
 ## Context
 
-The v2 server needs a live internal `@nuvix/db` resource and per-tenant database
-resources backed by PostgreSQL or SQLite, while tests need an application that
+The v2 server needs a PostgreSQL-or-SQLite platform `@nuvix/db` resource and
+PostgreSQL-only per-tenant resources, while tests need an application that
 opens neither sockets nor databases. Feature code
 must be able to run an operation with a role-scoped database session without
 placing that session or its lease in global request context.
@@ -159,8 +159,8 @@ bypassing tenant isolation.
 
 - Explicit injection keeps the app deterministic and testable without live
   PostgreSQL, SQLite, or sockets.
-- Adapter-neutral composition allows the same portable application contract to
-  run in a full PostgreSQL deployment or a minimal SQLite deployment.
+- Platform composition supports PostgreSQL or SQLite. Tenant composition is
+  intentionally PostgreSQL-only because projects use the custom image.
 - Capability policy disables or rejects optional unsupported behavior without
   concrete adapter checks or silent fallback.
 - One process owner makes startup rollback and shutdown ordering unambiguous.
@@ -204,8 +204,9 @@ bypassing tenant isolation.
 
 ## Impact and exclusions
 
-**Positive**: tests can inject fakes; PostgreSQL and SQLite share one lifecycle;
-resource authority is auditable; cleanup and shutdown failures remain observable.
+**Positive**: tests can inject fakes; either platform adapter shares the same
+lifecycle with PostgreSQL tenants; resource authority is auditable; cleanup and
+shutdown failures remain observable.
 
 **Trade-off**: composition and failure aggregation require more explicit code.
 

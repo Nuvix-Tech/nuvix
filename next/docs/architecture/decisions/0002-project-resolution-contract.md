@@ -42,10 +42,10 @@ fails authentication there; it cannot redirect selection to B. A publishable
 key without another credential produces guest context and grants only what the
 selected tenant's guest roles and route policy permit.
 
-All platform and tenant persistence uses public `@nuvix/db` APIs. If the
-portable security-critical lookup cannot run, the request fails closed; no
-adapter-specific SQL fallback is allowed. Health and OpenAPI routes remain
-unscoped and require no publishable key.
+All persistence uses public `@nuvix/db` APIs. Project/target lookup runs on a
+PostgreSQL or SQLite platform database; the resolved target always identifies a
+PostgreSQL tenant. If a security-critical lookup cannot run, the request fails
+closed. Health and OpenAPI remain unscoped.
 
 ```http
 GET /v2/database/schemas HTTP/1.1
@@ -118,17 +118,17 @@ the contract to an unhelpful single error.
 
 ## Alternatives Considered
 
-| Alternative                                          | Benefit                  | Why rejected                                                                                                        |
-| ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Send a bare project ID                               | Simple routing           | Misses an environment/version marker and has a weaker public SDK contract.                                          |
-| Sign the publishable key                             | Detects tampering        | Adds secret rotation and false authority to a value that still must be treated as public input.                     |
-| Infer project from an auth credential                | One header               | Reverses the required order and prevents guest tenant selection.                                                    |
-| Store platform credential bindings                   | Central lookup           | Duplicates tenant auth state and makes authentication precede tenant selection.                                     |
-| Use raw SQL for registry or binding lookups          | Direct control           | Bypasses the adapter-neutral `@nuvix/db` boundary and prevents the same resolution contract from running on SQLite. |
-| Return distinct unknown and disabled errors          | Easier diagnosis         | Reveals project existence and operational state.                                                                    |
-| Return one error for every resolution failure        | Maximum privacy          | Prevents clients from correcting missing or malformed input and obscures authenticated authorization failures.      |
-| Resolve from hostname or custom domain               | Header-free client calls | Adds DNS, certificate, proxy, and domain-ownership concerns outside this phase.                                     |
-| Expose registry or database capabilities to handlers | Flexible implementation  | Breaks least privilege and risks metadata or cross-tenant access.                                                   |
+| Alternative                                          | Benefit                  | Why rejected                                                                                                   |
+| ---------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Send a bare project ID                               | Simple routing           | Misses an environment/version marker and has a weaker public SDK contract.                                     |
+| Sign the publishable key                             | Detects tampering        | Adds secret rotation and false authority to a value that still must be treated as public input.                |
+| Infer project from an auth credential                | One header               | Reverses the required order and prevents guest tenant selection.                                               |
+| Store platform credential bindings                   | Central lookup           | Duplicates tenant auth state and makes authentication precede tenant selection.                                |
+| Use raw SQL for registry lookups                     | Direct control           | Bypasses `@nuvix/db` and prevents platform resolution from running on SQLite.                                  |
+| Return distinct unknown and disabled errors          | Easier diagnosis         | Reveals project existence and operational state.                                                               |
+| Return one error for every resolution failure        | Maximum privacy          | Prevents clients from correcting missing or malformed input and obscures authenticated authorization failures. |
+| Resolve from hostname or custom domain               | Header-free client calls | Adds DNS, certificate, proxy, and domain-ownership concerns outside this phase.                                |
+| Expose registry or database capabilities to handlers | Flexible implementation  | Breaks least privilege and risks metadata or cross-tenant access.                                              |
 
 ## Impact
 

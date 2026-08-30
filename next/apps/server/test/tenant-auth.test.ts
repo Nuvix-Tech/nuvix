@@ -230,7 +230,7 @@ describe('tenant-local authentication', () => {
 
   test('turns tenant persistence failures into a redacted availability error', async () => {
     const state = await authHarness({
-      persistenceError: new Error('sqlite ./secret/tenant.sqlite failed'),
+      persistenceError: new Error('postgresql://user:secret@example.test/tenant failed'),
     })
 
     const failure = await resolver

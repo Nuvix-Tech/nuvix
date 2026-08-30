@@ -8,7 +8,7 @@ import type { TenantDatabaseTarget } from '../src/infrastructure/platform-persis
 function harness() {
   const events: string[] = []
   const targets = new Map<string, TenantDatabaseTarget>([
-    ['project_a', { driver: 'sqlite', filename: 'project_a.sqlite' }],
+    ['project_a', { driver: 'postgresql', connectionString: 'postgresql://example.test/a' }],
     ['project_b', { driver: 'postgresql', connectionString: 'postgresql://example.test/b' }],
   ])
   const locator: ProjectLocator = {
@@ -43,7 +43,7 @@ function harness() {
     },
     tenantAuth,
     createResource: async (target) => {
-      const projectId = target.driver === 'sqlite' ? 'project_a' : 'project_b'
+      const projectId = target.connectionString.endsWith('/a') ? 'project_a' : 'project_b'
       events.push(`create:${projectId}`)
       return {
         database: {

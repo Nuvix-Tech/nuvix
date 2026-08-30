@@ -6,9 +6,11 @@
 
 ## Context
 
-Nuvix must support both a full PostgreSQL deployment and a minimal SQLite
-deployment. Most platform and tenant behavior is portable, while a small set of
-features depends on capabilities that not every database adapter provides.
+The platform/control plane supports PostgreSQL or SQLite because it stores
+portable project and target documents through `@nuvix/db`. Project databases
+are different: every tenant uses PostgreSQL 18 from the custom
+`nuvix-dev/postgres` image and depends on its schema, trigger, and metadata
+features.
 
 An earlier implementation introduced raw Bun SQL repositories, a PostgreSQL-only
 platform schema, bespoke SQL migrations, and a one-to-one connection table. A
@@ -22,13 +24,13 @@ legacy collection structure is superseded by this amendment.
 
 ## Decision
 
-Every platform and tenant persistence path uses the public `@nuvix/db` APIs,
-including `Adapter` or `SQLiteAdapter`, `Database`, `Session`, `Doc`, and
-`Query`. Application repositories never receive a Bun SQL client, author SQL,
-or branch into a direct database-driver path.
+Every persistence path uses public `@nuvix/db` APIs. Platform composition may
+select `Adapter` or `SQLiteAdapter`; tenant composition always constructs the
+PostgreSQL `Adapter`. Application repositories never receive a Bun SQL client
+or author SQL directly.
 
-The process owner selects and configures an adapter from validated deployment
-configuration:
+The process owner selects and configures the **platform** adapter from validated
+deployment configuration:
 
 ```ts
 const adapter =
@@ -59,13 +61,12 @@ The adapters may generate dialect-specific SQL internally; Nuvix application
 packages do not own raw SQL repositories, dialect-specific platform tables, or
 bespoke SQL migration runners.
 
-### Portable feature contract
+### Platform portability and tenant contract
 
-The portable application baseline must run against PostgreSQL `Adapter` and
-`SQLiteAdapter`. Optional behavior is enabled from common adapter capability
-and limit fields, such as `$supportForFulltextIndex`, `$supportForUpdateLock`,
-`$supportForIndexArray`, `$supportForJSONOverlaps`, `$supportForTimeouts`,
-`$supportForBatchOperations`, and `$limitFor*` values.
+Platform project/target storage runs against PostgreSQL `Adapter` or
+`SQLiteAdapter`. Optional platform behavior is enabled from common adapter
+capabilities and limits. Tenant targets are strictly PostgreSQL URLs;
+SQLite-shaped tenant records fail closed before resource construction.
 
 Feature policy checks capabilities, not concrete adapter identity. Code must
 not use `instanceof SQLiteAdapter`, adapter names, URL schemes, or equivalent
@@ -73,9 +74,9 @@ dialect checks to decide whether an application feature is available.
 
 When a required capability is absent, optional routes or controls are disabled
 or return a stable unsupported-feature result. They must not silently weaken
-authorization, isolation, durability, or validation. Ordinary document CRUD,
-project resolution, tenant-target resolution, tenant-local authentication, and
-request-scoped sessions remain available on the portable baseline.
+authorization, isolation, durability, or validation. Platform project and
+target resolution remain portable; tenant auth and feature operations run on
+the custom PostgreSQL project database.
 
 ## Security invariants
 
@@ -93,10 +94,9 @@ request-scoped sessions remain available on the portable baseline.
 
 ## Rationale
 
-- `@nuvix/db` provides one document and schema contract over PostgreSQL and
-  SQLite while keeping dialect details in adapters.
-- A minimal installation can avoid a PostgreSQL service without losing the
-  portable Nuvix core.
+- `@nuvix/db` keeps platform storage portable across PostgreSQL and SQLite.
+- A control-plane-only installation can avoid a platform PostgreSQL service.
+  Serving a project still requires its PostgreSQL tenant.
 - Capability-based policy describes what an adapter can do and continues to
   work when more adapters are added.
 - A v2-specific collection model can evolve without coupling persistence to one
@@ -117,15 +117,14 @@ request-scoped sessions remain available on the portable baseline.
 
 ## Consequences
 
-Platform contracts, collection definitions, indexes, and required queries must
-fit the portable capability baseline. Cross-adapter tests run the same contract
-against real PostgreSQL and SQLite fixtures. Tests also verify stable disabled
-or unsupported behavior for optional features.
+Platform contracts and lookups run against PostgreSQL and SQLite fixtures.
+Tenant auth and project features run against the custom PostgreSQL image. The
+supported matrix is PostgreSQL-platform/PostgreSQL-tenant and
+SQLite-platform/PostgreSQL-tenant.
 
-Deployment configuration selects the platform adapter and may select a
-different adapter per tenant. Resource ownership and request capability shape
-do not change with the selected adapter. Legacy data import and PostgreSQL-only
-enhancements remain explicit compatibility or optional-feature work.
+Deployment configuration selects the platform adapter. Tenant provisioning
+always records a PostgreSQL target; there is no tenant adapter choice. Resource
+ownership and request capability shape remain unchanged.
 
 ## Scope and non-goals
 

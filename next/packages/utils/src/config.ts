@@ -7,7 +7,7 @@
  */
 
 export type NuvixEnv = 'development' | 'production' | 'test'
-export type DatabaseDriver = 'postgresql' | 'sqlite'
+export type PlatformDatabaseDriver = 'postgresql' | 'sqlite'
 
 function required(name: string, fallback?: string): string {
   const value = Bun.env[name] ?? fallback
@@ -25,7 +25,7 @@ function parsePort(raw: string): number {
   return port
 }
 
-function databaseDriver(): DatabaseDriver {
+function platformDatabaseDriver(): PlatformDatabaseDriver {
   const value =
     Bun.env.NUVIX_INTERNAL_DATABASE_DRIVER ??
     (Bun.env.NUVIX_INTERNAL_DATABASE_URL ? 'postgresql' : 'sqlite')
@@ -39,7 +39,7 @@ const env = required('NUVIX_ENV', 'development')
 if (env !== 'development' && env !== 'production' && env !== 'test') {
   throw new Error(`NUVIX_ENV must be development | production | test, got: ${env}`)
 }
-const internalDatabaseDriver = databaseDriver()
+const internalDatabaseDriver = platformDatabaseDriver()
 
 export const config = {
   /** `development` | `production` | `test` */

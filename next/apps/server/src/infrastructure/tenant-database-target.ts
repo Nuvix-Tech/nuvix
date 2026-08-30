@@ -1,5 +1,4 @@
 import { type Doc, Query } from '@nuvix/db'
-import { validateDatabaseAdapterConfiguration } from './database-adapter-config'
 import {
   PLATFORM_PERSISTENCE_MODEL,
   type PlatformPersistenceModel,
@@ -45,15 +44,26 @@ function target(value: unknown): TenantDatabaseTarget {
   const input = record(value)
   if (!input) throw new TenantTargetResolutionError()
 
-  const expected =
-    input.driver === 'sqlite' ? ['driver', 'filename'] : ['connectionString', 'driver']
-  if (Object.keys(input).toSorted().join() !== expected.join()) {
+  if (
+    input.driver !== 'postgresql' ||
+    Object.keys(input).toSorted().join() !== 'connectionString,driver' ||
+    typeof input.connectionString !== 'string' ||
+    input.connectionString.length === 0 ||
+    input.connectionString.trim() !== input.connectionString ||
+    input.connectionString.includes('\0')
+  ) {
     throw new TenantTargetResolutionError()
   }
 
   try {
-    const validated = validateDatabaseAdapterConfiguration(input as never)
-    return Object.freeze(validated)
+    const protocol = new URL(input.connectionString).protocol
+    if (protocol !== 'postgres:' && protocol !== 'postgresql:') {
+      throw new TenantTargetResolutionError()
+    }
+    return Object.freeze({
+      driver: 'postgresql',
+      connectionString: input.connectionString,
+    })
   } catch {
     throw new TenantTargetResolutionError()
   }

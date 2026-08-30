@@ -24,13 +24,11 @@ function harness(result: Doc[] | Error) {
 const document = (projectId: unknown, target: unknown) => new Doc({ projectId, target })
 
 describe('tenant database target resolver', () => {
-  test.each([
-    {
+  test('resolves and freezes a validated PostgreSQL target', async () => {
+    const target = {
       driver: 'postgresql',
       connectionString: 'postgresql://user:secret@example.test/tenant',
-    },
-    { driver: 'sqlite', filename: './data/project_a.sqlite' },
-  ] as const)('resolves and freezes a validated $driver target', async (target) => {
+    } as const
     const state = harness([document('project_a', target)])
 
     const resolved = await createTenantTargetResolver(state.documents).resolve('project_a')
@@ -55,15 +53,18 @@ describe('tenant database target resolver', () => {
       new Doc({
         project: 'project_a',
         configuration: JSON.stringify({
-          driver: 'sqlite',
-          filename: ':memory:',
+          driver: 'postgresql',
+          connectionString: 'postgresql://example.test/project_a',
         }),
       }),
     ])
 
     const resolved = await createTenantTargetResolver(state.documents, model).resolve('project_a')
 
-    expect(resolved).toEqual({ driver: 'sqlite', filename: ':memory:' })
+    expect(resolved).toEqual({
+      driver: 'postgresql',
+      connectionString: 'postgresql://example.test/project_a',
+    })
     expect(state.calls[0]?.collection).toBe('locations')
     expect(state.calls[0]?.queries.map((query) => query.getMethod())).toEqual([
       QueryType.Equal,
@@ -78,8 +79,14 @@ describe('tenant database target resolver', () => {
     [
       'duplicate',
       [
-        document('project_a', { driver: 'sqlite', filename: 'one.sqlite' }),
-        document('project_a', { driver: 'sqlite', filename: 'two.sqlite' }),
+        document('project_a', {
+          driver: 'postgresql',
+          connectionString: 'postgresql://example.test/one',
+        }),
+        document('project_a', {
+          driver: 'postgresql',
+          connectionString: 'postgresql://example.test/two',
+        }),
       ],
     ],
   ] as const)('fails closed for a %s target record', async (_case, records) => {
@@ -91,12 +98,15 @@ describe('tenant database target resolver', () => {
   })
 
   test.each([
-    document('other_project', { driver: 'sqlite', filename: ':memory:' }),
+    document('other_project', {
+      driver: 'postgresql',
+      connectionString: 'postgresql://example.test/other',
+    }),
     document('project_a', {
       driver: 'postgresql',
       connectionString: 'https://example.test',
     }),
-    document('project_a', { driver: 'sqlite', filename: ' ./secret.sqlite' }),
+    document('project_a', { driver: 'sqlite', filename: './secret.sqlite' }),
     document('project_a', {
       driver: 'sqlite',
       filename: ':memory:',

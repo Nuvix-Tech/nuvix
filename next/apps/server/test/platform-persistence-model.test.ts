@@ -46,21 +46,18 @@ function schemaHarness(capabilities: PlatformSchemaCapabilities) {
 }
 
 describe('platform persistence model', () => {
-  test('keeps safe project data separate from owner-only PostgreSQL and SQLite targets', () => {
-    const targets: TenantDatabaseTarget[] = [
-      {
-        driver: 'postgresql',
-        connectionString: 'postgresql://example.test/platform',
-      },
-      { driver: 'sqlite', filename: './data/nuvix.sqlite' },
-    ]
+  test('keeps safe project data separate from the owner-only PostgreSQL target', () => {
+    const target: TenantDatabaseTarget = {
+      driver: 'postgresql',
+      connectionString: 'postgresql://example.test/project',
+    }
 
     expect(PLATFORM_PERSISTENCE_MODEL.collections).toEqual({
       projects: 'platform_projects',
       tenantTargets: 'platform_tenant_targets',
     })
     expect(JSON.stringify(PLATFORM_PERSISTENCE_MODEL)).not.toContain('credential')
-    expect(targets.map(({ driver }) => driver)).toEqual(['postgresql', 'sqlite'])
+    expect(target.driver).toBe('postgresql')
   })
 
   test('allows a different module-owned collection and field mapping', () => {

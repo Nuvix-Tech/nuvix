@@ -5,15 +5,10 @@ export interface PlatformProject {
 }
 
 /** Process-owner-only configuration used to construct a tenant database resource. */
-export type TenantDatabaseTarget =
-  | {
-      readonly driver: 'postgresql'
-      readonly connectionString: string
-    }
-  | {
-      readonly driver: 'sqlite'
-      readonly filename: string
-    }
+export type TenantDatabaseTarget = {
+  readonly driver: 'postgresql'
+  readonly connectionString: string
+}
 
 export interface PlatformTenantTarget {
   readonly projectId: string
