@@ -143,3 +143,24 @@ schema → `404 /errors/not-found`.
 - Smoke cases to add: create/list/get/patch/delete round-trip requires a live
   Postgres — keep harness cases limited to auth-posture rejections (403 for
   guest) until integration fixtures exist.
+
+## Live PostgreSQL 18 verification
+
+Run the integration suite only against the exact deployable image:
+
+```bash
+docker run --rm -d --name nuvix-schema-crud-test \
+  -e POSTGRES_PASSWORD=test_admin \
+  -p 127.0.0.1:55432:5432 \
+  nuvix/postgres:18.1
+
+until docker exec nuvix-schema-crud-test pg_isready -U nuvix_admin -d postgres; do sleep 1; done
+
+NUVIX_SCHEMA_TEST_URL=postgresql://nuvix_admin:test_admin@127.0.0.1:55432/postgres \
+  bun test apps/server/test/integration/schema-crud.test.ts
+
+docker rm -f nuvix-schema-crud-test
+```
+
+Without `NUVIX_SCHEMA_TEST_URL`, the live suite is skipped; unit and fake-backed
+route tests do not claim PostgreSQL integration coverage.

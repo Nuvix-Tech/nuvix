@@ -48,13 +48,20 @@ export interface TenantDatabaseResource<
   readonly schemas: SchemaService
 }
 
+const TENANT_DATABASE_META = Object.freeze({
+  schema: 'public',
+  sharedTables: false,
+  namespace: 'nx',
+})
+
 const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<SQL, Adapter, Database, PostgresDatabase> = {
   sql: (connectionString) => new SQL(connectionString),
-  postgresql: (sql) => new Adapter(sql),
+  postgresql: (sql) => new Adapter(sql).setMeta(TENANT_DATABASE_META),
   database: (adapter, cache) => new Database(adapter, cache),
   postgres: (sql) => createPostgresDatabase(sql),
   catalog: (postgres) => createSchemaCatalog(postgres),
-  documentAdmin: (sql, cache, schema) => new Database(new Adapter(sql).setMeta({ schema }), cache),
+  documentAdmin: (sql, cache, schema) =>
+    new Database(new Adapter(sql).setMeta({ ...TENANT_DATABASE_META, schema }), cache),
   none: () => new None(),
 }
 

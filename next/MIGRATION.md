@@ -335,8 +335,8 @@ next/
 - [ ] Teams, Users slices — Teams core CRUD/preferences implemented; public
       memberships/logs deferred; Users core identity/profile administration
       implemented, auth/session/MFA/targets/usage/logs/deletion deferred
-- [ ] Schemas CRUD slice — implementation in progress on `@nuvix/pg@2.0.0`;
-      collection, attribute, index, and document contracts remain separate
+- [x] Schemas CRUD slice — implemented on `@nuvix/pg@2.0.0`; collection,
+      attribute, index, and document contracts remain separate
 
 ### Phase 4 — Account/Auth (highest risk)
 
