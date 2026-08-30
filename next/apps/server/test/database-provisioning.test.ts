@@ -1,11 +1,19 @@
 import { describe, expect, test } from 'bun:test'
-import { Database, DuplicateException } from '@nuvix/db'
+import { Database, DuplicateException, type Filter } from '@nuvix/db'
 import { DATABASE_METADATA, type DatabaseMetadata } from '../src/infrastructure/database-metadata'
 import {
-  type DatabaseProvisioningAdmin,
+  type PlatformDatabaseProvisioningAdmin,
   provisionPlatformDatabase,
   provisionTenantDatabase,
 } from '../src/infrastructure/database-provisioning'
+import { createTenantTargetFilters } from '../src/infrastructure/tenant-target-codec'
+
+const TENANT_TARGET_FILTERS = await createTenantTargetFilters(
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+)
+const PLATFORM_PROVISIONING_OPTIONS = {
+  tenantTargetFilters: TENANT_TARGET_FILTERS,
+} as const
 
 const CAPABILITIES = {
   $limitForAttributes: 1_600,
@@ -26,6 +34,7 @@ function harness(
 ) {
   const events: string[] = []
   const existing = new Set<string>()
+  const filters: Record<string, Filter> = {}
   const metadata: DatabaseMetadata[] = []
   const database = {
     create: async () => {
@@ -47,12 +56,17 @@ function harness(
       return collection === undefined || existing.has(collection)
     },
     getAdapter: () => CAPABILITIES,
+    getFilters: () => ({ ...filters }),
+    addFilter: (name: string, filter: Filter) => {
+      if (filters[name]) throw new Error(`duplicate filter: ${name}`)
+      filters[name] = filter
+    },
     setMeta: (value: DatabaseMetadata) => {
       metadata.push(value)
     },
-  } as unknown as DatabaseProvisioningAdmin
+  } as unknown as PlatformDatabaseProvisioningAdmin
 
-  return { database, events, existing, metadata }
+  return { database, events, existing, filters, metadata }
 }
 
 describe('database metadata', () => {
@@ -87,7 +101,7 @@ describe('database provisioning', () => {
   test('initializes base metadata before fresh platform collections', async () => {
     const state = harness()
 
-    await provisionPlatformDatabase(state.database, 'postgresql')
+    await provisionPlatformDatabase(state.database, 'postgresql', PLATFORM_PROVISIONING_OPTIONS)
 
     expect(state.events).toEqual([
       'exists:_metadata',
@@ -97,6 +111,8 @@ describe('database provisioning', () => {
       'exists:platform_tenant_targets',
       'create:platform_tenant_targets',
     ])
+    expect(state.filters.json).toBe(TENANT_TARGET_FILTERS.json)
+    expect(state.filters.encrypt).toBe(TENANT_TARGET_FILTERS.encrypt)
     expect(state.metadata).toEqual([DATABASE_METADATA.platform.postgresql])
   })
 
@@ -125,7 +141,8 @@ describe('database provisioning', () => {
   test.each([
     [
       'platform',
-      (database: DatabaseProvisioningAdmin) => provisionPlatformDatabase(database, 'sqlite'),
+      (database: PlatformDatabaseProvisioningAdmin) =>
+        provisionPlatformDatabase(database, 'sqlite', PLATFORM_PROVISIONING_OPTIONS),
     ],
     ['tenant', provisionTenantDatabase],
   ] as const)('does not recreate initialized %s database state', async (_name, provision) => {
@@ -147,7 +164,7 @@ describe('database provisioning', () => {
       metadataVisibleAfterCreateFailure: true,
     })
 
-    await provisionPlatformDatabase(state.database, 'postgresql')
+    await provisionPlatformDatabase(state.database, 'postgresql', PLATFORM_PROVISIONING_OPTIONS)
 
     expect(state.events.slice(0, 3)).toEqual([
       'exists:_metadata',
@@ -169,7 +186,9 @@ describe('database provisioning', () => {
     const failure = new DuplicateException('unrelated duplicate')
     const state = harness({ createFailure: failure })
 
-    await expect(provisionPlatformDatabase(state.database, 'postgresql')).rejects.toBe(failure)
+    await expect(
+      provisionPlatformDatabase(state.database, 'postgresql', PLATFORM_PROVISIONING_OPTIONS),
+    ).rejects.toBe(failure)
     expect(state.events).toEqual(['exists:_metadata', 'create:metadata', 'exists:_metadata'])
   })
 

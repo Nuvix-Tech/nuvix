@@ -7,9 +7,11 @@ import { createDatabaseComposition, type DatabaseRegistryOptions } from './datab
 import { createPlatformDatabase } from './platform-database'
 import { createPlatformProjectLookup } from './platform-projects'
 import { createTenantTargetResolver } from './tenant-database-target'
+import type { TenantTargetFilters } from './tenant-target-codec'
 
 export interface PlatformRuntimeOptions {
   readonly database: PlatformDatabaseConfiguration
+  readonly tenantTargetFilters: TenantTargetFilters
   readonly publishableKeyEnvironment: PublishableKeyEnvironment
   readonly app?: AppOptions
   readonly tenantRegistry?: Pick<DatabaseRegistryOptions, 'idleMs' | 'maxTenants'>
@@ -35,7 +37,9 @@ async function closeInOrder(
 export async function createPlatformRuntime(
   options: PlatformRuntimeOptions,
 ): Promise<PlatformRuntime> {
-  const platform = await createPlatformDatabase(options.database)
+  const platform = await createPlatformDatabase(options.database, {
+    tenantTargetFilters: options.tenantTargetFilters,
+  })
   let database: ReturnType<typeof createDatabaseComposition> | undefined
 
   try {

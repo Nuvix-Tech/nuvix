@@ -1,15 +1,45 @@
-import { Database, DuplicateException } from '@nuvix/db'
+import { Database, DuplicateException, type Filter } from '@nuvix/db'
 import { setupTenantAuthSchema } from '../context/tenant-auth-schema'
 import { setupTeamSchema } from '../teams/schema'
 import { DATABASE_METADATA } from './database-metadata'
 import { setupPlatformSchema } from './platform-schema'
+import {
+  TenantTargetCodecConfigurationError,
+  type TenantTargetFilters,
+} from './tenant-target-codec'
 
 export type DatabaseProvisioningAdmin = Pick<
   Database,
   'create' | 'createCollection' | 'exists' | 'getAdapter' | 'setMeta'
 >
 
+export type PlatformDatabaseProvisioningAdmin = DatabaseProvisioningAdmin &
+  Pick<Database, 'addFilter' | 'getFilters'>
+
+export interface PlatformDatabaseProvisioningOptions {
+  readonly tenantTargetFilters: TenantTargetFilters
+}
+
 export type PlatformDatabaseDriver = keyof typeof DATABASE_METADATA.platform
+
+function addFilter(
+  database: PlatformDatabaseProvisioningAdmin,
+  name: 'json' | 'encrypt',
+  filter: Filter,
+): void {
+  const configured = database.getFilters()[name]
+  if (configured === filter) return
+  if (configured) throw new TenantTargetCodecConfigurationError()
+  database.addFilter(name, filter)
+}
+
+function configureTenantTargetFilters(
+  database: PlatformDatabaseProvisioningAdmin,
+  filters: TenantTargetFilters,
+): void {
+  addFilter(database, 'json', filters.json)
+  addFilter(database, 'encrypt', filters.encrypt)
+}
 
 async function setupMetadata(database: DatabaseProvisioningAdmin): Promise<void> {
   if (await database.exists(undefined, Database.METADATA)) return
@@ -27,9 +57,11 @@ async function setupMetadata(database: DatabaseProvisioningAdmin): Promise<void>
 
 /** Explicit owner-only setup for an adapter-neutral platform database. */
 export async function provisionPlatformDatabase(
-  database: DatabaseProvisioningAdmin,
+  database: PlatformDatabaseProvisioningAdmin,
   driver: PlatformDatabaseDriver,
+  options: PlatformDatabaseProvisioningOptions,
 ): Promise<void> {
+  configureTenantTargetFilters(database, options.tenantTargetFilters)
   database.setMeta(DATABASE_METADATA.platform[driver])
   await setupMetadata(database)
   await setupPlatformSchema(database)

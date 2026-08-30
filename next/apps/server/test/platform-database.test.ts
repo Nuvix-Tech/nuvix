@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { None } from '@nuvix/cache'
-import type { DatabaseOptions, Doc } from '@nuvix/db'
+import type { Doc } from '@nuvix/db'
 import {
   type DatabaseCapabilitySource,
   requireDatabaseFeature,
@@ -12,6 +12,14 @@ import {
   type PlatformDatabaseConstruction,
   type PlatformLookupSession,
 } from '../src/infrastructure/platform-database'
+import {
+  createTenantTargetFilters,
+  type TenantTargetFilters,
+} from '../src/infrastructure/tenant-target-codec'
+
+const TENANT_TARGET_FILTERS = await createTenantTargetFilters(
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+)
 
 interface FakeAdapter extends DatabaseCapabilitySource {
   readonly selected: 'postgresql' | 'sqlite'
@@ -22,7 +30,7 @@ interface FakeAdapter extends DatabaseCapabilitySource {
 interface FakeDatabase {
   readonly adapter: FakeAdapter
   readonly cache: OwnedCacheDriver
-  readonly filters: DatabaseOptions['filters']
+  readonly filters: TenantTargetFilters
 }
 
 const capabilities = (
@@ -49,7 +57,11 @@ function harness(
   options: {
     readonly capabilityOverrides?: Partial<DatabaseCapabilitySource>
     readonly disconnect?: () => Promise<void>
-    readonly database?: () => FakeDatabase
+    readonly database?: (
+      adapter: FakeAdapter,
+      cache: OwnedCacheDriver,
+      filters: TenantTargetFilters,
+    ) => FakeDatabase
     readonly cache?: OwnedCacheDriver
     readonly session?: PlatformLookupSession
   } = {},
@@ -84,7 +96,11 @@ function harness(
     },
     cache: () => cache,
     database: (adapter, selectedCache, filters) =>
-      options.database?.() ?? { adapter, cache: selectedCache, filters },
+      options.database?.(adapter, selectedCache, filters) ?? {
+        adapter,
+        cache: selectedCache,
+        filters,
+      },
     system: () => session,
     capabilitySource: (adapter) => adapter,
   }
@@ -102,7 +118,9 @@ describe('platform database owner', () => {
     ],
     [{ driver: 'sqlite', filename: ':memory:' }],
   ] as const)('constructs and closes the public adapter for $driver', async (configuration) => {
-    const owner = await createPlatformDatabase(configuration)
+    const owner = await createPlatformDatabase(configuration, {
+      tenantTargetFilters: TENANT_TARGET_FILTERS,
+    })
 
     expect(owner.capabilities.features.indexes).toBe(true)
     await owner.close()
@@ -119,7 +137,11 @@ describe('platform database owner', () => {
     [{ driver: 'sqlite', filename: './data/platform.sqlite' }, 'sqlite'],
   ] as const)('selects the configured $driver construction seam', async (configuration, driver) => {
     const state = harness()
-    const owner = await createPlatformDatabase(configuration, {}, state.construction)
+    const owner = await createPlatformDatabase(
+      configuration,
+      { tenantTargetFilters: TENANT_TARGET_FILTERS },
+      state.construction,
+    )
 
     expect(state.selected).toEqual([driver])
     expect(configuration.driver).toBe(driver)
@@ -131,6 +153,24 @@ describe('platform database owner', () => {
       indexes: 64,
     })
 
+    await owner.close()
+  })
+
+  test('forwards the exact tenant-target filter map to the database', async () => {
+    let forwarded: TenantTargetFilters | undefined
+    const state = harness({
+      database: (adapter, cache, filters) => {
+        forwarded = filters
+        return { adapter, cache, filters }
+      },
+    })
+    const owner = await createPlatformDatabase(
+      { driver: 'sqlite', filename: ':memory:' },
+      { tenantTargetFilters: TENANT_TARGET_FILTERS },
+      state.construction,
+    )
+
+    expect(forwarded).toBe(TENANT_TARGET_FILTERS)
     await owner.close()
   })
 
@@ -147,7 +187,7 @@ describe('platform database owner', () => {
     })
     const owner = await createPlatformDatabase(
       { driver: 'sqlite', filename: ':memory:' },
-      {},
+      { tenantTargetFilters: TENANT_TARGET_FILTERS },
       state.construction,
     )
 
@@ -200,7 +240,7 @@ describe('platform database owner', () => {
     })
     const owner = await createPlatformDatabase(
       { driver: 'sqlite', filename: ':memory:' },
-      {},
+      { tenantTargetFilters: TENANT_TARGET_FILTERS },
       state.construction,
     )
 
@@ -224,9 +264,11 @@ describe('platform database owner', () => {
     { driver: 'sqlite', filename: ' ./secret/platform.sqlite' },
   ] as const)('rejects invalid targets without disclosing them', async (configuration) => {
     const state = harness()
-    const failure = await createPlatformDatabase(configuration, {}, state.construction).catch(
-      (error: unknown) => error,
-    )
+    const failure = await createPlatformDatabase(
+      configuration,
+      { tenantTargetFilters: TENANT_TARGET_FILTERS },
+      state.construction,
+    ).catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(TypeError)
     expect((failure as Error).message).toBe('Platform database configuration is invalid')
@@ -256,7 +298,7 @@ describe('platform database owner', () => {
         driver: 'postgresql',
         connectionString: 'postgresql://user:secret@example.test/platform',
       },
-      {},
+      { tenantTargetFilters: TENANT_TARGET_FILTERS },
       state.construction,
     ).catch((error: unknown) => error)
 
@@ -283,7 +325,7 @@ describe('platform database owner', () => {
     })
     const owner = await createPlatformDatabase(
       { driver: 'sqlite', filename: ':memory:' },
-      {},
+      { tenantTargetFilters: TENANT_TARGET_FILTERS },
       state.construction,
     )
 
@@ -319,7 +361,7 @@ describe('platform database owner', () => {
     })
     const owner = await createPlatformDatabase(
       { driver: 'sqlite', filename: ':memory:' },
-      {},
+      { tenantTargetFilters: TENANT_TARGET_FILTERS },
       state.construction,
     )
 

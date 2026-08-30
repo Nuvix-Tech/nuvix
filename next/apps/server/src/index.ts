@@ -1,9 +1,14 @@
 import { config } from '@nuvix/utils'
 import { createPlatformRuntime } from './infrastructure/platform-runtime'
+import { createTenantTargetFilters } from './infrastructure/tenant-target-codec'
 import { startProcess } from './process'
 
+const tenantTargetFilters = await createTenantTargetFilters(
+  config.security.tenantTargetEncryptionKey,
+)
 const runtime = await createPlatformRuntime({
   database: config.internalDatabase,
+  tenantTargetFilters,
   publishableKeyEnvironment: config.isProd ? 'live' : 'test',
   app: { isProduction: config.isProd },
   onTenantCloseError: () => {

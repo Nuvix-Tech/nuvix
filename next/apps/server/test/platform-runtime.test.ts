@@ -1,10 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import { createPlatformRuntime } from '../src/infrastructure/platform-runtime'
+import { createTenantTargetFilters } from '../src/infrastructure/tenant-target-codec'
+
+const TENANT_TARGET_FILTERS = await createTenantTargetFilters(
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+)
 
 describe('platform runtime', () => {
   test('owns an injectable SQLite platform and leaves schema setup explicit', async () => {
     const runtime = await createPlatformRuntime({
       database: { driver: 'sqlite', filename: ':memory:' },
+      tenantTargetFilters: TENANT_TARGET_FILTERS,
       publishableKeyEnvironment: 'test',
       app: {
         isProduction: false,
@@ -31,6 +37,7 @@ describe('platform runtime', () => {
   test('closes process-owned resources idempotently', async () => {
     const runtime = await createPlatformRuntime({
       database: { driver: 'sqlite', filename: ':memory:' },
+      tenantTargetFilters: TENANT_TARGET_FILTERS,
       publishableKeyEnvironment: 'test',
       app: { isProduction: false, geoip: { lookup: () => null } },
     })

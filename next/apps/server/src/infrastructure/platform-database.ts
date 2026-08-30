@@ -1,13 +1,5 @@
 import { type CacheDriver, None } from '@nuvix/cache'
-import {
-  Adapter,
-  Database,
-  type DatabaseOptions,
-  type Doc,
-  type Query,
-  type Session,
-  SQLiteAdapter,
-} from '@nuvix/db'
+import { Adapter, Database, type Doc, type Query, type Session, SQLiteAdapter } from '@nuvix/db'
 import {
   type PlatformDatabaseConfiguration,
   validatePlatformDatabaseConfiguration,
@@ -18,6 +10,7 @@ import {
   deriveDatabaseCapabilities,
 } from './database-capabilities'
 import { DATABASE_METADATA } from './database-metadata'
+import type { TenantTargetFilters } from './tenant-target-codec'
 
 interface DatabaseClient {
   disconnect(): Promise<void>
@@ -51,7 +44,7 @@ export interface PlatformDatabaseConstruction<AdapterResource, DatabaseResource,
   readonly database: (
     adapter: AdapterResource,
     cache: OwnedCacheDriver,
-    filters: DatabaseOptions['filters'],
+    filters: TenantTargetFilters,
   ) => DatabaseResource
   readonly system: (database: DatabaseResource) => SessionResource
   readonly capabilitySource: (adapter: AdapterResource) => DatabaseCapabilitySource
@@ -65,7 +58,7 @@ export interface PlatformDatabaseOwner {
 
 export interface PlatformDatabaseOptions {
   readonly cache?: OwnedCacheDriver
-  readonly filters?: DatabaseOptions['filters']
+  readonly tenantTargetFilters: TenantTargetFilters
 }
 
 type PublicAdapter = Adapter | SQLiteAdapter
@@ -125,7 +118,7 @@ export async function createPlatformDatabase<
   SessionResource extends PlatformLookupSession = Session,
 >(
   input: PlatformDatabaseConfiguration,
-  options: PlatformDatabaseOptions = {},
+  options: PlatformDatabaseOptions,
   construction: PlatformDatabaseConstruction<
     AdapterResource,
     DatabaseResource,
@@ -148,7 +141,7 @@ export async function createPlatformDatabase<
     const { adapter } = resource
     client = resource.client
     cache = options.cache ?? construction.cache()
-    const database = construction.database(adapter, cache, options.filters)
+    const database = construction.database(adapter, cache, options.tenantTargetFilters)
     const systemSession = construction.system(database)
     const capabilities = deriveDatabaseCapabilities(construction.capabilitySource(adapter))
     const lookups = lookupCapabilities(systemSession)

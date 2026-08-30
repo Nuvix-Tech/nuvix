@@ -63,6 +63,10 @@ export const config = {
           filename: required('NUVIX_INTERNAL_DATABASE_FILE', './data/nuvix.sqlite'),
         },
 
+  security: {
+    tenantTargetEncryptionKey: required('NUVIX_TENANT_TARGET_ENCRYPTION_KEY'),
+  },
+
   /** Redis connection string (queues/cache). */
   redisUrl: required('NUVIX_REDIS_URL'),
 
