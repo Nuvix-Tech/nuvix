@@ -33,6 +33,14 @@ const TEAMS_WRITE_KEY_ID = 'integration_teams_write_key'
 const USERS_READ_KEY_ID = 'integration_users_read_key'
 const USERS_WRITE_KEY_ID = 'integration_users_write_key'
 const SCOPE_DEFICIENT_KEY_ID = 'integration_scope_deficient_key'
+const FAILURE_PROJECT_IDS = Object.freeze({
+  unknown: 'integration_unknown_project',
+  disabled: 'integration_disabled_project',
+  missingTarget: 'integration_missing_target',
+  corruptTarget: 'integration_corrupt_target',
+  malformedTarget: 'integration_malformed_target',
+  unreachableTarget: 'integration_unreachable_target',
+} as const)
 
 export const TENANT_FULL_SCOPES = Object.freeze([
   'schemas.read',
@@ -73,6 +81,20 @@ export interface TenantFixture {
   }
 }
 
+export interface PlatformFailureFixture {
+  readonly projectId: string
+  readonly publishableKey: string
+}
+
+export interface PlatformFailureFixtures {
+  readonly unknown: PlatformFailureFixture
+  readonly disabled: PlatformFailureFixture
+  readonly missingTarget: PlatformFailureFixture
+  readonly corruptTarget: PlatformFailureFixture
+  readonly malformedTarget: PlatformFailureFixture
+  readonly unreachableTarget: PlatformFailureFixture
+}
+
 export interface TenantFixtureInspection {
   readonly imageFoundation: boolean
   readonly collections: readonly string[]
@@ -111,12 +133,14 @@ export interface TwoTenantFixtureOwner {
     mode?: AuthMode,
   ): Promise<ProjectAuthContext>
   inspectTargetCiphertext(projectId: string): Promise<string>
+  assertNoSensitiveValues(value: string): Promise<void>
   close(): Promise<void>
 }
 
 export interface TwoTenantFixture {
   readonly driver: PlatformDatabaseDriver
   readonly tenants: Readonly<Record<TwoTenantName, TenantFixture>>
+  readonly platformFailures: PlatformFailureFixtures
   readonly runtime: TwoTenantFixtureRuntimeOptions
   readonly owner: TwoTenantFixtureOwner
 }
@@ -181,6 +205,44 @@ function target(postgres: PostgresTestResource): TenantDatabaseTarget {
   return Object.freeze({
     driver: 'postgresql' as const,
     connectionString: postgres.owner.connectionString(),
+  })
+}
+
+function unreachableTarget(selected: TenantDatabaseTarget): TenantDatabaseTarget {
+  const connection = new URL(selected.connectionString)
+  connection.hostname = '127.0.0.1'
+  connection.port = '1'
+  return Object.freeze({
+    driver: 'postgresql',
+    connectionString: connection.toString(),
+  })
+}
+
+function malformedTarget(): TenantDatabaseTarget {
+  const connection = new URL('https://malformed-target.example.test/database')
+  connection.username = 'malformed-owner'
+  connection.password = crypto.randomUUID().replaceAll('-', '')
+  return Object.freeze({
+    driver: 'postgresql',
+    connectionString: connection.toString(),
+  })
+}
+
+function failureFixture(projectId: string): PlatformFailureFixture {
+  return Object.freeze({
+    projectId,
+    publishableKey: createPublishableKey(projectId, 'test'),
+  })
+}
+
+function platformFailures(): PlatformFailureFixtures {
+  return Object.freeze({
+    unknown: failureFixture(FAILURE_PROJECT_IDS.unknown),
+    disabled: failureFixture(FAILURE_PROJECT_IDS.disabled),
+    missingTarget: failureFixture(FAILURE_PROJECT_IDS.missingTarget),
+    corruptTarget: failureFixture(FAILURE_PROJECT_IDS.corruptTarget),
+    malformedTarget: failureFixture(FAILURE_PROJECT_IDS.malformedTarget),
+    unreachableTarget: failureFixture(FAILURE_PROJECT_IDS.unreachableTarget),
   })
 }
 
@@ -368,6 +430,35 @@ async function authenticateApiKey(
   )
 }
 
+function credentialCanaries(seeded: readonly SeededCredentials[]): readonly string[] {
+  return seeded.flatMap((credentials) =>
+    Object.values(credentials).flatMap(({ fixture, verifier }) => [
+      fixture.token,
+      fixture.token.split('.').at(-1) ?? '',
+      verifier.digest,
+      verifier.salt,
+    ]),
+  )
+}
+
+async function assertNoSensitiveValues(
+  value: string,
+  seeded: readonly SeededCredentials[],
+  tenants: Readonly<Record<TwoTenantName, OwnedTenant>>,
+  failures: PlatformFailureFixtures,
+  platform: PlatformFixture,
+): Promise<void> {
+  const canaries = [
+    ...credentialCanaries(seeded),
+    ...Object.values(tenants).map(({ fixture }) => fixture.publishableKey),
+    ...Object.values(failures).map(({ publishableKey }) => publishableKey),
+  ]
+  if (canaries.some((canary) => canary.length > 0 && value.includes(canary))) {
+    throw new Error('Tenant fixture sensitive value leaked into request diagnostics')
+  }
+  await platform.owner.assertNoSensitiveValues(value)
+}
+
 async function closeOwned(
   platform: PlatformFixture | undefined,
   postgresResources: readonly PostgresTestResource[],
@@ -401,20 +492,44 @@ export async function createTwoTenantFixture(
     const tenantA = await createTenant('a', postgresA, credentialsA)
     const tenantB = await createTenant('b', postgresB, credentialsB)
     const ownedTenants = Object.freeze({ a: tenantA, b: tenantB })
+    const failureProjects = platformFailures()
     platform = await createPlatformFixture({
       driver: options.driver,
       projects: [
         { ...tenantA.fixture.project, target: tenantA.target },
         { ...tenantB.fixture.project, target: tenantB.target },
+        {
+          id: failureProjects.disabled.projectId,
+          enabled: false,
+          target: tenantA.target,
+        },
+        { id: failureProjects.missingTarget.projectId, enabled: true },
+        {
+          id: failureProjects.corruptTarget.projectId,
+          enabled: true,
+          target: tenantA.target,
+        },
+        {
+          id: failureProjects.malformedTarget.projectId,
+          enabled: true,
+          target: malformedTarget(),
+        },
+        {
+          id: failureProjects.unreachableTarget.projectId,
+          enabled: true,
+          target: unreachableTarget(tenantA.target),
+        },
       ],
       sqliteFilename: options.sqliteFilename,
     })
+    await platform.owner.corruptTargetCiphertext(failureProjects.corruptTarget.projectId)
 
     const selectedPlatform = platform
     let closePromise: Promise<void> | undefined
     return Object.freeze({
       driver: options.driver,
       tenants: Object.freeze({ a: tenantA.fixture, b: tenantB.fixture }),
+      platformFailures: failureProjects,
       runtime: Object.freeze({
         ...selectedPlatform.runtime,
         publishableKeyEnvironment: 'test' as const,
@@ -430,6 +545,14 @@ export async function createTwoTenantFixture(
           authenticateApiKey(tenant(ownedTenants, name), token, mode),
         inspectTargetCiphertext: (projectId: string) =>
           selectedPlatform.owner.inspectTargetCiphertext(projectId),
+        assertNoSensitiveValues: (value: string) =>
+          assertNoSensitiveValues(
+            value,
+            [credentialsA, credentialsB],
+            ownedTenants,
+            failureProjects,
+            selectedPlatform,
+          ),
         close: () => {
           closePromise ??= closeOwned(selectedPlatform, postgresResources)
           return closePromise

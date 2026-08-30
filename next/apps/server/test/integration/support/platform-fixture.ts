@@ -25,7 +25,7 @@ export const PLATFORM_FIXTURE_DRIVERS = ['sqlite', 'postgresql'] as const
 export interface PlatformFixtureProject {
   readonly id: string
   readonly enabled: boolean
-  readonly target: TenantDatabaseTarget
+  readonly target?: TenantDatabaseTarget
 }
 
 export interface PlatformFixtureOptions {
@@ -41,6 +41,8 @@ export interface PlatformFixtureRuntimeOptions {
 
 export interface PlatformFixtureOwner {
   inspectTargetCiphertext(projectId: string): Promise<string>
+  corruptTargetCiphertext(projectId: string): Promise<void>
+  assertNoSensitiveValues(value: string): Promise<void>
   close(): Promise<void>
 }
 
@@ -167,6 +169,7 @@ async function seed(
           enabled: project.enabled,
         }),
       )
+      if (project.target === undefined) continue
       await system.createDocument(
         PLATFORM_PERSISTENCE_MODEL.collections.tenantTargets,
         new Doc({
@@ -257,10 +260,105 @@ async function inspectTargetCiphertext(
   return value
 }
 
+function tamper(ciphertext: string): string {
+  const replacement = ciphertext.endsWith('A') ? 'B' : 'A'
+  return `${ciphertext.slice(0, -1)}${replacement}`
+}
+
+async function corruptTargetCiphertext(
+  configuration: PlatformDatabaseConfiguration,
+  projectId: string,
+): Promise<void> {
+  // Raw mutation is intentionally confined to this test-owner seam. Public
+  // document writes would re-encrypt the value and could not model at-rest corruption.
+  const selectedAdapter = adapter(configuration)
+  let mutationFailure: unknown
+
+  try {
+    selectedAdapter.setMeta(DATABASE_METADATA.platform[configuration.driver])
+    const table =
+      selectedAdapter instanceof SQLiteAdapter
+        ? await sqliteTargetTable(selectedAdapter)
+        : postgresTargetTable()
+    const field = quote(PLATFORM_PERSISTENCE_MODEL.fields.tenantTargets.target)
+    const projectField = quote(PLATFORM_PERSISTENCE_MODEL.fields.tenantTargets.projectId)
+    const result = await selectedAdapter.$client.query<{ target: unknown }>(
+      `SELECT ${field} AS "target" FROM ${table} WHERE ${projectField} = ?`,
+      [projectId],
+    )
+    const ciphertext = result.rows[0]?.target
+    if (result.rows.length !== 1 || typeof ciphertext !== 'string') {
+      throw new Error('missing target')
+    }
+    await selectedAdapter.$client.query(
+      `UPDATE ${table} SET ${field} = ? WHERE ${projectField} = ?`,
+      [tamper(ciphertext), projectId],
+    )
+  } catch {
+    mutationFailure = new Error('Platform fixture target corruption failed')
+  }
+
+  const cleanupFailure = await selectedAdapter.$client
+    .disconnect()
+    .catch(() => new Error('Platform fixture mutation close failed'))
+  if (mutationFailure && cleanupFailure) {
+    throw new AggregateError(
+      [mutationFailure, cleanupFailure],
+      'Platform fixture mutation and cleanup failed',
+    )
+  }
+  if (mutationFailure) throw mutationFailure
+  if (cleanupFailure) throw cleanupFailure
+}
+
+function connectionCanaries(connectionString: string): readonly string[] {
+  try {
+    const parsed = new URL(connectionString)
+    return [connectionString, parsed.username, parsed.password, parsed.host].filter(
+      (value) => value.length >= 8,
+    )
+  } catch {
+    return [connectionString]
+  }
+}
+
+async function assertNoSensitiveValues(
+  value: string,
+  configuration: PlatformDatabaseConfiguration,
+  encryptionKey: string,
+  projects: readonly PlatformFixtureProject[],
+): Promise<void> {
+  const targetProjects = projects.filter(
+    (
+      project,
+    ): project is PlatformFixtureProject & {
+      readonly target: TenantDatabaseTarget
+    } => project.target !== undefined,
+  )
+  const ciphertexts = await Promise.all(
+    targetProjects.map((project) => inspectTargetCiphertext(configuration, project.id)),
+  )
+  const storageCanaries =
+    configuration.driver === 'sqlite'
+      ? [configuration.filename]
+      : connectionCanaries(configuration.connectionString)
+  const canaries = [
+    encryptionKey,
+    ...storageCanaries,
+    ...targetProjects.flatMap((project) => connectionCanaries(project.target.connectionString)),
+    ...ciphertexts,
+  ]
+
+  if (canaries.some((canary) => canary.length > 0 && value.includes(canary))) {
+    throw new Error('Platform fixture sensitive value leaked into request diagnostics')
+  }
+}
+
 export async function createPlatformFixture(
   options: PlatformFixtureOptions,
 ): Promise<PlatformFixture> {
-  const tenantTargetFilters = await createTenantTargetFilters(targetKey())
+  const encryptionKey = targetKey()
+  const tenantTargetFilters = await createTenantTargetFilters(encryptionKey)
   const resource = await backing(options)
 
   try {
@@ -281,6 +379,10 @@ export async function createPlatformFixture(
   const owner = Object.freeze({
     inspectTargetCiphertext: (projectId: string) =>
       inspectTargetCiphertext(resource.configuration, projectId),
+    corruptTargetCiphertext: (projectId: string) =>
+      corruptTargetCiphertext(resource.configuration, projectId),
+    assertNoSensitiveValues: (value: string) =>
+      assertNoSensitiveValues(value, resource.configuration, encryptionKey, options.projects),
     close: () => {
       closePromise ??= resource.close()
       return closePromise

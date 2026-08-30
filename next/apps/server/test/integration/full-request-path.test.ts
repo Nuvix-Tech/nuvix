@@ -30,8 +30,50 @@ interface SchemaListData {
   readonly data: readonly { readonly name: string }[]
 }
 
-function publishableKeyHeaders(tenant: TenantFixture): Readonly<Record<string, string>> {
-  return Object.freeze({ [HEADERS.publishableKey]: tenant.publishableKey })
+interface PublishableKeyFixture {
+  readonly publishableKey: string
+}
+
+interface StableProblem {
+  readonly status: number
+  readonly type: string
+  readonly title: string
+  readonly detail: string
+  readonly code?: string
+}
+
+const STABLE_PROBLEMS = Object.freeze({
+  credentialInvalid: {
+    status: 401,
+    type: '/errors/unauthorized',
+    title: 'Unauthorized',
+    detail: 'Credential is invalid',
+    code: 'credential_invalid',
+  },
+  forbidden: {
+    status: 403,
+    type: '/errors/forbidden',
+    title: 'Forbidden',
+    detail: 'Insufficient permissions',
+  },
+  projectNotFound: {
+    status: 404,
+    type: '/errors/not-found',
+    title: 'Not Found',
+    detail: 'Project not found',
+    code: 'project_not_found',
+  },
+  projectUnavailable: {
+    status: 503,
+    type: '/errors/unavailable',
+    title: 'Service Unavailable',
+    detail: 'Project is temporarily unavailable',
+    code: 'project_unavailable',
+  },
+} as const satisfies Readonly<Record<string, StableProblem>>)
+
+function publishableKeyHeaders(fixture: PublishableKeyFixture): Readonly<Record<string, string>> {
+  return Object.freeze({ [HEADERS.publishableKey]: fixture.publishableKey })
 }
 
 function apiKeyHeaders(
@@ -82,12 +124,32 @@ function expectProblem(
   expect(problem(result.error?.value)).toMatchObject(expected)
 }
 
-function expectNoBearerSecrets(result: ProblemResult, secrets: readonly string[]): void {
-  const serialized = JSON.stringify({
-    data: result.data,
-    error: result.error?.value ?? null,
-  })
-  for (const secret of secrets) expect(serialized).not.toContain(secret)
+function expectStableProblem(result: ProblemResult, expected: StableProblem): void {
+  const body = problem(result.error?.value)
+  const expectedBody: Readonly<Record<string, unknown>> = {
+    type: expected.type,
+    title: expected.title,
+    status: expected.status,
+    detail: expected.detail,
+    instance: expected.detail,
+    ...(expected.code === undefined ? {} : { code: expected.code }),
+  }
+  const matchesBody =
+    Object.keys(body).length === Object.keys(expectedBody).length &&
+    Object.entries(expectedBody).every(([key, value]) => body[key] === value)
+  const hasProblemContentType =
+    result.response.headers.get('content-type')?.startsWith('application/problem+json') === true
+
+  if (
+    result.data !== null ||
+    result.error?.status !== expected.status ||
+    !hasProblemContentType ||
+    !matchesBody
+  ) {
+    throw new Error(
+      `Request did not return the stable redacted ${expected.code ?? expected.type} problem`,
+    )
+  }
 }
 
 async function close(
@@ -155,6 +217,64 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
       observedResults.push(result)
       return result
     }
+    const scopeDeficientHeadersA = apiKeyHeaders(
+      fixture.tenants.a,
+      fixture.tenants.a.credentials.scopeDeficient.token,
+    )
+
+    // Negative authentication and acquisition run through the same production
+    // request scope as the successful matrix below.
+    expect(fixture.tenants.b.credentials.full.id).toBe(fixture.tenants.a.credentials.full.id)
+    if (fixture.tenants.b.credentials.full.token === fixture.tenants.a.credentials.full.token) {
+      throw new Error('Tenant fixture credentials must use distinct secrets')
+    }
+    const wrongTenantCredential = observe(
+      await client.v2.database.schemas.get({
+        headers: apiKeyHeaders(fixture.tenants.a, fixture.tenants.b.credentials.full.token),
+      }),
+    )
+    expectStableProblem(wrongTenantCredential, STABLE_PROBLEMS.credentialInvalid)
+
+    for (const selected of [fixture.platformFailures.unknown, fixture.platformFailures.disabled]) {
+      const unavailableProject = observe(
+        await client.v2.database.schemas.get({
+          headers: publishableKeyHeaders(selected),
+        }),
+      )
+      expectStableProblem(unavailableProject, STABLE_PROBLEMS.projectNotFound)
+    }
+
+    for (const selected of [
+      fixture.platformFailures.missingTarget,
+      fixture.platformFailures.corruptTarget,
+      fixture.platformFailures.malformedTarget,
+      fixture.platformFailures.unreachableTarget,
+    ]) {
+      const unavailableProject = observe(
+        await client.v2.database.schemas.get({
+          headers: publishableKeyHeaders(selected),
+        }),
+      )
+      expectStableProblem(unavailableProject, STABLE_PROBLEMS.projectUnavailable)
+    }
+
+    const deniedSchemaName = schemaName()
+    const schemaScopeDeficient = observe(
+      await client.v2.database.schemas.post(
+        { name: deniedSchemaName, type: 'managed' },
+        { headers: scopeDeficientHeadersA },
+      ),
+    )
+    expectStableProblem(schemaScopeDeficient, STABLE_PROBLEMS.forbidden)
+    const schemaAfterDeniedWrite = observe(
+      await client.v2.database.schemas({ name: deniedSchemaName }).get({ headers: headersA }),
+    )
+    expectProblem(schemaAfterDeniedWrite, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'schema_not_found',
+    })
+
     const sharedName = schemaName()
     const schemaA = {
       name: sharedName,
@@ -297,21 +417,14 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
       type: '/errors/forbidden',
     })
 
+    const deniedTeamName = `Denied ${sharedName}`
     const teamScopeDeficient = observe(
-      await client.v2.teams.post(
-        { name: `Denied ${sharedName}` },
-        {
-          headers: apiKeyHeaders(
-            fixture.tenants.a,
-            fixture.tenants.a.credentials.scopeDeficient.token,
-          ),
-        },
-      ),
+      await client.v2.teams.post({ name: deniedTeamName }, { headers: scopeDeficientHeadersA }),
     )
-    expectProblem(teamScopeDeficient, {
-      status: 403,
-      type: '/errors/forbidden',
-    })
+    expectStableProblem(teamScopeDeficient, STABLE_PROBLEMS.forbidden)
+    const teamsAfterDeniedWrite = observe(await client.v2.teams.get({ headers: headersA }))
+    expect(teamsAfterDeniedWrite.status).toBe(200)
+    expect(teamsAfterDeniedWrite.data?.data.map((team) => team.name)).not.toContain(deniedTeamName)
 
     const createdTeamA = observe(
       await client.v2.teams.post(
@@ -482,31 +595,24 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
       type: '/errors/forbidden',
     })
 
+    const deniedUserId = entityId('denied')
     const usersScopeDeficient = observe(
-      await client.v2.users.get({
-        headers: apiKeyHeaders(
-          fixture.tenants.a,
-          fixture.tenants.a.credentials.scopeDeficient.token,
-        ),
-      }),
+      await client.v2.users.post(
+        {
+          userId: deniedUserId,
+          email: `${deniedUserId}@example.test`,
+        },
+        { headers: scopeDeficientHeadersA },
+      ),
     )
-    expectProblem(usersScopeDeficient, {
-      status: 403,
-      type: '/errors/forbidden',
-    })
-
-    const wrongTenantUserRead = observe(
-      await client.v2.users.get({
-        headers: apiKeyHeaders(
-          fixture.tenants.a,
-          fixture.tenants.b.credentials.usersReadOnly.token,
-        ),
-      }),
+    expectStableProblem(usersScopeDeficient, STABLE_PROBLEMS.forbidden)
+    const userAfterDeniedWrite = observe(
+      await client.v2.users({ userId: deniedUserId }).get({ headers: usersReadHeadersA }),
     )
-    expectProblem(wrongTenantUserRead, {
-      status: 401,
-      type: '/errors/unauthorized',
-      code: 'credential_invalid',
+    expectProblem(userAfterDeniedWrite, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'user_not_found',
     })
 
     const createdUserA = observe(
@@ -714,10 +820,14 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     expect(userAFilteredFromB.status).toBe(200)
     expect(userAFilteredFromB.data?.data).toEqual([])
 
-    const bearerSecrets = Object.values(fixture.tenants).flatMap(({ credentials }) =>
-      Object.values(credentials).map(({ token }) => token),
+    const requestDiagnostics = JSON.stringify(
+      observedResults.map((result) => ({
+        data: result.data,
+        status: result.error?.status ?? result.response.status,
+        problem: result.error?.value ?? null,
+      })),
     )
-    for (const result of observedResults) expectNoBearerSecrets(result, bearerSecrets)
+    await fixture.owner.assertNoSensitiveValues(requestDiagnostics)
   })().then(
     () => ({ ok: true }) as const,
     (error: unknown) => ({ ok: false, error }) as const,

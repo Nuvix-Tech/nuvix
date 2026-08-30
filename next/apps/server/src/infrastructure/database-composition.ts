@@ -69,11 +69,27 @@ function requestResource(
   }
 }
 
+async function createReadyResource(
+  target: TenantDatabaseTarget,
+): Promise<CompositionTenantDatabaseResource> {
+  const resource = createTenantDatabaseResource(target)
+
+  try {
+    // Bun SQL connects lazily. Probing here keeps an unreachable target inside
+    // tenant acquisition, before tenant-local authentication can misclassify it.
+    await resource.postgres.raw<void>('select 1').execute()
+    return resource
+  } catch {
+    await resource.close().catch(() => undefined)
+    throw new Error('Tenant database resource initialization failed')
+  }
+}
+
 /** Composes the only allowed project → tenant → auth request sequence. */
 export function createDatabaseComposition(
   options: DatabaseCompositionOptions,
 ): DatabaseComposition {
-  const createResource = options.createResource ?? createTenantDatabaseResource
+  const createResource = options.createResource ?? createReadyResource
   const registry = new TenantDatabaseRegistry<RequestTenantDatabase>({
     ...options.registryOptions,
     create: async (projectId) =>
