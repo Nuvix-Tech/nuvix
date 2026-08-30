@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { Doc, type Query } from '@nuvix/db'
+import { Doc, type Query, Role } from '@nuvix/db'
+import { apiScopeLabel } from '../src/context/database-roles'
 import type { ProjectAuthContext } from '../src/context/project'
 import type { TeamDocuments } from '../src/teams/documents'
 import { createTeamService } from '../src/teams/service'
@@ -12,11 +13,11 @@ const SESSION_AUTH: ProjectAuthContext = {
   verified: true,
   scopes: [],
 }
-const API_AUTH: ProjectAuthContext = {
+const API_WRITE_AUTH: ProjectAuthContext = {
   type: 'apiKey',
   keyId: 'key_a',
   mode: 'admin',
-  scopes: ['teams.read', 'teams.write'],
+  scopes: ['teams.write'],
 }
 
 function stored(document: Doc, updatedAt = NOW): Doc {
@@ -102,12 +103,26 @@ describe('teams service', () => {
     const state = harness()
     const service = createTeamService({ id: () => 'team_api', now: () => NOW })
 
-    const team = await service.create(state.documents, API_AUTH, {
+    const team = await service.create(state.documents, API_WRITE_AUTH, {
       name: 'Automation',
     })
 
     expect(team.total).toBe(0)
     expect(state.collection('memberships').size).toBe(0)
+  })
+
+  test('lets a teams.write session read a team for write-operation preconditions', async () => {
+    const state = harness()
+    const service = createTeamService({ id: () => 'team_api', now: () => NOW })
+    await service.create(state.documents, API_WRITE_AUTH, {
+      name: 'Automation',
+    })
+
+    expect(state.collection('teams').get('team_api')?.getRead()).toEqual([
+      Role.team('team_api').toString(),
+      Role.label(apiScopeLabel('teams.read')).toString(),
+      Role.label(apiScopeLabel('teams.write')).toString(),
+    ])
   })
 
   test('lists teams with the v2 pagination envelope', async () => {
@@ -118,7 +133,7 @@ describe('teams service', () => {
       now: () => NOW,
     })
     await service.create(state.documents, SESSION_AUTH, { name: 'A' })
-    await service.create(state.documents, API_AUTH, { name: 'B' })
+    await service.create(state.documents, API_WRITE_AUTH, { name: 'B' })
 
     const result = await service.list(state.documents, 25, 0)
 

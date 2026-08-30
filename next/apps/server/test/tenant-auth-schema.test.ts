@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { IndexType } from '@nuvix/db'
+import { IndexType, Permission, Role } from '@nuvix/db'
+import { apiScopeLabel } from '../src/context/database-roles'
 import {
   assertTenantAuthSchemaCapabilities,
   createTenantAuthCollectionDefinitions,
@@ -71,6 +72,17 @@ describe('tenant auth schema', () => {
     expect(credentialCollections.every(({ documentSecurity }) => documentSecurity === false)).toBe(
       true,
     )
+  })
+
+  test('allows users.write precondition reads without granting write access to users.read', () => {
+    const users = createTenantAuthCollectionDefinitions().find(({ id }) => id === 'users')
+
+    expect(users?.permissions).toEqual([
+      Permission.create(Role.label(apiScopeLabel('users.write'))),
+      Permission.read(Role.label(apiScopeLabel('users.read'))),
+      Permission.read(Role.label(apiScopeLabel('users.write'))),
+      Permission.update(Role.label(apiScopeLabel('users.write'))),
+    ])
   })
 
   test('rejects unsupported auth indexes before persistence', () => {

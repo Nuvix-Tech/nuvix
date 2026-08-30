@@ -120,6 +120,37 @@ describe('users routes', () => {
     expect(state.calls).toEqual(['list'])
   })
 
+  test('keeps users.read and users.write authority distinct', async () => {
+    const readOnly = probe({
+      type: 'apiKey',
+      keyId: 'key_read',
+      mode: 'admin',
+      scopes: ['users.read'],
+    })
+    const writeOnly = probe({
+      type: 'apiKey',
+      keyId: 'key_write',
+      mode: 'admin',
+      scopes: ['users.write'],
+    })
+
+    const [writeResponse, readResponse] = await Promise.all([
+      readOnly.app.handle(
+        new Request('http://nuvix.test/v2/users', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: 'ada@example.com' }),
+        }),
+      ),
+      writeOnly.app.handle(new Request('http://nuvix.test/v2/users')),
+    ])
+
+    expect(writeResponse.status).toBe(403)
+    expect(readResponse.status).toBe(403)
+    expect(readOnly.calls).toEqual([])
+    expect(writeOnly.calls).toEqual([])
+  })
+
   test('rejects password fields before service invocation', async () => {
     const state = probe({
       type: 'apiKey',

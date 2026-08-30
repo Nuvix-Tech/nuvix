@@ -94,6 +94,8 @@ function teamPermissions(teamId: string) {
   return [
     Permission.read(Role.team(teamId)),
     Permission.read(Role.label(apiScopeLabel('teams.read'))),
+    // Write handlers perform caller-scoped precondition reads; read routes still require teams.read.
+    Permission.read(Role.label(apiScopeLabel('teams.write'))),
     Permission.update(Role.team(teamId, 'owner')),
     Permission.update(Role.label(apiScopeLabel('teams.write'))),
     Permission.delete(Role.team(teamId, 'owner')),

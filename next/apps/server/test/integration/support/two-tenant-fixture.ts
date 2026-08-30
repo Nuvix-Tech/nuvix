@@ -30,6 +30,8 @@ import { type PostgresTestResource, startPostgresResource } from './postgres-res
 const API_KEY_MODES = Object.freeze(['admin'] as const satisfies readonly AuthMode[])
 const SHARED_KEY_ID = 'integration_full_key'
 const TEAMS_WRITE_KEY_ID = 'integration_teams_write_key'
+const USERS_READ_KEY_ID = 'integration_users_read_key'
+const USERS_WRITE_KEY_ID = 'integration_users_write_key'
 const SCOPE_DEFICIENT_KEY_ID = 'integration_scope_deficient_key'
 
 export const TENANT_FULL_SCOPES = Object.freeze([
@@ -65,6 +67,8 @@ export interface TenantFixture {
   readonly credentials: {
     readonly full: TenantApiKeyFixture
     readonly teamsWriteOnly: TenantApiKeyFixture
+    readonly usersReadOnly: TenantApiKeyFixture
+    readonly usersWriteOnly: TenantApiKeyFixture
     readonly scopeDeficient: TenantApiKeyFixture
   }
 }
@@ -130,6 +134,8 @@ interface SeededApiKey {
 interface SeededCredentials {
   readonly full: SeededApiKey
   readonly teamsWriteOnly: SeededApiKey
+  readonly usersReadOnly: SeededApiKey
+  readonly usersWriteOnly: SeededApiKey
   readonly scopeDeficient: SeededApiKey
 }
 
@@ -155,12 +161,20 @@ async function apiKey(id: string, scopes: readonly string[]): Promise<SeededApiK
 }
 
 async function credentials(): Promise<SeededCredentials> {
-  const [full, teamsWriteOnly, scopeDeficient] = await Promise.all([
+  const [full, teamsWriteOnly, usersReadOnly, usersWriteOnly, scopeDeficient] = await Promise.all([
     apiKey(SHARED_KEY_ID, TENANT_FULL_SCOPES),
     apiKey(TEAMS_WRITE_KEY_ID, ['teams.write']),
+    apiKey(USERS_READ_KEY_ID, ['users.read']),
+    apiKey(USERS_WRITE_KEY_ID, ['users.write']),
     apiKey(SCOPE_DEFICIENT_KEY_ID, []),
   ])
-  return Object.freeze({ full, teamsWriteOnly, scopeDeficient })
+  return Object.freeze({
+    full,
+    teamsWriteOnly,
+    usersReadOnly,
+    usersWriteOnly,
+    scopeDeficient,
+  })
 }
 
 function target(postgres: PostgresTestResource): TenantDatabaseTarget {
@@ -213,7 +227,13 @@ async function seedApiKeys(
   // Fixture bootstrap is an owner-only boundary; bearer tokens never enter this session.
   const system = resource.database.system()
 
-  for (const credential of [seeded.full, seeded.teamsWriteOnly, seeded.scopeDeficient]) {
+  for (const credential of [
+    seeded.full,
+    seeded.teamsWriteOnly,
+    seeded.usersReadOnly,
+    seeded.usersWriteOnly,
+    seeded.scopeDeficient,
+  ]) {
     await system.createDocument(
       TENANT_AUTH_MODEL.collections.apiKeys,
       new Doc({
@@ -244,6 +264,8 @@ function publicCredentials(seeded: SeededCredentials): TenantFixture['credential
   return Object.freeze({
     full: seeded.full.fixture,
     teamsWriteOnly: seeded.teamsWriteOnly.fixture,
+    usersReadOnly: seeded.usersReadOnly.fixture,
+    usersWriteOnly: seeded.usersWriteOnly.fixture,
     scopeDeficient: seeded.scopeDeficient.fixture,
   })
 }

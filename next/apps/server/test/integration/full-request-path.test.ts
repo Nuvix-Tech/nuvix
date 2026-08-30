@@ -49,6 +49,11 @@ function schemaName(): string {
   return `it_request_${crypto.randomUUID().replaceAll('-', '').toLowerCase()}`
 }
 
+function entityId(prefix: string): string {
+  const suffix = crypto.randomUUID().replaceAll('-', '').toLowerCase().slice(0, 24)
+  return `${prefix}_${suffix}`
+}
+
 function schemaNames(data: SchemaListData | null): readonly string[] {
   if (!data) throw new Error('Schema list response was empty')
   return data.data.map((schema) => schema.name)
@@ -66,7 +71,7 @@ function expectProblem(
   expected: {
     readonly status: number
     readonly type: string
-    readonly code: string
+    readonly code?: string
   },
 ): void {
   expect(result.data).toBeNull()
@@ -75,6 +80,14 @@ function expectProblem(
     true,
   )
   expect(problem(result.error?.value)).toMatchObject(expected)
+}
+
+function expectNoBearerSecrets(result: ProblemResult, secrets: readonly string[]): void {
+  const serialized = JSON.stringify({
+    data: result.data,
+    error: result.error?.value ?? null,
+  })
+  for (const secret of secrets) expect(serialized).not.toContain(secret)
 }
 
 async function close(
@@ -117,6 +130,31 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     expect(fixture.tenants.a.project.id).not.toBe(fixture.tenants.b.project.id)
     const headersA = apiKeyHeaders(fixture.tenants.a)
     const headersB = apiKeyHeaders(fixture.tenants.b)
+    const teamsWriteHeadersA = apiKeyHeaders(
+      fixture.tenants.a,
+      fixture.tenants.a.credentials.teamsWriteOnly.token,
+    )
+    const usersReadHeadersA = apiKeyHeaders(
+      fixture.tenants.a,
+      fixture.tenants.a.credentials.usersReadOnly.token,
+    )
+    const usersWriteHeadersA = apiKeyHeaders(
+      fixture.tenants.a,
+      fixture.tenants.a.credentials.usersWriteOnly.token,
+    )
+    const usersReadHeadersB = apiKeyHeaders(
+      fixture.tenants.b,
+      fixture.tenants.b.credentials.usersReadOnly.token,
+    )
+    const usersWriteHeadersB = apiKeyHeaders(
+      fixture.tenants.b,
+      fixture.tenants.b.credentials.usersWriteOnly.token,
+    )
+    const observedResults: ProblemResult[] = []
+    const observe = <Result extends ProblemResult>(result: Result): Result => {
+      observedResults.push(result)
+      return result
+    }
     const sharedName = schemaName()
     const schemaA = {
       name: sharedName,
@@ -252,6 +290,434 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     })
     expect(removedB.status).toBe(204)
     expect(removedB.error).toBeNull()
+
+    const teamsWriteRead = observe(await client.v2.teams.get({ headers: teamsWriteHeadersA }))
+    expectProblem(teamsWriteRead, {
+      status: 403,
+      type: '/errors/forbidden',
+    })
+
+    const teamScopeDeficient = observe(
+      await client.v2.teams.post(
+        { name: `Denied ${sharedName}` },
+        {
+          headers: apiKeyHeaders(
+            fixture.tenants.a,
+            fixture.tenants.a.credentials.scopeDeficient.token,
+          ),
+        },
+      ),
+    )
+    expectProblem(teamScopeDeficient, {
+      status: 403,
+      type: '/errors/forbidden',
+    })
+
+    const createdTeamA = observe(
+      await client.v2.teams.post(
+        { name: `Tenant A ${sharedName}` },
+        { headers: teamsWriteHeadersA },
+      ),
+    )
+    expect(createdTeamA.status).toBe(201)
+    expect(createdTeamA.error).toBeNull()
+    expect(createdTeamA.data).toMatchObject({
+      name: `Tenant A ${sharedName}`,
+      total: 0,
+      prefs: {},
+    })
+    if (!createdTeamA.data) throw new Error('Tenant A team create response was empty')
+    const teamIdA = createdTeamA.data.$id
+
+    const missingTeamFromB = observe(
+      await client.v2.teams({ teamId: teamIdA }).get({ headers: headersB }),
+    )
+    expectProblem(missingTeamFromB, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'team_not_found',
+    })
+
+    const createdTeamB = observe(
+      await client.v2.teams.post({ name: `Tenant B ${sharedName}` }, { headers: headersB }),
+    )
+    expect(createdTeamB.status).toBe(201)
+    expect(createdTeamB.error).toBeNull()
+    expect(createdTeamB.data).toMatchObject({
+      name: `Tenant B ${sharedName}`,
+      total: 0,
+      prefs: {},
+    })
+    if (!createdTeamB.data) throw new Error('Tenant B team create response was empty')
+    const teamIdB = createdTeamB.data.$id
+    expect(teamIdB).not.toBe(teamIdA)
+
+    const [listedTeamsAResult, listedTeamsBResult] = await Promise.all([
+      client.v2.teams.get({ headers: headersA }),
+      client.v2.teams.get({ headers: headersB }),
+    ])
+    const listedTeamsA = observe(listedTeamsAResult)
+    const listedTeamsB = observe(listedTeamsBResult)
+    expect(listedTeamsA.status).toBe(200)
+    expect(listedTeamsB.status).toBe(200)
+    expect(listedTeamsA.data?.data.map((team) => team.$id)).toContain(teamIdA)
+    expect(listedTeamsA.data?.data.map((team) => team.$id)).not.toContain(teamIdB)
+    expect(listedTeamsB.data?.data.map((team) => team.$id)).toContain(teamIdB)
+    expect(listedTeamsB.data?.data.map((team) => team.$id)).not.toContain(teamIdA)
+
+    const fetchedTeamA = observe(
+      await client.v2.teams({ teamId: teamIdA }).get({ headers: headersA }),
+    )
+    expect(fetchedTeamA.status).toBe(200)
+    expect(fetchedTeamA.data).toMatchObject({
+      $id: teamIdA,
+      name: `Tenant A ${sharedName}`,
+    })
+
+    const updatedTeamA = observe(
+      await client.v2
+        .teams({ teamId: teamIdA })
+        .put({ name: `Tenant A updated ${sharedName}` }, { headers: teamsWriteHeadersA }),
+    )
+    expect(updatedTeamA.status).toBe(200)
+    expect(updatedTeamA.error).toBeNull()
+    expect(updatedTeamA.data).toMatchObject({
+      $id: teamIdA,
+      name: `Tenant A updated ${sharedName}`,
+    })
+
+    const updatedTeamPrefsA = observe(
+      await client.v2
+        .teams({ teamId: teamIdA })
+        .prefs.put(
+          { prefs: { tenant: 'a', theme: 'dark', nested: { isolated: true } } },
+          { headers: teamsWriteHeadersA },
+        ),
+    )
+    expect(updatedTeamPrefsA.status).toBe(200)
+    expect(updatedTeamPrefsA.data).toEqual({
+      tenant: 'a',
+      theme: 'dark',
+      nested: { isolated: true },
+    })
+
+    const fetchedTeamPrefsA = observe(
+      await client.v2.teams({ teamId: teamIdA }).prefs.get({ headers: headersA }),
+    )
+    expect(fetchedTeamPrefsA.status).toBe(200)
+    expect(fetchedTeamPrefsA.data).toEqual(updatedTeamPrefsA.data)
+
+    const updatedTeamB = observe(
+      await client.v2
+        .teams({ teamId: teamIdB })
+        .put({ name: `Tenant B updated ${sharedName}` }, { headers: headersB }),
+    )
+    expect(updatedTeamB.status).toBe(200)
+    expect(updatedTeamB.data).toMatchObject({
+      $id: teamIdB,
+      name: `Tenant B updated ${sharedName}`,
+    })
+
+    const teamAAfterBUpdate = observe(
+      await client.v2.teams({ teamId: teamIdA }).get({ headers: headersA }),
+    )
+    expect(teamAAfterBUpdate.status).toBe(200)
+    expect(teamAAfterBUpdate.data).toMatchObject({
+      $id: teamIdA,
+      name: `Tenant A updated ${sharedName}`,
+      prefs: { tenant: 'a', theme: 'dark', nested: { isolated: true } },
+    })
+
+    const removedTeamB = observe(
+      await client.v2.teams({ teamId: teamIdB }).delete(undefined, { headers: headersB }),
+    )
+    expect(removedTeamB.status).toBe(204)
+    expect(removedTeamB.error).toBeNull()
+
+    const teamAAfterBDelete = observe(
+      await client.v2.teams({ teamId: teamIdA }).get({ headers: headersA }),
+    )
+    expect(teamAAfterBDelete.status).toBe(200)
+    expect(teamAAfterBDelete.data).toMatchObject({ $id: teamIdA })
+
+    const removedTeamA = observe(
+      await client.v2.teams({ teamId: teamIdA }).delete(undefined, { headers: teamsWriteHeadersA }),
+    )
+    expect(removedTeamA.status).toBe(204)
+    expect(removedTeamA.error).toBeNull()
+
+    const deletedTeamA = observe(
+      await client.v2.teams({ teamId: teamIdA }).get({ headers: headersA }),
+    )
+    expectProblem(deletedTeamA, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'team_not_found',
+    })
+
+    const sharedUserId = entityId('user')
+    const userEmailA = `${sharedUserId}.a@example.test`
+    const userEmailB = `${sharedUserId}.b@example.test`
+    const updatedUserEmailA = `${sharedUserId}.updated@example.test`
+
+    const usersReadWriteAttempt = observe(
+      await client.v2.users.post(
+        {
+          userId: entityId('denied'),
+          email: `${entityId('email')}@example.test`,
+        },
+        { headers: usersReadHeadersA },
+      ),
+    )
+    expectProblem(usersReadWriteAttempt, {
+      status: 403,
+      type: '/errors/forbidden',
+    })
+
+    const usersWriteReadAttempt = observe(
+      await client.v2.users.get({ headers: usersWriteHeadersA }),
+    )
+    expectProblem(usersWriteReadAttempt, {
+      status: 403,
+      type: '/errors/forbidden',
+    })
+
+    const usersScopeDeficient = observe(
+      await client.v2.users.get({
+        headers: apiKeyHeaders(
+          fixture.tenants.a,
+          fixture.tenants.a.credentials.scopeDeficient.token,
+        ),
+      }),
+    )
+    expectProblem(usersScopeDeficient, {
+      status: 403,
+      type: '/errors/forbidden',
+    })
+
+    const wrongTenantUserRead = observe(
+      await client.v2.users.get({
+        headers: apiKeyHeaders(
+          fixture.tenants.a,
+          fixture.tenants.b.credentials.usersReadOnly.token,
+        ),
+      }),
+    )
+    expectProblem(wrongTenantUserRead, {
+      status: 401,
+      type: '/errors/unauthorized',
+      code: 'credential_invalid',
+    })
+
+    const createdUserA = observe(
+      await client.v2.users.post(
+        {
+          userId: sharedUserId,
+          name: 'Tenant A User',
+          email: userEmailA,
+          phone: '+12025550101',
+        },
+        { headers: usersWriteHeadersA },
+      ),
+    )
+    expect(createdUserA.status).toBe(201)
+    expect(createdUserA.error).toBeNull()
+    expect(createdUserA.data).toMatchObject({
+      $id: sharedUserId,
+      name: 'Tenant A User',
+      email: userEmailA,
+      phone: '+12025550101',
+      status: true,
+      labels: [],
+      prefs: {},
+    })
+
+    const missingUserFromB = observe(
+      await client.v2.users({ userId: sharedUserId }).get({ headers: usersReadHeadersB }),
+    )
+    expectProblem(missingUserFromB, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'user_not_found',
+    })
+
+    const createdUserB = observe(
+      await client.v2.users.post(
+        {
+          userId: sharedUserId,
+          name: 'Tenant B User',
+          email: userEmailB,
+          phone: '+12025550102',
+        },
+        { headers: usersWriteHeadersB },
+      ),
+    )
+    expect(createdUserB.status).toBe(201)
+    expect(createdUserB.error).toBeNull()
+    expect(createdUserB.data).toMatchObject({
+      $id: sharedUserId,
+      name: 'Tenant B User',
+      email: userEmailB,
+      phone: '+12025550102',
+    })
+
+    const [listedUsersAResult, listedUsersBResult] = await Promise.all([
+      client.v2.users.get({ headers: usersReadHeadersA }),
+      client.v2.users.get({ headers: usersReadHeadersB }),
+    ])
+    const listedUsersA = observe(listedUsersAResult)
+    const listedUsersB = observe(listedUsersBResult)
+    expect(listedUsersA.status).toBe(200)
+    expect(listedUsersB.status).toBe(200)
+    expect(listedUsersA.data?.data).toHaveLength(1)
+    expect(listedUsersB.data?.data).toHaveLength(1)
+    expect(listedUsersA.data?.data[0]).toMatchObject({
+      $id: sharedUserId,
+      email: userEmailA,
+    })
+    expect(listedUsersB.data?.data[0]).toMatchObject({
+      $id: sharedUserId,
+      email: userEmailB,
+    })
+
+    const [fetchedUserAResult, fetchedUserBResult] = await Promise.all([
+      client.v2.users({ userId: sharedUserId }).get({ headers: usersReadHeadersA }),
+      client.v2.users({ userId: sharedUserId }).get({ headers: usersReadHeadersB }),
+    ])
+    const fetchedUserA = observe(fetchedUserAResult)
+    const fetchedUserB = observe(fetchedUserBResult)
+    expect(fetchedUserA.status).toBe(200)
+    expect(fetchedUserB.status).toBe(200)
+    expect(fetchedUserA.data).toMatchObject({
+      name: 'Tenant A User',
+      email: userEmailA,
+    })
+    expect(fetchedUserB.data).toMatchObject({
+      name: 'Tenant B User',
+      email: userEmailB,
+    })
+
+    const updatedUserNameA = observe(
+      await client.v2
+        .users({ userId: sharedUserId })
+        .name.patch({ name: 'Tenant A Updated' }, { headers: usersWriteHeadersA }),
+    )
+    expect(updatedUserNameA.status).toBe(200)
+    expect(updatedUserNameA.data).toMatchObject({ name: 'Tenant A Updated' })
+
+    const updatedUserEmailResultA = observe(
+      await client.v2
+        .users({ userId: sharedUserId })
+        .email.patch({ email: updatedUserEmailA }, { headers: usersWriteHeadersA }),
+    )
+    expect(updatedUserEmailResultA.status).toBe(200)
+    expect(updatedUserEmailResultA.data).toMatchObject({
+      email: updatedUserEmailA,
+      emailVerification: false,
+    })
+
+    const updatedUserPhoneA = observe(
+      await client.v2
+        .users({ userId: sharedUserId })
+        .phone.patch({ phone: '+12025550103' }, { headers: usersWriteHeadersA }),
+    )
+    expect(updatedUserPhoneA.status).toBe(200)
+    expect(updatedUserPhoneA.data).toMatchObject({
+      phone: '+12025550103',
+      phoneVerification: false,
+    })
+
+    const updatedUserPrefsA = observe(
+      await client.v2
+        .users({ userId: sharedUserId })
+        .prefs.patch(
+          { prefs: { tenant: 'a', notifications: { email: false } } },
+          { headers: usersWriteHeadersA },
+        ),
+    )
+    expect(updatedUserPrefsA.status).toBe(200)
+    expect(updatedUserPrefsA.data).toEqual({
+      tenant: 'a',
+      notifications: { email: false },
+    })
+
+    const fetchedUserPrefsA = observe(
+      await client.v2.users({ userId: sharedUserId }).prefs.get({ headers: usersReadHeadersA }),
+    )
+    expect(fetchedUserPrefsA.status).toBe(200)
+    expect(fetchedUserPrefsA.data).toEqual(updatedUserPrefsA.data)
+
+    const updatedUserLabelsA = observe(
+      await client.v2
+        .users({ userId: sharedUserId })
+        .labels.put({ labels: ['tenant-a', 'integration'] }, { headers: usersWriteHeadersA }),
+    )
+    expect(updatedUserLabelsA.status).toBe(200)
+    expect(updatedUserLabelsA.data).toMatchObject({
+      labels: ['tenant-a', 'integration'],
+    })
+
+    const updatedUserStatusA = observe(
+      await client.v2
+        .users({ userId: sharedUserId })
+        .status.patch({ status: false }, { headers: usersWriteHeadersA }),
+    )
+    expect(updatedUserStatusA.status).toBe(200)
+    expect(updatedUserStatusA.data).toMatchObject({ status: false })
+
+    const updatedUserNameB = observe(
+      await client.v2
+        .users({ userId: sharedUserId })
+        .name.patch({ name: 'Tenant B Updated' }, { headers: usersWriteHeadersB }),
+    )
+    expect(updatedUserNameB.status).toBe(200)
+    expect(updatedUserNameB.data).toMatchObject({
+      name: 'Tenant B Updated',
+      email: userEmailB,
+      phone: '+12025550102',
+      status: true,
+      labels: [],
+      prefs: {},
+    })
+
+    const [isolatedUserAResult, isolatedUserBResult] = await Promise.all([
+      client.v2.users({ userId: sharedUserId }).get({ headers: usersReadHeadersA }),
+      client.v2.users({ userId: sharedUserId }).get({ headers: usersReadHeadersB }),
+    ])
+    const isolatedUserA = observe(isolatedUserAResult)
+    const isolatedUserB = observe(isolatedUserBResult)
+    expect(isolatedUserA.data).toMatchObject({
+      $id: sharedUserId,
+      name: 'Tenant A Updated',
+      email: updatedUserEmailA,
+      phone: '+12025550103',
+      prefs: { tenant: 'a', notifications: { email: false } },
+      labels: ['tenant-a', 'integration'],
+      status: false,
+    })
+    expect(isolatedUserB.data).toMatchObject({
+      $id: sharedUserId,
+      name: 'Tenant B Updated',
+      email: userEmailB,
+      phone: '+12025550102',
+      prefs: {},
+      labels: [],
+      status: true,
+    })
+
+    const userAFilteredFromB = observe(
+      await client.v2.users.get({
+        query: { email: updatedUserEmailA },
+        headers: usersReadHeadersB,
+      }),
+    )
+    expect(userAFilteredFromB.status).toBe(200)
+    expect(userAFilteredFromB.data?.data).toEqual([])
+
+    const bearerSecrets = Object.values(fixture.tenants).flatMap(({ credentials }) =>
+      Object.values(credentials).map(({ token }) => token),
+    )
+    for (const result of observedResults) expectNoBearerSecrets(result, bearerSecrets)
   })().then(
     () => ({ ok: true }) as const,
     (error: unknown) => ({ ok: false, error }) as const,

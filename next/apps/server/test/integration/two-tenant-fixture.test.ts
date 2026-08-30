@@ -52,24 +52,40 @@ for (const driver of PLATFORM_FIXTURE_DRIVERS) {
       const credentials = [
         current.tenants.a.credentials.full,
         current.tenants.a.credentials.teamsWriteOnly,
+        current.tenants.a.credentials.usersReadOnly,
+        current.tenants.a.credentials.usersWriteOnly,
         current.tenants.a.credentials.scopeDeficient,
         current.tenants.b.credentials.full,
         current.tenants.b.credentials.teamsWriteOnly,
+        current.tenants.b.credentials.usersReadOnly,
+        current.tenants.b.credentials.usersWriteOnly,
         current.tenants.b.credentials.scopeDeficient,
       ]
       const records = await Promise.all([
         current.owner.inspectApiKey('a', current.tenants.a.credentials.full.id),
         current.owner.inspectApiKey('a', current.tenants.a.credentials.teamsWriteOnly.id),
+        current.owner.inspectApiKey('a', current.tenants.a.credentials.usersReadOnly.id),
+        current.owner.inspectApiKey('a', current.tenants.a.credentials.usersWriteOnly.id),
         current.owner.inspectApiKey('a', current.tenants.a.credentials.scopeDeficient.id),
         current.owner.inspectApiKey('b', current.tenants.b.credentials.full.id),
         current.owner.inspectApiKey('b', current.tenants.b.credentials.teamsWriteOnly.id),
+        current.owner.inspectApiKey('b', current.tenants.b.credentials.usersReadOnly.id),
+        current.owner.inspectApiKey('b', current.tenants.b.credentials.usersWriteOnly.id),
         current.owner.inspectApiKey('b', current.tenants.b.credentials.scopeDeficient.id),
       ])
 
-      expect(current.tenants.a.credentials.full.id).toBe(current.tenants.b.credentials.full.id)
-      expect(
-        current.tenants.a.credentials.full.token === current.tenants.b.credentials.full.token,
-      ).toBe(false)
+      for (const name of [
+        'full',
+        'teamsWriteOnly',
+        'usersReadOnly',
+        'usersWriteOnly',
+        'scopeDeficient',
+      ] as const) {
+        expect(current.tenants.a.credentials[name].id).toBe(current.tenants.b.credentials[name].id)
+        expect(current.tenants.a.credentials[name].token).not.toBe(
+          current.tenants.b.credentials[name].token,
+        )
+      }
       for (const [index, record] of records.entries()) {
         expect(record.fieldNames).toEqual(
           expect.arrayContaining([
@@ -92,18 +108,23 @@ for (const driver of PLATFORM_FIXTURE_DRIVERS) {
       }
       expect(records[0]?.scopes).toEqual(TENANT_FULL_SCOPES)
       expect(records[1]?.scopes).toEqual(['teams.write'])
-      expect(records[2]?.scopes).toEqual([])
+      expect(records[2]?.scopes).toEqual(['users.read'])
+      expect(records[3]?.scopes).toEqual(['users.write'])
+      expect(records[4]?.scopes).toEqual([])
       expect(records[0]?.modes).toEqual(['admin'])
     })
 
     test('authenticates each tenant-local key and rejects the other tenant secret', async () => {
       const current = initialized(fixture)
-      const [authA, authB, teamsWriteOnly, scopeDeficient] = await Promise.all([
-        current.owner.authenticateApiKey('a', current.tenants.a.credentials.full.token),
-        current.owner.authenticateApiKey('b', current.tenants.b.credentials.full.token),
-        current.owner.authenticateApiKey('a', current.tenants.a.credentials.teamsWriteOnly.token),
-        current.owner.authenticateApiKey('a', current.tenants.a.credentials.scopeDeficient.token),
-      ])
+      const [authA, authB, teamsWriteOnly, usersReadOnly, usersWriteOnly, scopeDeficient] =
+        await Promise.all([
+          current.owner.authenticateApiKey('a', current.tenants.a.credentials.full.token),
+          current.owner.authenticateApiKey('b', current.tenants.b.credentials.full.token),
+          current.owner.authenticateApiKey('a', current.tenants.a.credentials.teamsWriteOnly.token),
+          current.owner.authenticateApiKey('a', current.tenants.a.credentials.usersReadOnly.token),
+          current.owner.authenticateApiKey('a', current.tenants.a.credentials.usersWriteOnly.token),
+          current.owner.authenticateApiKey('a', current.tenants.a.credentials.scopeDeficient.token),
+        ])
 
       expect(authA).toEqual({
         type: 'apiKey',
@@ -115,6 +136,14 @@ for (const driver of PLATFORM_FIXTURE_DRIVERS) {
       expect(teamsWriteOnly).toMatchObject({
         type: 'apiKey',
         scopes: ['teams.write'],
+      })
+      expect(usersReadOnly).toMatchObject({
+        type: 'apiKey',
+        scopes: ['users.read'],
+      })
+      expect(usersWriteOnly).toMatchObject({
+        type: 'apiKey',
+        scopes: ['users.write'],
       })
       expect(scopeDeficient).toMatchObject({ type: 'apiKey', scopes: [] })
 
