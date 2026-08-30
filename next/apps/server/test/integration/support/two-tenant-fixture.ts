@@ -74,6 +74,10 @@ export interface TenantFixtureInspection {
   readonly collections: readonly string[]
 }
 
+export interface TenantSchemaMetadataInspection {
+  readonly initialized: boolean
+}
+
 export interface TenantApiKeyInspection {
   readonly id: string
   readonly fieldNames: readonly string[]
@@ -92,6 +96,10 @@ export interface TwoTenantFixtureRuntimeOptions extends PlatformFixtureRuntimeOp
 
 export interface TwoTenantFixtureOwner {
   inspectTenant(tenant: TwoTenantName): Promise<TenantFixtureInspection>
+  inspectSchemaMetadata(
+    tenant: TwoTenantName,
+    schemaName: string,
+  ): Promise<TenantSchemaMetadataInspection>
   inspectApiKey(tenant: TwoTenantName, keyId: string): Promise<TenantApiKeyInspection>
   authenticateApiKey(
     tenant: TwoTenantName,
@@ -283,6 +291,22 @@ async function inspectTenant(selected: OwnedTenant): Promise<TenantFixtureInspec
   })
 }
 
+async function inspectSchemaMetadata(
+  selected: OwnedTenant,
+  schemaName: string,
+): Promise<TenantSchemaMetadataInspection> {
+  return await withTenantResource(selected.target, async (resource) => {
+    // Physical bootstrap state is observable only through this test-owner seam.
+    const rows = await resource.postgres
+      .raw<readonly { exists: boolean }[]>(
+        'select exists (select 1 from information_schema.tables where table_schema = ? and table_name = ?) as "exists"',
+        [schemaName, 'nx__metadata'],
+      )
+      .execute()
+    return Object.freeze({ initialized: rows[0]?.exists === true })
+  })
+}
+
 async function inspectApiKey(
   selected: OwnedTenant,
   keyId: string,
@@ -376,6 +400,8 @@ export async function createTwoTenantFixture(
       owner: Object.freeze({
         // Targets and privileged database access remain confined to test-owner methods.
         inspectTenant: (name: TwoTenantName) => inspectTenant(tenant(ownedTenants, name)),
+        inspectSchemaMetadata: (name: TwoTenantName, schemaName: string) =>
+          inspectSchemaMetadata(tenant(ownedTenants, name), schemaName),
         inspectApiKey: (name: TwoTenantName, keyId: string) =>
           inspectApiKey(tenant(ownedTenants, name), keyId),
         authenticateApiKey: (name: TwoTenantName, token: string, mode: AuthMode = 'admin') =>
