@@ -1,7 +1,7 @@
 # ADR 0003: Process Resource Lifecycle
 
 **Date**: 2026-08-28
-**Status**: Decided (amended 2026-08-29)
+**Status**: Decided (amended 2026-08-30)
 **Owner**: Nuvix server platform
 
 ## Context
@@ -30,7 +30,7 @@ Project and database context applies only to project-scoped `/v2` route groups.
 invoke project or database dependencies.
 
 ```ts
-const app = createApp({ withProjectRequest });
+const app = createApp({ projectRequests });
 ```
 
 ### Process ownership
@@ -94,23 +94,35 @@ escape. The scope awaits idempotent release in `finally` before the response can
 complete.
 
 ```ts
-return withProjectRequest(headers, async ({ project, auth, session }) => {
-  return service({ project, auth, documents: session });
-});
+return projectRequests.withProject(
+  headers,
+  async ({ project, auth, session }) => {
+    return service({ project, auth, documents: session });
+  },
+);
 ```
 
 The helper owns the complete lifecycle:
 
 ```ts
-const locator = parsePublishableKey(headers);
-const project = await projects.resolve(locator.projectId);
+const project = await projects.resolve(headers);
 const lease = await tenantDatabases.acquire(project.id);
 let operationError: unknown;
 
 try {
-  const auth = await tenantAuth.resolve(lease.database, headers);
+  const system = lease.database.system();
+  const documents = Object.freeze({
+    find: system.find.bind(system),
+    getDocument: system.getDocument.bind(system),
+  });
+  const auth = await tenantAuth.resolve({ headers, project, documents });
   const session = lease.database.for(...rolesFor(auth, project));
-  return await operation({ project, auth, session });
+  return await operation({
+    project,
+    auth,
+    session,
+    schemas: lease.database.schemas,
+  });
 } catch (error) {
   operationError = error;
   throw error;
@@ -128,8 +140,8 @@ try {
 Repeated release calls share the lease's release promise and preserve the same
 cleanup failure. If the operation and release both fail, the aggregate preserves
 them in operation-then-cleanup order. Routes and services do not acquire,
-release, or retain leases themselves; the callback receives only the
-operation-scoped `Session` or a narrower `Pick<Session>`.
+release, or retain leases themselves; the callback receives only safe project
+and auth values, the operation-scoped `Session`, and the schema capability.
 
 Elysia `defer` is not used for database lease cleanup. It runs after response
 completion, so cleanup failure cannot participate reliably in the response

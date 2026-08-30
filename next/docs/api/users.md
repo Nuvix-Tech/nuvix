@@ -1,6 +1,7 @@
 # v2 Contract — Users
 
-> Status: PARTIALLY IMPLEMENTED — credentialless core identity/profile administration
+> Status: PARTIALLY IMPLEMENTED — credentialless core identity/profile routes
+> live-verified; auth and extended administration deferred
 > Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`, D29 (password
 > hashing policy), `../architecture/integrations.md`,
 > `@nuvix/db@1.0.0-alpha.2`, `@nuvix/messaging@2.0.0`
@@ -146,6 +147,26 @@ Body: `{ targetId?, providerType, identifier }`.
   and re-hash with current default cost params.
 - Smoke cases without DB: guest 403s, 422 validation shapes, removed-route
   404s (`/v2/users/md5` etc.).
+
+## Live composed verification
+
+From `next/`:
+
+```bash
+bun run test:integration:live
+```
+
+Every implemented Users core route runs through production composition for both
+PostgreSQL and real-file SQLite platform persistence, each resolving two
+isolated `nuvix/postgres:18.1` tenants. Real tenant-local read/write API keys
+verify create/list/get, profile updates, preference replacement, labels, status,
+same-ID tenant isolation, wrong-tenant credential rejection, and deficient-scope
+`403` responses.
+
+A `users.write`-only key has the document-read permission required for mutation
+preconditions but cannot call public read routes without `users.read`. User
+membership projection, identities, credentials, sessions, MFA, targets, usage,
+logs, and deletion remain deferred.
 
 ## Deferred decisions
 

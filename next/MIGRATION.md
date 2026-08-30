@@ -1,6 +1,7 @@
 # Nuvix v2 — Bun-Native Rewrite Plan
 
-> **Status**: EXECUTION — Phase 3 data-service completion and integration
+> **Status**: EXECUTION — Phase 3 infrastructure/core-data gate complete;
+> membership administration is the active Phase 3 slice
 > **Scope**: Full rewrite of the Nuvix backend from NestJS/Fastify/Node to a
 > Bun-native stack built on Elysia (`elysia@next`). This is a **rewrite**, not
 > a mechanical migration.
@@ -318,10 +319,38 @@ next/
       remain assigned to messaging/audit phases
 - [ ] Users auth/session/MFA/targets/usage/logs/deletion remain assigned to
       their dedicated later phases
-- [ ] Complete live composed-request integration for platform PostgreSQL and
-      SQLite resolving isolated PostgreSQL tenants
+- [x] Complete the Phase 3 infrastructure/core-data live gate: PostgreSQL and
+      real-file SQLite platform persistence each resolve two isolated PostgreSQL
+      tenants through production request composition
 - [x] Schemas CRUD slice — implemented on `@nuvix/pg@2.0.0`; collection,
       attribute, index, and document contracts remain separate
+
+**Infrastructure/core-data gate verified 2026-08-30:**
+
+| Platform persistence                | Project databases                                        | Verified request surface          |
+| ----------------------------------- | -------------------------------------------------------- | --------------------------------- |
+| PostgreSQL on `nuvix/postgres:18.1` | two isolated PostgreSQL tenants on `nuvix/postgres:18.1` | Schemas, Teams core, Users core   |
+| real-file SQLite                    | two isolated PostgreSQL tenants on `nuvix/postgres:18.1` | same production-composed scenario |
+
+The gate provisions base `@nuvix/db` metadata before platform collections or
+tenant auth/team collections, then reopens the platform through the read-only
+startup path. Platform collections are owner-only, tenant targets are
+AES-256-GCM encrypted at rest, and tenant internals use reserved schema `core`
+with namespace `nx`.
+
+Real tenant-local API keys prove correct-tenant access, wrong-tenant rejection,
+and scope failures. Missing, corrupt, malformed, and unreachable targets return
+the same redacted `503 project_unavailable`. Request completion awaits lease
+release, runtime close drains tenants before the platform, and the live suite
+asserts no retained PostgreSQL connections or SQLite files. Two narrow
+regressions were fixed by granting write-scope database roles only the document
+read permission needed for write preconditions, and by probing Bun SQL's lazy
+connection during tenant acquisition so unreachable targets cannot be
+misclassified as auth failures.
+
+This does **not** complete Phase 3. The active slice is Teams membership
+administration and the Users membership projection. Invitations, logs, and the
+remaining auth/session/MFA surface stay deferred to their documented phases.
 
 ### Phase 4 — Account/Auth (highest risk)
 
@@ -421,9 +450,11 @@ v2 makes tenancy **structural**:
 **Rules:**
 
 1. **One database per tenant/project.** No shared-schema tenancy in v2.
-2. The **platform app owns provisioning**: creating the project record,
-   creating its database (via the pg-18 image's auto-schema bootstrap),
-   tracking connection metadata in the internal/platform DB.
+2. An explicit **owner-only provisioning flow** initializes base `@nuvix/db`
+   metadata before platform collections or tenant auth/team collections, then
+   creates project records and stores encrypted connection metadata. API process
+   startup only opens existing resources and performs lookups; it never mutates
+   schemas or invokes provisioning implicitly.
 3. The **server app never hardcodes tenants or derives connection metadata**.
    A public `x-nuvix-publishable-key` decodes to the public project ID and is
    only a locator. The process-owned boundary resolves the enabled project and
@@ -436,21 +467,24 @@ v2 makes tenancy **structural**:
    `maxTenants` is an idle-resource cache target, not a hard cap on active
    tenants; in-use resources are never evicted to satisfy it.
 5. Schema/collection model inside a tenant DB is **redesigned freely** (D25) —
-   the `nuvix/postgres:18.1` image's auto-schema features are the foundation;
-   consult the `nuvix-dev/postgres` source repository when designing.
+   application internals use reserved schema `core`, namespace `nx`, and the
+   `nuvix/postgres:18.1` image's auto-schema features as the foundation; consult
+   the `nuvix-dev/postgres` source repository when designing.
 6. Platform-side features that depend on provisioning (billing, quotas,
    region placement) are **explicitly out of scope for now** — interfaces are
    stubbed so they can be added later without rework.
 7. The injected resolver → registry → tenant resource → request `Session` flow is
-   implemented and fake-tested. Request leases release idempotently in `finally`;
-   owner shutdown rejects later acquisition, drains active leases, exposes close
-   failures, and owns retries.
+   implemented and verified through both live platform rows. Request leases
+   release idempotently in `finally`; owner shutdown rejects later acquisition,
+   drains active leases, closes tenant owners before platform persistence,
+   exposes close failures, and owns retries.
 8. Authentication happens only after tenant acquisition. Users, sessions, JWT
    trust material, memberships, scopes, and secret API keys are tenant-owned;
    platform persistence has no credential-binding collection.
-9. HTTP project scope, feature routes, and live startup are implemented. The
-   remaining Phase 3 integration gate is a full PostgreSQL/SQLite platform
-   matrix resolving isolated `nuvix/postgres:18.1` tenants.
+9. The Phase 3 infrastructure/core-data integration gate is complete: both
+   platform adapters resolve two isolated `nuvix/postgres:18.1` tenants and run
+   Schemas, Teams core, and Users core routes with real tenant-local API keys.
+   Phase 3 remains open for membership administration and projection.
 
 ---
 

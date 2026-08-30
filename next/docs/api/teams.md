@@ -1,6 +1,7 @@
 # v2 Contract — Teams
 
-> Status: PARTIALLY IMPLEMENTED — core team CRUD + preferences; memberships/logs deferred
+> Status: PARTIALLY IMPLEMENTED — core team CRUD + preferences live-verified;
+> memberships/invites/logs deferred
 > Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`,
 > `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`,
 > `@nuvix/messaging@2.0.0`
@@ -143,7 +144,27 @@ Errors (`type` = coarse class, `code` = what SDKs branch on):
 - Map DB not-found/conflict failures through the shared translator to the
   existing `team_*` and `membership_*` public codes.
 - Smoke cases (no live DB): guest gets `403` on all endpoints; malformed
-  create bodies get `422`. Full lifecycle cases need integration fixtures.
+  create bodies get `422`. Membership/invite lifecycle coverage remains deferred
+  with those endpoints.
+
+## Live composed verification
+
+From `next/`:
+
+```bash
+bun run test:integration:live
+```
+
+All seven implemented Teams routes run through production composition for both
+PostgreSQL and real-file SQLite platform persistence, each resolving two
+isolated `nuvix/postgres:18.1` tenants. Real tenant-local API keys verify CRUD,
+preference replacement, cross-tenant absence, wrong-tenant credential rejection,
+and deficient-scope `403` responses.
+
+A `teams.write`-only key may read a document only inside write preconditions;
+the public list/get/prefs routes still require `teams.read`. Membership
+administration, invites, and logs are not covered by this completed core gate and
+remain deferred.
 
 ## Open questions for review
 

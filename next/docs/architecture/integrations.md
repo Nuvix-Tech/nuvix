@@ -1,6 +1,6 @@
 # Package Integration Architecture
 
-> Status: DATABASE FOUNDATION + LIVE COMPOSITION + SCHEMA CRUD IMPLEMENTED
+> Status: PHASE 3 INFRASTRUCTURE/CORE-DATA LIVE GATE VERIFIED; MEMBERSHIPS DEFERRED
 > Scope: sibling `@nuvix/db`, `@nuvix/pg`, `@nuvix/cache`, `@nuvix/storage`,
 > and `@nuvix/messaging` source packages
 
@@ -40,9 +40,16 @@ construct/cache a PostgreSQL `Adapter`, `@nuvix/pg` facade, cache driver, and
 its source repository is `nuvix-dev/postgres`.
 
 The platform persistence model, publishable-key project locator, tenant-local
-authentication, feature routes, and live startup/shutdown are implemented. The
-remaining Phase 3 gate is full request-path integration coverage across both
-supported platform adapters and PostgreSQL tenants. This boundary does not
+authentication, feature routes, and startup/shutdown are implemented. The live
+gate runs the same production-composed request scenario for both platform
+adapters:
+
+| Platform fixture                    | Tenant fixtures                              | Result |
+| ----------------------------------- | -------------------------------------------- | ------ |
+| PostgreSQL on `nuvix/postgres:18.1` | two isolated `nuvix/postgres:18.1` databases | passed |
+| unique real-file SQLite             | two isolated `nuvix/postgres:18.1` databases | passed |
+
+The PostgreSQL image source is `nuvix-dev/postgres`. This boundary does not
 hardcode tenant URLs or expose connection metadata to requests.
 
 ```text
@@ -63,6 +70,51 @@ verifiers, reject credential conflicts, expiry, revocation, and disabled users,
 and hydrate current accepted memberships before role construction. Project JWTs
 remain fail-closed until tenant signing-key storage and rotation land in Phase 4;
 there is no process-global project JWT secret.
+
+### Provisioning and stored targets
+
+Provisioning is an explicit owner operation, separate from API startup:
+
+```text
+platform: configure target filters + metadata
+          → create base @nuvix/db metadata
+          → create platform_projects + platform_tenant_targets
+
+tenant:   configure core/nx metadata
+          → create base @nuvix/db metadata
+          → create users/sessions/memberships/api_keys
+          → create teams
+```
+
+`provisionPlatformDatabase` and `provisionTenantDatabase` are idempotent. The
+runtime does not call either function: startup opens already-provisioned state
+and its platform capability is lookup-only. Platform collections have empty
+permissions and are accessed only by the process-owned system session.
+
+The target field uses the same instance-local `json` and `encrypt` filters at
+provisioning and runtime. `encrypt` stores an authenticated AES-256-GCM
+`ntt1.<base64url>` envelope, so PostgreSQL URLs are ciphertext at rest on both
+platform adapters. Invalid key configuration and encode/decode failures expose
+no key, plaintext target, ciphertext, filename, or provider cause. See
+[`../ENV.md`](../ENV.md) for the required key format.
+
+The live fixtures persist verifier material—not bearer secrets—and deliberately
+reuse key IDs with different secrets in tenants A and B. A wrong-tenant secret
+returns `401 credential_invalid`; deficient scopes return `403` without the
+denied write. Project lookup failures stay stable and redacted:
+
+| Condition                                          | Public result             |
+| -------------------------------------------------- | ------------------------- |
+| unknown or disabled project                        | `404 project_not_found`   |
+| missing, corrupt, malformed, or unreachable target | `503 project_unavailable` |
+
+Canonical adapter metadata is also shared by provisioning and runtime:
+
+| Role                | Schema          | Namespace  |
+| ------------------- | --------------- | ---------- |
+| PostgreSQL platform | `internal`      | `platform` |
+| SQLite platform     | `main`          | `platform` |
+| PostgreSQL tenant   | reserved `core` | `nx`       |
 
 ## Lifetimes and ownership
 
@@ -86,8 +138,8 @@ adapter and cache.
 
 | Consumer              | Capability                                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------------------ |
-| Request pipeline      | One ordered `withProjectRequest` operation scope                                                       |
-| Request lease         | role-scoped `session` and idempotent `release`                                                         |
+| Request pipeline      | One ordered `withProject` operation scope                                                              |
+| Registry lease        | composition-internal tenant `database` and idempotent `release`                                        |
 | Process owner         | `close()`                                                                                              |
 | Composition internals | metadata resolver, registry controls, connection value, raw `Database`, adapter, cache, and `system()` |
 
@@ -96,27 +148,31 @@ adapter and cache.
 raw or privileged resource. Composition internals are never request-visible.
 
 ```ts
-interface RequestDatabaseSessionLease {
-  readonly session: Session;
+interface TenantDatabaseLease<Database> {
+  readonly database: Database;
   release(): Promise<void>;
 }
 ```
 
-Request code sees this lease, not the underlying `Database`, adapter, cache,
-connection value, or registry lifecycle controls. Every successful acquisition
-must release in `finally`; repeated release calls return the same promise and
-preserve the same cleanup failure.
+`ProjectRequestScope` owns this lease; request callbacks never receive it or the
+underlying `Database`, adapter, cache, connection value, or registry lifecycle
+controls. Every successful acquisition releases in `finally`; repeated release
+calls return the same promise and preserve the same cleanup failure.
 
 ```ts
-const lease = await tenantDatabases.acquire(project.id);
-try {
-  const auth = await tenantAuth.resolve(lease.database, headers);
-  const session = lease.database.for(...rolesFor(auth));
-  return await service(session);
-} finally {
-  await lease.release();
-}
+return requests.withProject(
+  headers,
+  async ({ project, auth, session, schemas }) =>
+    service({ project, auth, documents: session, schemas }),
+);
 ```
+
+The live matrix reopens the runtime with zero-idle eviction and verifies that a
+successful request and a failed tenant-auth request both settle only after the
+tenant connection is released. Runtime close is idempotent, leaves no platform
+or tenant PostgreSQL clients, rejects post-close acquisition, and removes the
+owned SQLite file/containers. Deterministic lifecycle coverage additionally
+holds an active lease open and proves every tenant closes before the platform.
 
 ### Tenant registry semantics
 
@@ -357,14 +413,26 @@ bun test
 - **Contract:** table-test every error mapping, role mapping, per-recipient
   messaging outcome, and storage device selection.
 - **Composition:** fake resolvers and resources verify capability narrowing,
-  lazy metadata lookup, tenant selection, lease draining, close failures, and
-  retry ownership. These tests do not cover live PostgreSQL or a concrete
-  platform metadata service.
+  lazy metadata lookup, tenant selection, lease draining, tenant-before-platform
+  close order, close failures, and retry ownership.
 - **Live schema integration:** `bun run test:integration:live` uses a test-only
   Docker helper to run direct schema CRUD and document bootstrap against exactly
   `nuvix/postgres:18.1`; unavailable Docker, image, or readiness is a failure.
-- **Remaining integration:** verify the complete request path for both platform
-  adapters, tenant isolation, caller permissions, and shutdown behavior.
+- **Live composed matrix:** `apps/server/test/integration/full-request-path.test.ts`
+  runs real-file SQLite and PostgreSQL platform persistence through production
+  composition. Both rows resolve two isolated PostgreSQL tenants, authenticate
+  real tenant-local API keys, exercise all current Schemas/Teams/Users core
+  routes, verify wrong-tenant and deficient-scope failures, and assert stable
+  redacted project-target failures plus connection/file cleanup.
+
+Run the complete live gate from `next/`:
+
+```bash
+bun run test:integration:live
+```
+
+Membership administration, invitations, logs, and later auth/session/MFA work
+remain deferred; the completed gate does not imply those routes are live.
 
 ## Related
 

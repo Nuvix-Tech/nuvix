@@ -1,6 +1,7 @@
 # v2 Contract — Database (Schemas)
 
-> Status: IMPLEMENTED — schema CRUD routes, service, catalog, and document bootstrap complete
+> Status: IMPLEMENTED + LIVE COMPOSED MATRIX VERIFIED — schema CRUD routes,
+> service, catalog, and document bootstrap complete
 > Depends on: `_conventions.md` (D19, D26–D28),
 > `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`,
 > `@nuvix/pg@2.0.0`
@@ -144,7 +145,7 @@ schema → `404 /errors/not-found`.
   suite covers schema CRUD, reserved exclusion, document metadata bootstrap,
   and bootstrap-failure cleanup on PostgreSQL 18.
 
-## Live PostgreSQL 18 verification
+## Live composed verification
 
 From `next/`, run the explicitly selected integration suite:
 
@@ -152,8 +153,14 @@ From `next/`, run the explicitly selected integration suite:
 bun run test:integration:live
 ```
 
-The test helper uses only `nuvix/postgres:18.1`, daemon-assigned loopback ports,
-an actual `pg_isready` probe, and idempotent cleanup. Selecting this command is
-mandatory: a missing Docker daemon, local image, or readiness signal fails the
-suite rather than skipping it. Ordinary `bun test` and fake-backed route tests
-do not claim PostgreSQL integration coverage.
+The same production composition is verified with PostgreSQL platform persistence
+and with a real-file SQLite platform. Each row resolves two isolated tenant
+databases on exactly `nuvix/postgres:18.1` and exercises all five schema routes
+with real tenant-local API keys. Coverage includes reserved-schema exclusion,
+same-name tenant isolation, document metadata bootstrap, duplicate/missing
+errors, wrong-tenant credentials, deficient scopes, and redacted unavailable
+targets.
+
+The helper uses daemon-assigned loopback ports, an actual `pg_isready` probe,
+and idempotent cleanup. A missing Docker daemon, local image, or readiness signal
+fails the selected suite. Ordinary `bun test` does not claim this live coverage.
