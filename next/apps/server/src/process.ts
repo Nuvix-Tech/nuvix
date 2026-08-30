@@ -23,28 +23,42 @@ export interface ProcessOwner {
 
 type Serve = (options: { hostname: string; port: number; fetch: NuvixApp['fetch'] }) => HttpServer
 
+async function closeInOrder(server: HttpServer, runtime: ProcessRuntime): Promise<void> {
+  const failures: Error[] = []
+  await Promise.resolve()
+    .then(() => server.stop())
+    .catch(() => failures.push(new Error('HTTP server stop failed')))
+  await Promise.resolve()
+    .then(() => runtime.close())
+    .catch(() => failures.push(new Error('Runtime resource close failed')))
+  if (failures.length > 0) throw new AggregateError(failures, 'Server process close failed')
+}
+
 /** Starts HTTP and owns deterministic stop-then-resource shutdown. */
-export function startProcess(
+export async function startProcess(
   runtime: ProcessRuntime,
   options: ProcessOptions,
   serve: Serve = (input) => Bun.serve(input) as unknown as HttpServer,
-): ProcessOwner {
-  const server = serve({
-    hostname: options.host,
-    port: options.port,
-    fetch: runtime.app.fetch,
-  })
+): Promise<ProcessOwner> {
+  let server: HttpServer
+  try {
+    server = serve({
+      hostname: options.host,
+      port: options.port,
+      fetch: runtime.app.fetch,
+    })
+  } catch (error) {
+    await Promise.resolve()
+      .then(() => runtime.close())
+      .catch(() => undefined)
+    throw error
+  }
   let closePromise: Promise<void> | undefined
 
   return Object.freeze({
     server,
     close: () => {
-      closePromise ??= (async () => {
-        const failures: unknown[] = []
-        await server.stop().catch((error: unknown) => failures.push(error))
-        await runtime.close().catch((error: unknown) => failures.push(error))
-        if (failures.length > 0) throw new AggregateError(failures, 'Server process close failed')
-      })()
+      closePromise ??= closeInOrder(server, runtime)
       return closePromise
     },
   })

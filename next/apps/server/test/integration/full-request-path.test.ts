@@ -159,6 +159,7 @@ async function close(
   const failures: unknown[] = []
   if (runtime) await runtime.close().catch((error: unknown) => failures.push(error))
   await fixture.owner.close().catch((error: unknown) => failures.push(error))
+  await fixture.owner.assertRemoved().catch((error: unknown) => failures.push(error))
   if (failures.length > 0) {
     throw new AggregateError(failures, 'Full request-path scenario cleanup failed')
   }
@@ -828,6 +829,61 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
       })),
     )
     await fixture.owner.assertNoSensitiveValues(requestDiagnostics)
+
+    // Reopen the same platform backing with immediate idle eviction. A response
+    // can settle only after release has closed its tenant owner, so the
+    // container-side probes deterministically cover both success and auth failure.
+    if (!runtime) throw new Error('Expected the primary platform runtime')
+    const primaryRuntime = runtime
+    const primaryClose = primaryRuntime.close()
+    expect(primaryRuntime.close()).toBe(primaryClose)
+    await primaryClose
+    expect(primaryRuntime.close()).toBe(primaryClose)
+    await Promise.all([
+      fixture.owner.assertNoPlatformConnections(),
+      fixture.owner.assertNoTenantConnections(),
+    ])
+    runtime = undefined
+
+    const lifecycleRuntime = await createPlatformRuntime({
+      ...fixture.runtime,
+      tenantRegistry: { idleMs: 0 },
+      app: {
+        isProduction: false,
+        geoip: { lookup: () => null },
+        uptime: () => 42,
+      },
+    })
+    runtime = lifecycleRuntime
+    const lifecycleClient = treaty(lifecycleRuntime.app)
+
+    const failedAfterRelease = await lifecycleClient.v2.database.schemas.get({
+      headers: apiKeyHeaders(fixture.tenants.a, fixture.tenants.b.credentials.full.token),
+    })
+    expectStableProblem(failedAfterRelease, STABLE_PROBLEMS.credentialInvalid)
+    await fixture.owner.assertNoTenantConnections()
+
+    const successfulAfterRelease = await lifecycleClient.v2.database.schemas.get({
+      headers: headersB,
+    })
+    expect(successfulAfterRelease.status).toBe(200)
+    expect(successfulAfterRelease.error).toBeNull()
+    await fixture.owner.assertNoTenantConnections()
+
+    const lifecycleClose = lifecycleRuntime.close()
+    expect(lifecycleRuntime.close()).toBe(lifecycleClose)
+    await lifecycleClose
+    expect(lifecycleRuntime.close()).toBe(lifecycleClose)
+    await Promise.all([
+      fixture.owner.assertNoPlatformConnections(),
+      fixture.owner.assertNoTenantConnections(),
+    ])
+
+    const rejectedAfterClose = await lifecycleClient.v2.database.schemas.get({
+      headers: headersA,
+    })
+    expectStableProblem(rejectedAfterClose, STABLE_PROBLEMS.projectUnavailable)
+    await fixture.owner.assertNoTenantConnections()
   })().then(
     () => ({ ok: true }) as const,
     (error: unknown) => ({ ok: false, error }) as const,

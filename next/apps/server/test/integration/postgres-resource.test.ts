@@ -36,6 +36,9 @@ function fakeProcesses(options: { readonly ready?: boolean } = {}) {
         }
       }
       if (operation === 'exec') {
+        if (arguments_.includes('psql')) {
+          return { exitCode: 0, stdout: '0\n' }
+        }
         return { exitCode: options.ready === false ? 1 : 0, stdout: '' }
       }
       return { exitCode: 0, stdout: '' }
@@ -64,9 +67,13 @@ describe('PostgreSQL integration resource', () => {
     expect(run.arguments.at(-1)).toBe('nuvix/postgres:18.1')
     expect(run.arguments).toContain('--pull=never')
     expect(run.arguments).toContain('127.0.0.1::5432')
-    expect(run.arguments).not.toContain(password)
+    expect(fake.commands.every(({ arguments: command }) => !command.includes(password!))).toBe(true)
     expect(fake.events[0]).toBe('signals')
-    expect(Object.keys(resource.owner)).toEqual(['connectionString'])
+    expect(Object.keys(resource.owner).toSorted()).toEqual([
+      'assertNoClientConnections',
+      'assertRemoved',
+      'connectionString',
+    ])
     expect(JSON.stringify(resource)).not.toContain(password!)
     const owner = new URL(resource.owner.connectionString())
     expect({
@@ -83,7 +90,10 @@ describe('PostgreSQL integration resource', () => {
       database: '/postgres',
     })
 
+    await resource.owner.assertNoClientConnections()
     await resource.close()
+    await resource.owner.assertRemoved()
+    expect(fake.commands.every(({ arguments: command }) => !command.includes(password!))).toBe(true)
   })
 
   test('removes a partially started container when readiness never succeeds', async () => {

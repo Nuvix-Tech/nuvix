@@ -134,6 +134,9 @@ export interface TwoTenantFixtureOwner {
   ): Promise<ProjectAuthContext>
   inspectTargetCiphertext(projectId: string): Promise<string>
   assertNoSensitiveValues(value: string): Promise<void>
+  assertNoPlatformConnections(): Promise<void>
+  assertNoTenantConnections(): Promise<void>
+  assertRemoved(): Promise<void>
   close(): Promise<void>
 }
 
@@ -471,6 +474,16 @@ async function closeOwned(
   if (failures.length > 0) throw new AggregateError(failures, 'Two-tenant fixture cleanup failed')
 }
 
+async function assertRemoved(
+  platform: PlatformFixture,
+  postgresResources: readonly PostgresTestResource[],
+): Promise<void> {
+  await Promise.all([
+    platform.owner.assertRemoved(),
+    ...postgresResources.map((postgres) => postgres.owner.assertRemoved()),
+  ])
+}
+
 export async function createTwoTenantFixture(
   options: TwoTenantFixtureOptions,
 ): Promise<TwoTenantFixture> {
@@ -553,6 +566,13 @@ export async function createTwoTenantFixture(
             failureProjects,
             selectedPlatform,
           ),
+        assertNoPlatformConnections: () => selectedPlatform.owner.assertNoClientConnections(),
+        assertNoTenantConnections: async () => {
+          await Promise.all(
+            postgresResources.map((postgres) => postgres.owner.assertNoClientConnections()),
+          )
+        },
+        assertRemoved: () => assertRemoved(selectedPlatform, postgresResources),
         close: () => {
           closePromise ??= closeOwned(selectedPlatform, postgresResources)
           return closePromise

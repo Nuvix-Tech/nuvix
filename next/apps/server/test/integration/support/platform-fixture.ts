@@ -43,6 +43,8 @@ export interface PlatformFixtureOwner {
   inspectTargetCiphertext(projectId: string): Promise<string>
   corruptTargetCiphertext(projectId: string): Promise<void>
   assertNoSensitiveValues(value: string): Promise<void>
+  assertNoClientConnections(): Promise<void>
+  assertRemoved(): Promise<void>
   close(): Promise<void>
 }
 
@@ -54,6 +56,8 @@ export interface PlatformFixture {
 
 interface PlatformBackingResource {
   readonly configuration: PlatformDatabaseConfiguration
+  assertNoClientConnections(): Promise<void>
+  assertRemoved(): Promise<void>
   close(): Promise<void>
 }
 
@@ -99,6 +103,13 @@ async function removeSQLiteFiles(filename: string): Promise<void> {
   }
 }
 
+async function assertSQLiteFilesRemoved(filename: string): Promise<void> {
+  const retained = await Promise.all(sqliteFiles(filename).map((path) => Bun.file(path).exists()))
+  if (retained.some(Boolean)) {
+    throw new Error('SQLite platform fixture retained a file after cleanup')
+  }
+}
+
 async function sqliteBacking(filename: string): Promise<PlatformBackingResource> {
   validateSQLiteFilename(filename)
   if (
@@ -109,6 +120,8 @@ async function sqliteBacking(filename: string): Promise<PlatformBackingResource>
 
   return Object.freeze({
     configuration: Object.freeze({ driver: 'sqlite' as const, filename }),
+    assertNoClientConnections: async () => {},
+    assertRemoved: () => assertSQLiteFilesRemoved(filename),
     close: () => removeSQLiteFiles(filename),
   })
 }
@@ -120,6 +133,8 @@ async function postgresBacking(): Promise<PlatformBackingResource> {
       driver: 'postgresql' as const,
       connectionString: postgres.owner.connectionString(),
     }),
+    assertNoClientConnections: () => postgres.owner.assertNoClientConnections(),
+    assertRemoved: () => postgres.owner.assertRemoved(),
     close: () => postgres.close(),
   })
 }
@@ -383,6 +398,8 @@ export async function createPlatformFixture(
       corruptTargetCiphertext(resource.configuration, projectId),
     assertNoSensitiveValues: (value: string) =>
       assertNoSensitiveValues(value, resource.configuration, encryptionKey, options.projects),
+    assertNoClientConnections: () => resource.assertNoClientConnections(),
+    assertRemoved: () => resource.assertRemoved(),
     close: () => {
       closePromise ??= resource.close()
       return closePromise

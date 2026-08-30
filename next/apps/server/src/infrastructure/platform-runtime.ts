@@ -3,8 +3,17 @@ import { createProjectLocator } from '../context/project-locator'
 import type { PublishableKeyEnvironment } from '../context/publishable-key'
 import { createTenantAuthResolver } from '../context/tenant-auth'
 import type { PlatformDatabaseConfiguration } from './database-adapter-config'
-import { createDatabaseComposition, type DatabaseRegistryOptions } from './database-composition'
-import { createPlatformDatabase } from './platform-database'
+import {
+  createDatabaseComposition,
+  type DatabaseComposition,
+  type DatabaseCompositionOptions,
+  type DatabaseRegistryOptions,
+} from './database-composition'
+import {
+  createPlatformDatabase,
+  type PlatformDatabaseOptions,
+  type PlatformDatabaseOwner,
+} from './platform-database'
 import { createPlatformProjectLookup } from './platform-projects'
 import { createTenantTargetResolver } from './tenant-database-target'
 import type { TenantTargetFilters } from './tenant-target-codec'
@@ -23,30 +32,49 @@ export interface PlatformRuntime {
   close(): Promise<void>
 }
 
+/** Process-owner construction seam; none of these capabilities enter request context. */
+export interface PlatformRuntimeConstruction {
+  readonly platform: (
+    database: PlatformDatabaseConfiguration,
+    options: PlatformDatabaseOptions,
+  ) => Promise<PlatformDatabaseOwner>
+  readonly composition: (options: DatabaseCompositionOptions) => DatabaseComposition
+}
+
+const DEFAULT_CONSTRUCTION: PlatformRuntimeConstruction = {
+  platform: createPlatformDatabase,
+  composition: createDatabaseComposition,
+}
+
 async function closeInOrder(
   closeTenants: () => Promise<void>,
   closePlatform: () => Promise<void>,
 ): Promise<void> {
-  const failures: unknown[] = []
-  await closeTenants().catch((error: unknown) => failures.push(error))
-  await closePlatform().catch((error: unknown) => failures.push(error))
+  const failures: Error[] = []
+  await Promise.resolve()
+    .then(closeTenants)
+    .catch(() => failures.push(new Error('Tenant composition close failed')))
+  await Promise.resolve()
+    .then(closePlatform)
+    .catch(() => failures.push(new Error('Platform database close failed')))
   if (failures.length > 0) throw new AggregateError(failures, 'Platform runtime close failed')
 }
 
 /** Owns live platform and tenant resources; collection setup remains explicit provisioning. */
 export async function createPlatformRuntime(
   options: PlatformRuntimeOptions,
+  construction: PlatformRuntimeConstruction = DEFAULT_CONSTRUCTION,
 ): Promise<PlatformRuntime> {
-  const platform = await createPlatformDatabase(options.database, {
+  const platform = await construction.platform(options.database, {
     tenantTargetFilters: options.tenantTargetFilters,
   })
-  let database: ReturnType<typeof createDatabaseComposition> | undefined
+  let database: DatabaseComposition | undefined
 
   try {
     const projects = createPlatformProjectLookup(platform.lookups)
     const projectLocator = createProjectLocator(projects, options.publishableKeyEnvironment)
     const tenantTargets = createTenantTargetResolver(platform.lookups)
-    database = createDatabaseComposition({
+    database = construction.composition({
       projectLocator,
       tenantTargets,
       tenantAuth: createTenantAuthResolver(),

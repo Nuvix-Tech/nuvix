@@ -15,7 +15,7 @@ const runtime = await createPlatformRuntime({
     console.error('[nuvix] tenant database close failed')
   },
 })
-const processOwner = startProcess(runtime, {
+const processOwner = await startProcess(runtime, {
   host: config.host,
   port: config.port,
 })
