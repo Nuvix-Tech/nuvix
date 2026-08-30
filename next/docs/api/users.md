@@ -1,6 +1,6 @@
 # v2 Contract — Users
 
-> Status: PROPOSED — review before implementation
+> Status: PARTIALLY IMPLEMENTED — credentialless core identity/profile administration
 > Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`, D29 (password
 > hashing policy), `../architecture/integrations.md`,
 > `@nuvix/db@1.0.0-alpha.2`, `@nuvix/messaging@2.0.0`
@@ -11,33 +11,42 @@ identities, password-hash imports, tokens/JWTs, sessions, MFA factors and
 recovery codes, push targets. Admin-facing surface (the end-user "account"
 surface lives in the future auth contract).
 
+Implemented first slice: create/list/get plus name, email, phone, preferences,
+labels, and status mutations. It is API-key-only (`users.read` / `users.write`)
+until a trusted administrative session claim exists. Passwords, hash imports,
+identities, tokens/JWTs, sessions, MFA, targets, usage, logs, deletion, and user
+membership projection remain deferred. Preferences replace the stored object;
+they do not merge.
+
 ## Auth posture
 
-Admin/key/session/JWT union like teams; most write endpoints are admin/key
-only in practice via `users.write`. Scopes: `users.read`, `users.write`.
+The implemented first slice is API-key-only. Keys require `users.read` or
+`users.write`; mode does not grant authority. Guest, ordinary session, and JWT
+contexts receive `403`. A trusted administrative-session claim may be added in
+Phase 4 without changing route/service boundaries.
 
 ---
 
 ## Endpoints — Core
 
-| Method | Path                            | Purpose                            |
-| ------ | ------------------------------- | ---------------------------------- |
-| POST   | `/v2/users`                     | Create user (server-side hashing)  |
-| POST   | `/v2/users/argon2`              | Create user with pre-hashed Argon2 |
-| POST   | `/v2/users/bcrypt`              | Create user with pre-hashed bcrypt |
-| GET    | `/v2/users`                     | List users (queries + search)      |
-| GET    | `/v2/users/usage`               | Aggregate usage stats              |
-| GET    | `/v2/users/:userId`             | Get user                           |
-| PATCH  | `/v2/users/:userId/name`        | Update name                        |
-| PATCH  | `/v2/users/:userId/password`    | Update password                    |
-| PATCH  | `/v2/users/:userId/email`       | Update email                       |
-| PATCH  | `/v2/users/:userId/phone`       | Update phone                       |
-| GET    | `/v2/users/:userId/prefs`       | Get prefs                          |
-| PATCH  | `/v2/users/:userId/prefs`       | Merge prefs                        |
-| PUT    | `/v2/users/:userId/labels`      | Replace labels                     |
-| PATCH  | `/v2/users/:userId/status`      | Activate/block                     |
-| GET    | `/v2/users/:userId/memberships` | Teams the user belongs to          |
-| GET    | `/v2/users/:userId/logs`        | Audit logs                         |
+| Method | Path                            | Purpose                             |
+| ------ | ------------------------------- | ----------------------------------- |
+| POST   | `/v2/users`                     | Create credentialless user profile  |
+| POST   | `/v2/users/argon2`              | Deferred to Phase 4                 |
+| POST   | `/v2/users/bcrypt`              | Deferred to Phase 4                 |
+| GET    | `/v2/users`                     | List users (portable exact filters) |
+| GET    | `/v2/users/usage`               | Deferred to stats phase             |
+| GET    | `/v2/users/:userId`             | Get user                            |
+| PATCH  | `/v2/users/:userId/name`        | Update name                         |
+| PATCH  | `/v2/users/:userId/password`    | Deferred to Phase 4                 |
+| PATCH  | `/v2/users/:userId/email`       | Update email                        |
+| PATCH  | `/v2/users/:userId/phone`       | Update phone                        |
+| GET    | `/v2/users/:userId/prefs`       | Get prefs                           |
+| PATCH  | `/v2/users/:userId/prefs`       | Replace prefs                       |
+| PUT    | `/v2/users/:userId/labels`      | Replace labels                      |
+| PATCH  | `/v2/users/:userId/status`      | Activate/block                      |
+| GET    | `/v2/users/:userId/memberships` | Deferred                            |
+| GET    | `/v2/users/:userId/logs`        | Deferred                            |
 
 ### Legacy hash variants — REMOVED (D29)
 
@@ -50,13 +59,10 @@ imports.
 
 ### Create user
 
-Body (`POST /v2/users`): `{ userId?, email?, phone?, password?, name? }` —
-all optional except one identifier is required in practice. Server hashes
-`password` with the project default (bcrypt). The argon2/bcrypt variants
-accept an already-hashed `password` (+ `hashOptions` where applicable) so
-plaintext never crosses the wire during migrations.
-
-`password` and `hashOptions` are sensitive fields — never echoed back.
+Implemented body: `{ userId?, email?, phone?, name? }`. At least one of
+`userId`, `email`, or `phone` is required. Omitted/`"unique()"` IDs are
+generated; emails are lowercased; phones use E.164. Password/hash fields are
+rejected by validation and land only with Phase 4 credential storage.
 
 ### Status
 
@@ -141,8 +147,9 @@ Body: `{ targetId?, providerType, identifier }`.
 - Smoke cases without DB: guest 403s, 422 validation shapes, removed-route
   404s (`/v2/users/md5` etc.).
 
-## Open questions for review
+## Deferred decisions
 
-1. Keep `GET /v2/users/usage` in v2 or defer with DEFERRED_ROUTES?
-2. `PATCH prefs` merge semantics vs `PUT` replace — v1 uses PATCH-as-merge;
-   proposed keeping merge for parity.
+1. `GET /v2/users/usage` waits for the shared stats pipeline.
+2. Preferences use replacement semantics, matching the actual v1 service.
+3. Passwords/hash imports, identities, JWTs, sessions, MFA, targets, logs,
+   deletion, and user membership projection remain outside this first slice.

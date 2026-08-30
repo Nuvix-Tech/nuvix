@@ -337,7 +337,8 @@ next/
       HTTP stop → tenant drain → platform close ordering, idempotent shutdown
 - [ ] Implement database services and reviewed routes on the foundation
 - [ ] Teams, Users slices — Teams core CRUD/preferences implemented; public
-      memberships, logs, and Users remain
+      memberships/logs deferred; Users core identity/profile administration
+      implemented, auth/session/MFA/targets/usage/logs/deletion deferred
 - [ ] Schemas slice — minus `@nuvix/pg`-dependent endpoints (deferred list in `DEFERRED_ROUTES.md`)
 
 ### Phase 4 — Account/Auth (highest risk)

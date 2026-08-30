@@ -13,6 +13,7 @@ import { rateLimit } from './plugins/rate-limit'
 import { securityHeaders } from './plugins/security'
 import { ServiceUnavailableError } from './shared/errors'
 import { teamRoutes } from './teams/route'
+import { userRoutes } from './users/route'
 
 const DEFAULT_TRANSLATIONS = new URL('../../../assets/locale/translations', import.meta.url)
   .pathname
@@ -89,6 +90,7 @@ export async function createApp(options: AppOptions = {}) {
     .use(localeRoutes(geoip, localeOptions))
     .use(avatarRoutes(avatars))
     .use(teamRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
+    .use(userRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(health)
 }
 

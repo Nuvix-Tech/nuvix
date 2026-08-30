@@ -18,6 +18,7 @@ describe('openapi', () => {
     const spec = (await res.json()) as { paths: Record<string, unknown> }
     expect(Object.keys(spec.paths)).toContain('/v2/health')
     expect(Object.keys(spec.paths)).toContain('/v2/teams')
+    expect(Object.keys(spec.paths)).toContain('/v2/users')
   })
 
   test('serves scalar UI', async () => {

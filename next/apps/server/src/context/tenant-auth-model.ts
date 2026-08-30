@@ -7,10 +7,14 @@ export interface TenantAuthModel {
   }
   readonly fields: {
     readonly users: {
+      readonly name: string
+      readonly email: string
+      readonly phone: string
       readonly status: string
       readonly emailVerified: string
       readonly phoneVerified: string
       readonly labels: string
+      readonly prefs: string
     }
     readonly sessions: {
       readonly userId: string
@@ -51,10 +55,14 @@ export const TENANT_AUTH_MODEL = {
   },
   fields: {
     users: {
+      name: 'name',
+      email: 'email',
+      phone: 'phone',
       status: 'status',
       emailVerified: 'emailVerified',
       phoneVerified: 'phoneVerified',
       labels: 'labels',
+      prefs: 'prefs',
     },
     sessions: {
       userId: 'userId',

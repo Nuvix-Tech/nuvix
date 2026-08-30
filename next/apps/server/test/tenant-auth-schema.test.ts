@@ -61,6 +61,8 @@ describe('tenant auth schema', () => {
     expect(attributes).toContain('secretDigest')
     expect(attributes).toContain('secretSalt')
     expect(attributes).not.toContain('secret')
+    expect(attributes).not.toContain('password')
+    expect(attributes).toEqual(expect.arrayContaining(['name', 'email', 'phone', 'prefs']))
   })
 
   test('does not expose credential collections through document permissions', () => {
