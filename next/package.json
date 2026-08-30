@@ -15,6 +15,7 @@
     "dev": "bun --filter '*' dev",
     "build": "bun --filter '*' build",
     "test": "bun test",
+    "test:integration:live": "NUVIX_LIVE_POSTGRES=1 bun test apps/server/test/integration",
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit"

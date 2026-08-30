@@ -146,21 +146,14 @@ schema → `404 /errors/not-found`.
 
 ## Live PostgreSQL 18 verification
 
-Run the integration suite only against the exact deployable image:
+From `next/`, run the explicitly selected integration suite:
 
 ```bash
-docker run --rm -d --name nuvix-schema-crud-test \
-  -e POSTGRES_PASSWORD=test_admin \
-  -p 127.0.0.1:55432:5432 \
-  nuvix/postgres:18.1
-
-until docker exec nuvix-schema-crud-test pg_isready -U nuvix_admin -d postgres; do sleep 1; done
-
-NUVIX_SCHEMA_TEST_URL=postgresql://nuvix_admin:test_admin@127.0.0.1:55432/postgres \
-  bun test apps/server/test/integration/schema-crud.test.ts
-
-docker rm -f nuvix-schema-crud-test
+bun run test:integration:live
 ```
 
-Without `NUVIX_SCHEMA_TEST_URL`, the live suite is skipped; unit and fake-backed
-route tests do not claim PostgreSQL integration coverage.
+The test helper uses only `nuvix/postgres:18.1`, daemon-assigned loopback ports,
+an actual `pg_isready` probe, and idempotent cleanup. Selecting this command is
+mandatory: a missing Docker daemon, local image, or readiness signal fails the
+suite rather than skipping it. Ordinary `bun test` and fake-backed route tests
+do not claim PostgreSQL integration coverage.

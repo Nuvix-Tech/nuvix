@@ -360,8 +360,9 @@ bun test
   lazy metadata lookup, tenant selection, lease draining, close failures, and
   retry ownership. These tests do not cover live PostgreSQL or a concrete
   platform metadata service.
-- **Live schema integration:** direct schema CRUD and document bootstrap run
-  against `nuvix/postgres:18.1` in `test/integration/schema-crud.test.ts`.
+- **Live schema integration:** `bun run test:integration:live` uses a test-only
+  Docker helper to run direct schema CRUD and document bootstrap against exactly
+  `nuvix/postgres:18.1`; unavailable Docker, image, or readiness is a failure.
 - **Remaining integration:** verify the complete request path for both platform
   adapters, tenant isolation, caller permissions, and shutdown behavior.
 

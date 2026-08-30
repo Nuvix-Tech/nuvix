@@ -1,11 +1,13 @@
-import { afterAll, describe, expect, test } from 'bun:test'
-import { createSchemaCatalog } from '../../src/database/catalog'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { createSchemaCatalog, type SchemaCatalog } from '../../src/database/catalog'
 import { createSchemaService } from '../../src/database/service'
-import { createTenantDatabaseResource } from '../../src/infrastructure/tenant-database-resource'
+import {
+  createTenantDatabaseResource,
+  type TenantDatabaseResource,
+} from '../../src/infrastructure/tenant-database-resource'
+import { type PostgresTestResource, startPostgresResource } from './support/postgres-resource'
 
-const connectionString = process.env.NUVIX_SCHEMA_TEST_URL
-const live = connectionString ? describe : describe.skip
-const integrationUrl = connectionString ?? 'postgresql://integration-not-configured'
+const live = process.env.NUVIX_LIVE_POSTGRES === '1' ? describe : describe.skip
 const suffix = crypto.randomUUID().replaceAll('-', '')
 const names = {
   managed: `it_managed_${suffix}`,
@@ -14,18 +16,47 @@ const names = {
 }
 
 live('schema CRUD on nuvix/postgres:18.1', () => {
-  const resource = createTenantDatabaseResource({
-    driver: 'postgresql',
-    connectionString: integrationUrl,
+  let postgres: PostgresTestResource | undefined
+  let resource: TenantDatabaseResource | undefined
+  let catalog: SchemaCatalog | undefined
+
+  beforeAll(async () => {
+    const started = await startPostgresResource()
+    postgres = started
+    try {
+      resource = createTenantDatabaseResource({
+        driver: 'postgresql',
+        connectionString: started.owner.connectionString(),
+      })
+      catalog = createSchemaCatalog(resource.postgres)
+    } catch (error) {
+      try {
+        await started.close()
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Live PostgreSQL setup and cleanup failed')
+      }
+      throw error
+    }
   })
-  const catalog = createSchemaCatalog(resource.postgres)
 
   afterAll(async () => {
-    await Promise.allSettled(Object.values(names).map((name) => catalog.remove(name)))
-    await resource.close()
+    const failures: unknown[] = []
+    if (catalog) {
+      const currentCatalog = catalog
+      const removals = await Promise.allSettled(
+        Object.values(names).map((name) => currentCatalog.remove(name)),
+      )
+      failures.push(
+        ...removals.filter((result) => result.status === 'rejected').map((result) => result.reason),
+      )
+    }
+    if (resource) await resource.close().catch((error: unknown) => failures.push(error))
+    if (postgres) await postgres.close().catch((error: unknown) => failures.push(error))
+    if (failures.length > 0) throw new AggregateError(failures, 'Live PostgreSQL cleanup failed')
   })
 
   test('round-trips managed schema CRUD with reserved-schema exclusion and stable errors', async () => {
+    if (!resource) throw new Error('PostgreSQL test resource was not initialized')
     const before = await resource.schemas.list()
     expect(before.data.map(({ name }) => name)).not.toContain('system')
 
@@ -65,6 +96,7 @@ live('schema CRUD on nuvix/postgres:18.1', () => {
   })
 
   test('bootstraps document metadata and removes a failed bootstrap schema', async () => {
+    if (!resource || !catalog) throw new Error('PostgreSQL test resource was not initialized')
     await resource.schemas.create({ name: names.document, type: 'document' })
 
     const metadata = await resource.postgres

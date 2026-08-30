@@ -34,9 +34,10 @@ platform-owned connection metadata unrelated to
 `NUVIX_INTERNAL_DATABASE_DRIVER`. SQLite is supported for the platform/control
 plane only.
 
-`NUVIX_SCHEMA_TEST_URL` is test-only. Set it to a `nuvix_admin` connection when
-running `apps/server/test/integration/schema-crud.test.ts`; without it, that live
-suite is skipped.
+`NUVIX_LIVE_POSTGRES=1` is test-only and selects the Docker-backed integration
+suite. Prefer `bun run test:integration:live`, which starts collision-isolated
+containers from the exact image and fails if Docker, the image, or readiness is
+unavailable. Ordinary `bun test` does not start Docker resources.
 
 ## Redis
 
