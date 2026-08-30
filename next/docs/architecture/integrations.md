@@ -1,6 +1,6 @@
 # Package Integration Architecture
 
-> Status: DATABASE FOUNDATION + LIVE COMPOSITION IMPLEMENTED — schema CRUD integration in progress
+> Status: DATABASE FOUNDATION + LIVE COMPOSITION + SCHEMA CRUD IMPLEMENTED
 > Scope: sibling `@nuvix/db`, `@nuvix/pg`, `@nuvix/cache`, `@nuvix/storage`,
 > and `@nuvix/messaging` source packages
 
@@ -39,10 +39,11 @@ construct/cache a PostgreSQL `Adapter`, `@nuvix/pg` facade, cache driver, and
 `Database`. Project databases use the deployable `nuvix/postgres:18.1` image;
 its source repository is `nuvix-dev/postgres`.
 
-The interface and composition flow are implemented. Concrete platform
-persistence/query logic, HTTP project locator semantics, feature routes, and
-live-service startup wiring remain deferred. This boundary does not define a
-platform storage schema, hardcoded tenant URLs, or new environment contracts.
+The platform persistence model, publishable-key project locator, tenant-local
+authentication, feature routes, and live startup/shutdown are implemented. The
+remaining Phase 3 gate is full request-path integration coverage across both
+supported platform adapters and PostgreSQL tenants. This boundary does not
+hardcode tenant URLs or expose connection metadata to requests.
 
 ```text
 x-nuvix-publishable-key
@@ -359,9 +360,10 @@ bun test
   lazy metadata lookup, tenant selection, lease draining, close failures, and
   retry ownership. These tests do not cover live PostgreSQL or a concrete
   platform metadata service.
-- **Future integration:** verify caller sessions enforce permissions,
-  transactions keep the same auth context, cache drivers satisfy the DB
-  contract, and configured storage devices resolve.
+- **Live schema integration:** direct schema CRUD and document bootstrap run
+  against `nuvix/postgres:18.1` in `test/integration/schema-crud.test.ts`.
+- **Remaining integration:** verify the complete request path for both platform
+  adapters, tenant isolation, caller permissions, and shutdown behavior.
 
 ## Related
 

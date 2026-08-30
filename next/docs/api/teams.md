@@ -8,8 +8,8 @@
 
 Team management plus the membership invite/accept lifecycle. Teams and
 memberships live in `@nuvix/db` collections inside the project's document
-schema. The package API is stable; implementation still waits for this
-contract's review and composition-root wiring.
+schema. Core team CRUD and preferences are implemented; the membership and log
+sections below remain deferred to their named dependencies.
 
 ## Auth posture
 

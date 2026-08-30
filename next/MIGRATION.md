@@ -1,11 +1,11 @@
 # Nuvix v2 — Bun-Native Rewrite Plan
 
-> **Status**: PLANNING → EXECUTION
+> **Status**: EXECUTION — Phase 3 data-service completion and integration
 > **Scope**: Full rewrite of the Nuvix backend from NestJS/Fastify/Node to a
 > Bun-native stack built on Elysia (`elysia@next`). This is a **rewrite**, not
 > a mechanical migration.
-> **Location**: Everything lives in `next/`. Root monorepo stays untouched and
-> runnable until cutover, then it is deleted.
+> **Location**: Product implementation lives in `next/`. Root product code stays
+> untouched and runnable as reference until the explicitly approved cutover.
 
 ---
 
@@ -89,9 +89,9 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D18 | **Workspace names**            | Simple internal names (`@nuvix/next-core`, `@nuvix/next-utils`, …)                                                                                                                                                                                                                      | Rename-friendly during rewrite                                                                                |
 | D19 | **Web standards**              | RFC 9457 Problem Details (`application/problem+json`) for ALL errors; standard HTTP semantics, caching, status codes throughout                                                                                                                                                         | Elysia 2 has native `problem()` support — use it, don't invent an envelope                                    |
 | D20 | **Multi-tenancy**              | First-class: **each tenant (project) gets its own database**; a public publishable key selects the project before tenant-local authentication                                                                                                                                           | Locator is not authorization; see §6b                                                                         |
-| D21 | **Images**                     | `Bun.Image` replaces `sharp`                                                                                                                                                                                                                                                            | Native, faster, zero deps. Linux serves JPEG/PNG/WebP/GIF/BMP. SVG→PNG still needs `@resvg/resvg-js` (open Q) |
+| D21 | **Images**                     | `Bun.Image` replaces `sharp`; retain `@resvg/resvg-js` for SVG→PNG                                                                                                                                                                                                                      | Native raster formats plus the resolved SVG fallback                                                          |
 | D22 | **Scheduling**                 | `Bun.cron` replaces `@nestjs/schedule` / cron loops                                                                                                                                                                                                                                     | OS-level scheduled jobs, built-in                                                                             |
-| D23 | **Auth model**                 | Design auth module **token-ready**: short-lived access tokens (~1 min) + refresh tokens (Clerk-style) as target state; DB sessions may ship first but must not be baked into architecture                                                                                               | See Open Questions #5                                                                                         |
+| D23 | **Auth model**                 | Design auth module **token-ready**: short-lived access tokens (~1 min) + refresh tokens (Clerk-style) as target state; DB sessions may ship first but must not be baked into architecture                                                                                               | See resolved Open Question #6                                                                                 |
 | D24 | **Tenant/project engine**      | PostgreSQL 18 only via deployable image `nuvix/postgres:18.1` ([source](https://github.com/nuvix-dev/postgres))                                                                                                                                                                         | Projects depend on PostgreSQL schemas/triggers; no SQLite tenant mode                                         |
 | D25 | **Schema/collections**         | Free to redesign collection/schema model during rewrite                                                                                                                                                                                                                                 | Old schema is reference, not contract                                                                         |
 | D26 | **API prefix**                 | `/v2`                                                                                                                                                                                                                                                                                   | All server routes mounted under `/v2`                                                                         |
@@ -193,7 +193,7 @@ refresh, and validation workflow.
 
 ---
 
-## 4. New Monorepo Structure (`next/`)
+## 4. Current Monorepo Structure (`next/`)
 
 ```
 next/
@@ -205,34 +205,15 @@ next/
 ├── bun.lock                      ← exact-pinned elysia@next + plugins
 ├── tsconfig.json                 ← strict, bundler resolution, bun-types
 ├── biome.json
-├── .env.example
 ├── apps/
-│   ├── server/                   ← project-facing API
-│   │   └── src/
-│   │       ├── index.ts          ← entry: assemble app, Bun.serve
-│   │       ├── app.ts            ← root Elysia instance + global plugins
-│   │       ├── context/          ← project resolution, auth, api key, mode
-│   │       │                     (built with derive/resolve, fully typed)
-│   │       ├── shared/           ← error envelope, security headers, pagination utils
-│   │       └── modules/          ← VERTICAL SLICES (D15):
-│   │           ├── locale/
-│   │           │   ├── routes.ts      ← Elysia plugin: paths + t schemas + handlers
-│   │           │   ├── service.ts     ← business logic (pure where possible)
-│   │           │   └── routes.test.ts ← bun test, co-located
-│   │           ├── avatars/
-│   │           ├── account/  users/  teams/  database/
-│   │           ├── schemas/  storage/  messaging/  webhooks/
-│   └── platform/                 ← admin/console API (same slice layout)
-│       └── src/modules/ projects/ keys/ templates/ auth-settings/ metadata/
+│   └── server/
+│       ├── src/                  ← app, context, infrastructure, plugins, slices
+│       │   └── {avatars,database,locale,teams,users}/
+│       └── test/                 ← unit, route, smoke, and opt-in integration tests
 └── packages/
-    ├── core/                     ← @nuvix/next-core
-    │   ├── auth/                 ← session/jwt/api-key/OAuth2/MFA primitives
-    │   ├── queues/               ← BullMQ-over-Bun wrapper + workers
-    │   ├── models/               ← shared data models
-    │   ├── i18n/  oauth/  ratelimit/
-    │   └── jwt.ts                ← crypto.subtle HS256/HS512
-    ├── utils/                    ← @nuvix/next-utils (config, query builders, constants)
-    └── pg-meta/                  ← @nuvix/next-pg-meta (schema introspection over Bun.sql)
+    ├── i18n/                     ← ICU translation loader and typed keys
+    ├── utils/                    ← runtime configuration and shared utilities
+    └── platform-db/              ← reserved for later platform-domain work
 ```
 
 ### Pipeline mapping (conceptual old → new)
@@ -240,8 +221,8 @@ next/
 | Concern                       | New home                                                     |
 | ----------------------------- | ------------------------------------------------------------ |
 | CORS / security headers       | global plugins in `app.ts`                                   |
-| Project + mode resolution     | `context/project.ts` (`resolve`)                             |
-| Auth (session/JWT/API key)    | `context/auth.ts` (`resolve`) — one place, typed output      |
+| Project + tenant resolution   | `infrastructure/database-composition.ts` + request scope     |
+| Auth (session/JWT/API key)    | `context/tenant-auth.ts` after tenant acquisition            |
 | Rate limiting                 | `packages/core/ratelimit` on `Bun.redis`                     |
 | Audit/stats/logs side-effects | `onAfterResponse` hooks → queues                             |
 | Error handling                | shared package translator → `AppError` → single error plugin |
@@ -276,9 +257,8 @@ next/
 - [x] Typed error classes + problem+json envelope (done early in Phase 0 — `apps/server/src/shared/errors.ts` + `plugins/errors.ts`)
 - [x] Auth resolution primitives: JWT util (`utils/jwt.ts`, zero-dep HS256 on `crypto.subtle`), auth context (`context/auth.ts`: guest/session/jwt/apiKey union, pluggable DB-backed verifiers for later phases; precedence session > jwt > key > guest)
 - [x] CORS (`plugins/cors.ts`, hand-rolled), security headers (`plugins/security.ts`), rate limiting (`plugins/rate-limit.ts`, pluggable `Store`; memory impl now, Redis drops in later) — all tested
-- [ ] Context chain: platform/tenant ownership foundations are implemented;
-      publishable-key project lookup → tenant acquisition → tenant-local auth and
-      live-service startup wiring remain
+- [x] Context chain: publishable-key project lookup → tenant acquisition →
+      tenant-local auth → caller-scoped session, with live startup/shutdown
 - [x] OpenAPI docs via `@elysia/openapi@2.0.0-beta.1` (D10) — spec at `/v2/openapi/json` (typed from `t` schemas), Scalar UI at `/v2/openapi`. **Requires a Bun patch** (`patches/@elysia+openapi@2.0.0-beta.1.patch`): the published bundle has broken relative `../node_modules/typebox` imports in its `gen` submodule; the patch stubs `Script` (only used by `fromTypes()`, which we don't use). Root `package.json` also carries `elysia` so the patched copy resolves it under Bun's isolated linker. Defaults differ from v1 plugin: spec path is `/openapi/json` (not `/openapi.json`), UI is Scalar (not Swagger).
 
 **Phase 1 notes (verified against elysia 2.0.0-beta.6 source):**
@@ -307,7 +287,7 @@ next/
 ### Phase 3 — Data services
 
 - [x] Contracts drafted for review: `docs/api/database.md` (schemas CRUD only — collections/documents require a separate reviewed contract), `docs/api/teams.md` (incl. invite/accept lifecycle), `docs/api/users.md` (**legacy hash-create endpoints dropped per D29** — md5/sha/phpass/scrypt variants not carried over)
-- [x] Link and validate the four sibling source packages; repair the local
+- [x] Link and validate the five sibling source packages; repair the local
       `@nuvix/db` declaration export at its source/build boundary without a package
       patch, deep import, shim, generated-file edit, or `node_modules` edit
 - [x] Implement the database foundation: canonical claim-to-role conversion,
@@ -331,10 +311,15 @@ next/
 - [x] Wire the composition owner into live-service startup and shutdown:
       injectable app factory, PostgreSQL/SQLite platform runtime, tenant owner,
       HTTP stop → tenant drain → platform close ordering, idempotent shutdown
-- [ ] Implement database services and reviewed routes on the foundation
-- [ ] Teams, Users slices — Teams core CRUD/preferences implemented; public
-      memberships/logs deferred; Users core identity/profile administration
-      implemented, auth/session/MFA/targets/usage/logs/deletion deferred
+- [x] Implement the reviewed database schema CRUD service and five routes
+- [x] Teams core CRUD/preferences, including accepted owner membership creation
+- [x] Users core identity/profile administration
+- [ ] Teams memberships and user membership projection; invitations and logs
+      remain assigned to messaging/audit phases
+- [ ] Users auth/session/MFA/targets/usage/logs/deletion remain assigned to
+      their dedicated later phases
+- [ ] Complete live composed-request integration for platform PostgreSQL and
+      SQLite resolving isolated PostgreSQL tenants
 - [x] Schemas CRUD slice — implemented on `@nuvix/pg@2.0.0`; collection,
       attribute, index, and document contracts remain separate
 
@@ -355,7 +340,7 @@ next/
 ### Phase 6 — Async jobs
 
 - [ ] BullMQ over Bun adapter: audits, batch, deletes, logs, mails, messaging, stats
-- [ ] Cron scheduler on `Bun.sleep` loop
+- [ ] Cron scheduler on `Bun.cron`
 - [ ] Typed event emitter
 
 ### Phase 7 — Platform app
@@ -463,10 +448,9 @@ v2 makes tenancy **structural**:
 8. Authentication happens only after tenant acquisition. Users, sessions, JWT
    trust material, memberships, scopes, and secret API keys are tenant-owned;
    platform persistence has no credential-binding collection.
-9. HTTP project-scope composition, feature routes, and live-service startup
-   wiring remain. Do not invent hardcoded tenant URLs or treat the publishable
-   key as authorization. Platform cross-adapter and custom-PostgreSQL tenant
-   integration coverage is not yet claimed.
+9. HTTP project scope, feature routes, and live startup are implemented. The
+   remaining Phase 3 integration gate is a full PostgreSQL/SQLite platform
+   matrix resolving isolated `nuvix/postgres:18.1` tenants.
 
 ---
 
@@ -498,7 +482,7 @@ Tracked here so nothing gets decided silently:
 | `elysia@next` beta churn/bugs          | Pin exact; isolate framework glue in `app.ts`/plugins; track changelog between phases |
 | BullMQ Bun adapter immaturity          | Thin queue interface; swap adapter only if broken                                     |
 | Business-rule drift during redesign    | Contracts reviewed before impl; old service code read as reference for every rule     |
-| Redisigned API breaks SDK expectations | Accept (v2); document breaking changes per module in `docs/api/`                      |
+| Redesigned API breaks SDK expectations | Accept (v2); document breaking changes per module in `docs/api/`                      |
 | Scope creep                            | No features beyond defined contracts until Phase 9                                    |
 
 ---

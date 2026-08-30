@@ -36,7 +36,7 @@ const UNAVAILABLE_PROJECT_REQUESTS: DatabaseRequestCapabilities = {
   },
 }
 
-/** Creates framework routing only; process-owned database resources are injected by later slices. */
+/** Creates framework routing; the live process injects its database composition owner. */
 export async function createApp(options: AppOptions = {}) {
   const loader = new TranslationLoader(options.translationsDir ?? DEFAULT_TRANSLATIONS)
   const localeOptions = {

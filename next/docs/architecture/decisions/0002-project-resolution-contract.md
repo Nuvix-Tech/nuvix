@@ -111,10 +111,9 @@ credential from selecting another tenant: selection is already complete before
 authentication begins.
 
 The error policy is balanced/private: clients receive actionable errors for
-missing or malformed input and an explicit forbidden result for an authenticated
-binding mismatch, while unknown and disabled states remain indistinguishable.
-This limits project enumeration and lifecycle-state disclosure without reducing
-the contract to an unhelpful single error.
+missing or malformed locators, while unknown and disabled projects remain
+indistinguishable. Credentials are verified only inside the selected tenant and
+fail with tenant-auth errors rather than a platform binding result.
 
 ## Alternatives Considered
 
@@ -136,8 +135,8 @@ the contract to an unhelpful single error.
   context, explicit authorization checks, stable client error handling, and
   reduced project enumeration.
 - **Negative**: every project-scoped client must send the header, and each
-  request requires registry resolution; authenticated requests also require
-  binding verification.
+  request requires registry resolution plus tenant-local credential verification
+  when authentication is supplied.
 - **Risk**: inconsistent route classification could bypass resolution; all new
   `/v2` routes must explicitly be project-scoped or listed as unscoped.
 
@@ -148,7 +147,7 @@ Revisit this decision if:
 - verified custom-domain routing becomes a product requirement;
 - a trusted gateway can provide a cryptographically authenticated project
   locator with equivalent binding guarantees;
-- privacy or threat-model changes require collapsing the 403 and 404 outcomes;
+- privacy or threat-model changes require altering public locator/auth errors;
 - measured resolution cost requires safe caching with prompt disablement and
   credential-revocation behavior; or
 - additional unscoped route classes are introduced.

@@ -27,10 +27,16 @@ SQLite.
 
 ## Tenant databases
 
-Every project database is PostgreSQL 18 provisioned from the custom
-`nuvix-dev/postgres` image. Tenant targets are platform-owned PostgreSQL
-connection metadata and are unrelated to `NUVIX_INTERNAL_DATABASE_DRIVER`.
-SQLite is supported for the platform/control plane only.
+Every project database is PostgreSQL 18 provisioned from the
+`nuvix/postgres:18.1` image. Its source repository is `nuvix-dev/postgres`.
+Tenant targets use the image's `nuvix_admin` schema-administration role and are
+platform-owned connection metadata unrelated to
+`NUVIX_INTERNAL_DATABASE_DRIVER`. SQLite is supported for the platform/control
+plane only.
+
+`NUVIX_SCHEMA_TEST_URL` is test-only. Set it to a `nuvix_admin` connection when
+running `apps/server/test/integration/schema-crud.test.ts`; without it, that live
+suite is skipped.
 
 ## Redis
 

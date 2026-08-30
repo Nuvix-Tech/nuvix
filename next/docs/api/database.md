@@ -140,9 +140,9 @@ schema → `404 /errors/not-found`.
   responses can use typed handlers directly.
 - Translate package failures through the shared package-error translator; this
   contract's `schema_*` codes remain the public API.
-- Smoke cases to add: create/list/get/patch/delete round-trip requires a live
-  Postgres — keep harness cases limited to auth-posture rejections (403 for
-  guest) until integration fixtures exist.
+- The fake-backed route suite covers transport/auth behavior. The opt-in live
+  suite covers schema CRUD, reserved exclusion, document metadata bootstrap,
+  and bootstrap-failure cleanup on PostgreSQL 18.
 
 ## Live PostgreSQL 18 verification
 

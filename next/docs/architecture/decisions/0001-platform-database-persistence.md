@@ -1,6 +1,6 @@
 # ADR 0001: Adapter-Neutral Platform Persistence
 
-> Status: Decided (amended 2026-08-29)
+> Status: Decided (amended 2026-08-30)
 > Date: 2026-08-28
 > Owner: Platform
 
@@ -8,9 +8,9 @@
 
 The platform/control plane supports PostgreSQL or SQLite because it stores
 portable project and target documents through `@nuvix/db`. Project databases
-are different: every tenant uses PostgreSQL 18 from the custom
-`nuvix-dev/postgres` image and depends on its schema, trigger, and metadata
-features.
+are different: every tenant uses the `nuvix/postgres:18.1` image from the
+`nuvix-dev/postgres` source repository and depends on its schema, trigger, and
+metadata features.
 
 An earlier implementation introduced raw Bun SQL repositories, a PostgreSQL-only
 platform schema, bespoke SQL migrations, and a one-to-one connection table. A
@@ -24,10 +24,11 @@ legacy collection structure is superseded by this amendment.
 
 ## Decision
 
-Every persistence path uses public `@nuvix/db` APIs. Platform composition may
-select `Adapter` or `SQLiteAdapter`; tenant composition always constructs the
-PostgreSQL `Adapter`. Application repositories never receive a Bun SQL client
-or author SQL directly.
+Platform and document persistence use public `@nuvix/db` APIs. Platform
+composition may select `Adapter` or `SQLiteAdapter`; tenant composition always
+constructs the PostgreSQL `Adapter`. Custom-image schema catalog and DDL work
+uses `@nuvix/pg` behind a narrow infrastructure capability. Routes and general
+application repositories never receive Bun SQL or author SQL directly.
 
 The process owner selects and configures the **platform** adapter from validated
 deployment configuration:
@@ -89,8 +90,9 @@ the custom PostgreSQL project database.
 - Unknown, disabled, malformed, unsupported, or inaccessible data fails closed.
 - Capability gating never bypasses a security check; required security features
   must be portable or the affected operation must be unavailable.
-- Schema and document operations go through `@nuvix/db`; application code does
-  not issue raw SQL or maintain a parallel persistence path.
+- Document operations and metadata administration go through `@nuvix/db`.
+  Custom-image schema catalog/DDL operations use an infrastructure-owned
+  `@nuvix/pg` capability; route and business-service code does not receive SQL.
 
 ## Rationale
 
