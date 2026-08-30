@@ -56,6 +56,7 @@ export function createPlatformCollectionDefinitions(
         booleanAttribute(fields.projects.enabled),
       ],
       indexes: [index('public_id_unique', IndexType.Unique, [fields.projects.publicId])],
+      permissions: [],
       documentSecurity: false,
     },
     {
@@ -72,6 +73,7 @@ export function createPlatformCollectionDefinitions(
         }),
       ],
       indexes: [index('project_id_unique', IndexType.Unique, [fields.tenantTargets.projectId])],
+      permissions: [],
       documentSecurity: false,
     },
   ]

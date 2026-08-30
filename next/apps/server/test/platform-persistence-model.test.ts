@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'bun:test'
-import { IndexType } from '@nuvix/db'
+import { None } from '@nuvix/cache'
+import {
+  AuthorizationException,
+  Database,
+  Doc,
+  IndexType,
+  Permission,
+  Role,
+  SQLiteAdapter,
+} from '@nuvix/db'
+import { DATABASE_METADATA } from '../src/infrastructure/database-metadata'
 import {
   PLATFORM_PERSISTENCE_MODEL,
   type PlatformPersistenceModel,
@@ -45,6 +55,24 @@ function schemaHarness(capabilities: PlatformSchemaCapabilities) {
   return { created, database, existing }
 }
 
+async function permissionDatabase(): Promise<Database> {
+  const adapter = new SQLiteAdapter(':memory:').setMeta(DATABASE_METADATA.platform.sqlite)
+  const database = new Database(adapter, new None())
+  await database.create()
+
+  for (const definition of createPlatformCollectionDefinitions()) {
+    // Keep this fixture on authorization only; tenant-target codec behavior has
+    // its own slice and does not affect collection-level access decisions.
+    await database.createCollection({
+      id: definition.id,
+      permissions: definition.permissions,
+      documentSecurity: definition.documentSecurity,
+    })
+  }
+
+  return database
+}
+
 describe('platform persistence model', () => {
   test('keeps safe project data separate from the owner-only PostgreSQL target', () => {
     const target: TenantDatabaseTarget = {
@@ -79,6 +107,77 @@ describe('platform persistence model', () => {
       'slug',
       'active',
     ])
+  })
+
+  test('defines both platform collections with exact owner-only permissions', () => {
+    const definitions = createPlatformCollectionDefinitions()
+
+    expect(
+      definitions.map(({ id, permissions, documentSecurity }) => ({
+        id,
+        permissions,
+        documentSecurity,
+      })),
+    ).toEqual([
+      {
+        id: 'platform_projects',
+        permissions: [],
+        documentSecurity: false,
+      },
+      {
+        id: 'platform_tenant_targets',
+        permissions: [],
+        documentSecurity: false,
+      },
+    ])
+  })
+
+  test('keeps both platform collections inaccessible to non-system sessions', async () => {
+    const database = await permissionDatabase()
+    const system = database.system()
+    const caller = database.for(
+      Role.any().toString(),
+      Role.users().toString(),
+      Role.user('caller').toString(),
+    )
+
+    try {
+      for (const collectionId of Object.values(PLATFORM_PERSISTENCE_MODEL.collections)) {
+        const id = `${collectionId}-owner-record`
+        const widenedDocumentPermissions = [
+          Permission.read(Role.any()),
+          Permission.update(Role.any()),
+          Permission.delete(Role.any()),
+        ]
+        await system.createDocument(
+          collectionId,
+          new Doc({ $id: id, $permissions: widenedDocumentPermissions }),
+        )
+
+        await expect(
+          caller.createDocument(
+            collectionId,
+            new Doc({
+              $id: `${collectionId}-denied`,
+              $permissions: widenedDocumentPermissions,
+            }),
+          ),
+        ).rejects.toBeInstanceOf(AuthorizationException)
+        await expect(caller.getDocument(collectionId, id)).rejects.toBeInstanceOf(
+          AuthorizationException,
+        )
+        await expect(
+          caller.updateDocument(collectionId, id, new Doc({ changed: true })),
+        ).rejects.toBeInstanceOf(AuthorizationException)
+        await expect(caller.deleteDocument(collectionId, id)).rejects.toBeInstanceOf(
+          AuthorizationException,
+        )
+
+        expect((await system.getDocument(collectionId, id)).getId()).toBe(id)
+      }
+    } finally {
+      await database.getAdapter<SQLiteAdapter>().$client.disconnect()
+    }
   })
 
   test.each([

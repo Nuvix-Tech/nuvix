@@ -8,6 +8,7 @@ import type {
   TenantAuthResolver,
 } from '../context/project-request'
 import type { SchemaService } from '../database/service'
+import { ServiceUnavailableError } from '../shared/errors'
 import type { TenantDatabases } from './tenant-databases'
 
 interface RequestTenantDatabase {
@@ -17,6 +18,20 @@ interface RequestTenantDatabase {
 }
 
 type RequestTenantDatabases = Pick<TenantDatabases<RequestTenantDatabase>, 'acquire'>
+
+function unavailable(): ServiceUnavailableError {
+  return new ServiceUnavailableError('Project is temporarily unavailable', {
+    code: 'project_unavailable',
+  })
+}
+
+async function acquire(databases: RequestTenantDatabases, projectId: string) {
+  try {
+    return await databases.acquire(projectId)
+  } catch {
+    throw unavailable()
+  }
+}
 
 async function release(
   lease: { release(): Promise<void> },
@@ -45,7 +60,7 @@ export class ProjectRequestScope {
 
   async run<Result>(headers: Headers, operation: ProjectRequestOperation<Result>): Promise<Result> {
     const project = await this.projects.resolve(headers)
-    const lease = await this.databases.acquire(project.id)
+    const lease = await acquire(this.databases, project.id)
     let operationError: unknown
 
     try {

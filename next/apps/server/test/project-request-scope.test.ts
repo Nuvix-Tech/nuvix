@@ -5,15 +5,19 @@ import type { ProjectLocator } from '../src/context/project-locator'
 import type { TenantAuthResolver } from '../src/context/project-request'
 import type { SchemaService } from '../src/database/service'
 import { ProjectRequestScope } from '../src/infrastructure/project-request-scope'
+import {
+  BadRequestError,
+  NotFoundError,
+  ServiceUnavailableError,
+  UnauthorizedError,
+} from '../src/shared/errors'
 
 const HEADERS = new Headers({
   'x-nuvix-publishable-key': 'pk_test_public',
   'x-nuvix-session': 'raw-session-secret',
 })
 
-function harness(
-  options: { authError?: Error; operationError?: Error; releaseError?: Error } = {},
-) {
+function harness(options: { acquireError?: Error; authError?: Error; releaseError?: Error } = {}) {
   const order: string[] = []
   const roles: string[][] = []
   const documents = {
@@ -56,6 +60,7 @@ function harness(
   const databases = {
     acquire: async (projectId: string) => {
       order.push(`tenant:${projectId}`)
+      if (options.acquireError) throw options.acquireError
       return {
         database: {
           schemas,
@@ -127,41 +132,114 @@ describe('project request scope', () => {
     expect(state.roles).toEqual([
       ['any', 'users', 'users/verified', 'user:user_a', 'user:user_a/verified'],
     ])
+    expect(state.order.filter((event) => event === 'release')).toHaveLength(1)
   })
 
-  test('does not acquire a tenant when project resolution fails', async () => {
-    const order: string[] = []
-    const scope = new ProjectRequestScope(
-      {
-        resolve: async () => {
-          order.push('project')
-          throw new Error('project failed')
+  test.each([
+    [
+      'publishable_key_invalid',
+      new BadRequestError('Publishable key is invalid', {
+        code: 'publishable_key_invalid',
+      }),
+    ],
+    ['project_not_found', new NotFoundError('Project', { code: 'project_not_found' })],
+    [
+      'project_unavailable',
+      new ServiceUnavailableError('Project is temporarily unavailable', {
+        code: 'project_unavailable',
+      }),
+    ],
+  ] as const)(
+    'preserves the %s project-locator error without tenant acquisition',
+    async (_code, projectError) => {
+      const order: string[] = []
+      const scope = new ProjectRequestScope(
+        {
+          resolve: async () => {
+            order.push('project')
+            throw projectError
+          },
         },
-      },
-      {
-        acquire: async () => {
-          order.push('tenant')
-          throw new Error('must not run')
+        {
+          acquire: async () => {
+            order.push('tenant')
+            throw new Error('must not run')
+          },
         },
-      },
-      {
-        resolve: async () => {
-          order.push('auth')
-          return { type: 'guest' }
+        {
+          resolve: async () => {
+            order.push('auth')
+            return { type: 'guest' }
+          },
         },
-      },
+      )
+
+      await expect(scope.run(HEADERS, async () => undefined)).rejects.toBe(projectError)
+      expect(order).toEqual(['project'])
+    },
+  )
+
+  test('redacts registry acquisition failures without releasing a nonexistent lease', async () => {
+    const cause = new Error(
+      'registry_internal_code: postgresql://owner:recognizable-secret@tenant.example/project_a',
     )
+    const state = harness({ acquireError: cause })
 
-    await expect(scope.run(HEADERS, async () => undefined)).rejects.toThrow('project failed')
-    expect(order).toEqual(['project'])
+    const failure = await state.scope
+      .run(HEADERS, async () => undefined)
+      .catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ServiceUnavailableError)
+    expect((failure as ServiceUnavailableError).status).toBe(503)
+    expect((failure as ServiceUnavailableError).fields).toEqual({
+      type: '/errors/unavailable',
+      detail: 'Project is temporarily unavailable',
+      code: 'project_unavailable',
+    })
+    expect(failure).not.toHaveProperty('cause')
+    expect(String(failure)).not.toContain('recognizable-secret')
+    expect(String(failure)).not.toContain('registry_internal_code')
+    expect(state.order).toEqual(['project', 'tenant:project_a'])
   })
 
-  test('releases the tenant when authentication fails', async () => {
-    const authError = new Error('credential invalid in selected tenant')
-    const state = harness({ authError })
+  test.each([
+    [
+      'credential_invalid',
+      new UnauthorizedError('Credential is invalid', {
+        code: 'credential_invalid',
+      }),
+    ],
+    [
+      'authentication_unavailable',
+      new ServiceUnavailableError('Authentication is temporarily unavailable', {
+        code: 'authentication_unavailable',
+      }),
+    ],
+  ] as const)(
+    'preserves the %s tenant-auth error and releases the tenant',
+    async (_code, authError) => {
+      const state = harness({ authError })
 
-    await expect(state.scope.run(HEADERS, async () => undefined)).rejects.toBe(authError)
-    expect(state.order).toEqual(['project', 'tenant:project_a', 'system', 'auth', 'release'])
+      await expect(state.scope.run(HEADERS, async () => undefined)).rejects.toBe(authError)
+      expect(state.order).toEqual(['project', 'tenant:project_a', 'system', 'auth', 'release'])
+      expect(state.order.filter((event) => event === 'release')).toHaveLength(1)
+    },
+  )
+
+  test('preserves handler errors and releases the tenant exactly once', async () => {
+    const handlerError = new NotFoundError('Schema', {
+      code: 'schema_not_found',
+    })
+    const state = harness()
+
+    await expect(
+      state.scope.run(HEADERS, async () => {
+        state.order.push('handler')
+        throw handlerError
+      }),
+    ).rejects.toBe(handlerError)
+    expect(state.order.at(-1)).toBe('release')
+    expect(state.order.filter((event) => event === 'release')).toHaveLength(1)
   })
 
   test('preserves operation and release failures in order', async () => {

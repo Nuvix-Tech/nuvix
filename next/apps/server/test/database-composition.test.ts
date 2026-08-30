@@ -5,6 +5,7 @@ import type { TenantAuthResolver } from '../src/context/project-request'
 import type { SchemaService } from '../src/database/service'
 import { createDatabaseComposition } from '../src/infrastructure/database-composition'
 import type { TenantDatabaseTarget } from '../src/infrastructure/platform-persistence-model'
+import { ServiceUnavailableError } from '../src/shared/errors'
 
 function harness() {
   const events: string[] = []
@@ -91,7 +92,126 @@ const headers = (projectId: string, credentialProject = projectId) =>
     'x-test-user-project': credentialProject,
   })
 
+function failureHarness(options: {
+  readonly target?: TenantDatabaseTarget
+  readonly targetError?: Error
+  readonly resourceError?: Error
+}) {
+  const events: string[] = []
+  const createResource = options.resourceError
+    ? async () => {
+        events.push('create')
+        throw options.resourceError
+      }
+    : undefined
+  const composition = createDatabaseComposition({
+    projectLocator: {
+      resolve: async () => {
+        events.push('project')
+        return { id: 'project_a', enabled: true }
+      },
+    },
+    tenantTargets: {
+      resolve: async () => {
+        events.push('target')
+        if (options.targetError) throw options.targetError
+        return (
+          options.target ?? {
+            driver: 'postgresql',
+            connectionString: 'postgresql://tenant.example/project_a',
+          }
+        )
+      },
+    },
+    tenantAuth: {
+      resolve: async () => {
+        events.push('auth')
+        return { type: 'guest' }
+      },
+    },
+    ...(createResource ? { createResource } : {}),
+    registryOptions: { onCloseError: () => {} },
+  })
+  return { composition, events }
+}
+
+function expectProjectUnavailable(failure: unknown, redacted: readonly string[]): void {
+  expect(failure).toBeInstanceOf(ServiceUnavailableError)
+  const unavailable = failure as ServiceUnavailableError
+  expect(unavailable.status).toBe(503)
+  expect(unavailable.fields).toEqual({
+    type: '/errors/unavailable',
+    detail: 'Project is temporarily unavailable',
+    code: 'project_unavailable',
+  })
+  expect(unavailable).not.toHaveProperty('cause')
+
+  const publicValue = `${String(unavailable)} ${JSON.stringify(unavailable.fields)}`
+  for (const value of redacted) expect(publicValue).not.toContain(value)
+}
+
 describe('database composition', () => {
+  test('redacts tenant target resolver failures before authentication', async () => {
+    const state = failureHarness({
+      targetError: new Error(
+        'target_resolver_internal: postgresql://owner:resolver-secret@tenant.example/project_a',
+      ),
+    })
+
+    const failure = await state.composition.requests
+      .withProject(headers('project_a'), async () => 'unexpected')
+      .catch((error: unknown) => error)
+
+    expectProjectUnavailable(failure, [
+      'target_resolver_internal',
+      'postgresql://',
+      'resolver-secret',
+    ])
+    expect(state.events).toEqual(['project', 'target'])
+  })
+
+  test('redacts malformed tenant targets during resource construction', async () => {
+    const state = failureHarness({
+      target: {
+        driver: 'postgresql',
+        connectionString: 'redis://owner:malformed-target-secret@tenant.example/project_a',
+      },
+    })
+
+    const failure = await state.composition.requests
+      .withProject(headers('project_a'), async () => 'unexpected')
+      .catch((error: unknown) => error)
+
+    expectProjectUnavailable(failure, ['redis://', 'malformed-target-secret', 'tenant.example'])
+    expect(state.events).toEqual(['project', 'target'])
+  })
+
+  test('redacts tenant resource construction failures before authentication', async () => {
+    const state = failureHarness({
+      target: {
+        driver: 'postgresql',
+        connectionString: 'postgresql://owner:target-secret@tenant.example/project_a',
+      },
+      resourceError: new Error(
+        'PG_DRIVER_42 provider refused ciphertext=ciphertext-secret credential=driver-secret',
+      ),
+    })
+
+    const failure = await state.composition.requests
+      .withProject(headers('project_a'), async () => 'unexpected')
+      .catch((error: unknown) => error)
+
+    expectProjectUnavailable(failure, [
+      'target-secret',
+      'tenant.example',
+      'PG_DRIVER_42',
+      'provider refused',
+      'ciphertext-secret',
+      'driver-secret',
+    ])
+    expect(state.events).toEqual(['project', 'target', 'create'])
+  })
+
   test('selects target, constructs tenant, and authenticates inside it', async () => {
     const state = harness()
 
