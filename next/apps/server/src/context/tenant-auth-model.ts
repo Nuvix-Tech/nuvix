@@ -24,6 +24,11 @@ export interface TenantAuthModel {
       readonly teamId: string
       readonly roles: string
       readonly status: string
+      readonly invited: string
+      readonly joined: string
+      readonly secretDigest: string
+      readonly secretSalt: string
+      readonly inviteExpiresAt: string
     }
     readonly apiKeys: {
       readonly secretDigest: string
@@ -63,6 +68,11 @@ export const TENANT_AUTH_MODEL = {
       teamId: 'teamId',
       roles: 'roles',
       status: 'status',
+      invited: 'invited',
+      joined: 'joined',
+      secretDigest: 'secretDigest',
+      secretSalt: 'secretSalt',
+      inviteExpiresAt: 'inviteExpiresAt',
     },
     apiKeys: {
       secretDigest: 'secretDigest',

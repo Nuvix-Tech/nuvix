@@ -1,4 +1,5 @@
-import { AttributeType, type Database, Doc, IndexType } from '@nuvix/db'
+import { AttributeType, type Database, Doc, IndexType, Permission, Role } from '@nuvix/db'
+import { API_SCOPE_ROLE_PREFIX } from './database-roles'
 import { TENANT_AUTH_MODEL, type TenantAuthModel } from './tenant-auth-model'
 
 export type TenantAuthCollectionDefinition = Parameters<Database['createCollection']>[0]
@@ -51,6 +52,7 @@ export function createTenantAuthCollectionDefinitions(
         string(fields.users.labels, 64, true, true),
       ],
       indexes: [],
+      permissions: [],
       documentSecurity: true,
     },
     {
@@ -66,6 +68,7 @@ export function createTenantAuthCollectionDefinitions(
         index('user_id', IndexType.Key, [fields.sessions.userId]),
         index('expires_at', IndexType.Key, [fields.sessions.expiresAt]),
       ],
+      permissions: [],
       documentSecurity: false,
     },
     {
@@ -75,13 +78,24 @@ export function createTenantAuthCollectionDefinitions(
         string(fields.memberships.teamId, 36),
         string(fields.memberships.roles, 64, true, true),
         string(fields.memberships.status, 32),
+        timestamp(fields.memberships.invited, true),
+        timestamp(fields.memberships.joined, false),
+        string(fields.memberships.secretDigest, 128, false),
+        string(fields.memberships.secretSalt, 128, false),
+        timestamp(fields.memberships.inviteExpiresAt, false),
       ],
       indexes: [
         index('user_status', IndexType.Key, [fields.memberships.userId, fields.memberships.status]),
+        index('team_id', IndexType.Key, [fields.memberships.teamId]),
+        index('team_status', IndexType.Key, [fields.memberships.teamId, fields.memberships.status]),
         index('user_team_unique', IndexType.Unique, [
           fields.memberships.userId,
           fields.memberships.teamId,
         ]),
+      ],
+      permissions: [
+        Permission.create(Role.users()),
+        Permission.create(Role.label(`${API_SCOPE_ROLE_PREFIX}teams.write`)),
       ],
       documentSecurity: true,
     },
@@ -97,6 +111,7 @@ export function createTenantAuthCollectionDefinitions(
         timestamp(fields.apiKeys.revokedAt, false),
       ],
       indexes: [index('expires_at', IndexType.Key, [fields.apiKeys.expiresAt])],
+      permissions: [],
       documentSecurity: false,
     },
   ]

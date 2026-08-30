@@ -5,11 +5,14 @@ import { avatarRoutes } from './avatars/route'
 import { type AvatarService, createAvatarService } from './avatars/service'
 import { createGeoIP, type GeoIP } from './context/geoip'
 import { getTranslator, localeContext } from './context/locale'
+import type { DatabaseRequestCapabilities } from './infrastructure/database-composition'
 import { localeRoutes } from './locale/route'
 import { cors } from './plugins/cors'
 import { problemErrors } from './plugins/errors'
 import { rateLimit } from './plugins/rate-limit'
 import { securityHeaders } from './plugins/security'
+import { ServiceUnavailableError } from './shared/errors'
+import { teamRoutes } from './teams/route'
 
 const DEFAULT_TRANSLATIONS = new URL('../../../assets/locale/translations', import.meta.url)
   .pathname
@@ -20,6 +23,15 @@ export interface AppOptions {
   readonly geoip?: GeoIP
   readonly avatars?: AvatarService
   readonly uptime?: () => number
+  readonly projectRequests?: DatabaseRequestCapabilities
+}
+
+const UNAVAILABLE_PROJECT_REQUESTS: DatabaseRequestCapabilities = {
+  withProject: async () => {
+    throw new ServiceUnavailableError('Project services are unavailable', {
+      code: 'project_unavailable',
+    })
+  },
 }
 
 /** Creates framework routing only; process-owned database resources are injected by later slices. */
@@ -76,6 +88,7 @@ export async function createApp(options: AppOptions = {}) {
     .use(localeContext(localeOptions))
     .use(localeRoutes(geoip, localeOptions))
     .use(avatarRoutes(avatars))
+    .use(teamRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(health)
 }
 

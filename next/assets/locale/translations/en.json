@@ -271,5 +271,6 @@
   "errors.rateLimited": "Too many requests. Please retry after {seconds, number} seconds.",
   "errors.validation": "The request payload is invalid.",
   "errors.avatars.unknownCode": "Unknown avatar code {code}.",
-  "errors.avatars.faviconUnavailable": "Favicon could not be retrieved."
+  "errors.avatars.faviconUnavailable": "Favicon could not be retrieved.",
+  "errors.teams.notFound": "Team not found."
 }

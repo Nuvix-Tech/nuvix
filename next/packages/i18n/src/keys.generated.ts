@@ -266,6 +266,7 @@ export type TranslationKey =
   | 'errors.generic'
   | 'errors.notFound'
   | 'errors.rateLimited'
+  | 'errors.teams.notFound'
   | 'errors.unauthorized'
   | 'errors.validation'
   | 'locale.country.unknown'

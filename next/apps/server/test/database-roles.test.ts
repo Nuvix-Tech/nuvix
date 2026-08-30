@@ -66,7 +66,7 @@ describe('database role mapping', () => {
       scopes: ['schemas.write'],
     }
 
-    expect(rolesFor(auth, PROJECT)).toEqual(['any'])
+    expect(rolesFor(auth, PROJECT)).toEqual(['any', 'label:_nuvix.scope.schemas.write'])
   })
 
   test('orders disjoint roles from duplicate team claims canonically', () => {
@@ -121,6 +121,10 @@ describe('database role mapping', () => {
     {
       name: 'unsupported label characters',
       claims: { labels: ['staff access'] },
+    },
+    {
+      name: 'reserved API scope label',
+      claims: { labels: ['_nuvix.scope.teams.write'] },
     },
   ])('rejects $name', ({ claims }) => {
     const auth: ProjectAuthContext = {

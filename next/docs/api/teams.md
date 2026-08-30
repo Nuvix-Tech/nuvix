@@ -1,6 +1,6 @@
 # v2 Contract — Teams
 
-> Status: PROPOSED — review before implementation
+> Status: PARTIALLY IMPLEMENTED — core team CRUD + preferences; memberships/logs deferred
 > Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`,
 > `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`,
 > `@nuvix/messaging@2.0.0`
@@ -54,6 +54,10 @@ JWTs — same union as v1. Scopes: `teams.read`, `teams.write`.
 - Logs: standard list envelope + D27 pagination (`limit`/`offset` in meta).
 
 ## Endpoints — Memberships
+
+> Deferred: public membership endpoints require the Users projection, invite
+> secret/status contract, and messaging gateway. Core team creation already
+> creates an accepted owner membership transactionally for session creators.
 
 Nested under `/v2/teams/:teamId/memberships`:
 

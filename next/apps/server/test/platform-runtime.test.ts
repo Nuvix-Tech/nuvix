@@ -22,7 +22,7 @@ describe('platform runtime', () => {
         version: '2.0.0-alpha.1',
         uptime: 5,
       })
-      expect(Object.keys(runtime.requests)).toEqual(['withProject'])
+      expect(Object.keys(runtime).toSorted()).toEqual(['app', 'close'])
     } finally {
       await runtime.close()
     }

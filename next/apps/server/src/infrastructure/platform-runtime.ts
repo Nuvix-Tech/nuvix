@@ -3,11 +3,7 @@ import { createProjectLocator } from '../context/project-locator'
 import type { PublishableKeyEnvironment } from '../context/publishable-key'
 import { createTenantAuthResolver } from '../context/tenant-auth'
 import type { DatabaseAdapterConfiguration } from './database-adapter-config'
-import {
-  createDatabaseComposition,
-  type DatabaseRegistryOptions,
-  type DatabaseRequestCapabilities,
-} from './database-composition'
+import { createDatabaseComposition, type DatabaseRegistryOptions } from './database-composition'
 import { createPlatformDatabase } from './platform-database'
 import { createPlatformProjectLookup } from './platform-projects'
 import { createTenantTargetResolver } from './tenant-database-target'
@@ -22,7 +18,6 @@ export interface PlatformRuntimeOptions {
 
 export interface PlatformRuntime {
   readonly app: NuvixApp
-  readonly requests: DatabaseRequestCapabilities
   close(): Promise<void>
 }
 
@@ -56,12 +51,14 @@ export async function createPlatformRuntime(
         onCloseError: (error) => options.onTenantCloseError?.(error),
       },
     })
-    const app = await createApp(options.app)
+    const app = await createApp({
+      ...options.app,
+      projectRequests: database.requests,
+    })
     let closePromise: Promise<void> | undefined
 
     return Object.freeze({
       app,
-      requests: database.requests,
       close: () => {
         closePromise ??= closeInOrder(database!.close, platform.close)
         return closePromise

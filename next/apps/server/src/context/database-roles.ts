@@ -3,6 +3,7 @@ import { ForbiddenError } from '../shared/errors'
 import type { ProjectAuthContext, ProjectContext } from './project'
 
 const ROLE_COMPONENT = /^[\p{L}\p{M}\p{N}._-]+$/u
+export const API_SCOPE_ROLE_PREFIX = '_nuvix.scope.'
 
 function component(value: string): string {
   if (
@@ -39,7 +40,12 @@ export function rolesFor(auth: ProjectAuthContext, project: ProjectContext): rea
   }
 
   const roles = new Set<string>([serialize(RoleName.ANY)])
-  if (auth.type === 'apiKey') return [...roles]
+  if (auth.type === 'apiKey') {
+    for (const scope of auth.scopes.map(component).toSorted(compare)) {
+      roles.add(serialize(RoleName.LABEL, `${API_SCOPE_ROLE_PREFIX}${scope}`))
+    }
+    return [...roles]
+  }
 
   const userId = component(auth.userId)
   const dimension = auth.verified ? UserDimension.VERIFIED : UserDimension.UNVERIFIED
@@ -71,6 +77,9 @@ export function rolesFor(auth: ProjectAuthContext, project: ProjectContext): rea
   }
 
   for (const label of (auth.labels ?? []).map(component).toSorted(compare)) {
+    if (label.startsWith(API_SCOPE_ROLE_PREFIX)) {
+      throw new ForbiddenError('Credential contains invalid role claims')
+    }
     roles.add(serialize(RoleName.LABEL, label))
   }
 
