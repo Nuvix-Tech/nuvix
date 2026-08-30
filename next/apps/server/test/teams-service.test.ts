@@ -111,6 +111,33 @@ describe('teams service', () => {
     expect(state.collection('memberships').size).toBe(0)
   })
 
+  test('grants exact membership permissions including teams.write cleanup', async () => {
+    const state = harness()
+    const ids = ['team_a', 'membership_a']
+    const service = createTeamService({
+      id: () => ids.shift()!,
+      now: () => NOW,
+    })
+
+    await service.create(state.documents, SESSION_AUTH, { name: 'Core Team' })
+
+    const membership = state.collection('memberships').get('membership_a')!
+    expect(membership.getCreate()).toEqual([])
+    expect(membership.getRead()).toEqual([
+      Role.user('user_a').toString(),
+      Role.team('team_a').toString(),
+    ])
+    expect(membership.getUpdate()).toEqual([
+      Role.user('user_a').toString(),
+      Role.team('team_a', 'owner').toString(),
+    ])
+    expect(membership.getDelete()).toEqual([
+      Role.user('user_a').toString(),
+      Role.team('team_a', 'owner').toString(),
+      Role.label(apiScopeLabel('teams.write')).toString(),
+    ])
+  })
+
   test('lets a teams.write session read a team for write-operation preconditions', async () => {
     const state = harness()
     const service = createTeamService({ id: () => 'team_api', now: () => NOW })

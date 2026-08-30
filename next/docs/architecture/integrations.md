@@ -421,9 +421,11 @@ bun test
 - **Live composed matrix:** `apps/server/test/integration/full-request-path.test.ts`
   runs real-file SQLite and PostgreSQL platform persistence through production
   composition. Both rows resolve two isolated PostgreSQL tenants, authenticate
-  real tenant-local API keys, exercise all current Schemas/Teams/Users core
-  routes, verify wrong-tenant and deficient-scope failures, and assert stable
-  redacted project-target failures plus connection/file cleanup.
+  real tenant-local API keys and a verifier-backed user session, exercise all
+  current Schemas/Teams/Users core routes, verify API-key deletion cleans up the
+  session-created team's membership, verify wrong-tenant and deficient-scope
+  failures, and assert stable redacted project-target failures plus
+  connection/file cleanup.
 
 Run the complete live gate from `next/`:
 

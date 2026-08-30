@@ -157,14 +157,15 @@ bun run test:integration:live
 
 All seven implemented Teams routes run through production composition for both
 PostgreSQL and real-file SQLite platform persistence, each resolving two
-isolated `nuvix/postgres:18.1` tenants. Real tenant-local API keys verify CRUD,
-preference replacement, cross-tenant absence, wrong-tenant credential rejection,
-and deficient-scope `403` responses.
+isolated `nuvix/postgres:18.1` tenants. Real tenant-local API keys and a
+verifier-backed user session verify CRUD, preference replacement, cross-tenant
+absence, wrong-tenant credential rejection, and deficient-scope `403` responses.
 
 A `teams.write`-only key may read a document only inside write preconditions;
-the public list/get/prefs routes still require `teams.read`. Membership
-administration, invites, and logs are not covered by this completed core gate and
-remain deferred.
+the public list/get/prefs routes still require `teams.read`. The same write-only
+key can delete a session-created team and its accepted owner membership without
+leaving an orphan. Membership administration, invites, and logs are not covered
+by this completed core gate and remain deferred.
 
 ## Open questions for review
 

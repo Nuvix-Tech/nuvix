@@ -114,6 +114,47 @@ for (const driver of PLATFORM_FIXTURE_DRIVERS) {
       expect(records[0]?.modes).toEqual(['admin'])
     })
 
+    test('persists real user sessions as salted HMAC verifiers without bearer tokens', async () => {
+      const current = initialized(fixture)
+      const sessions = [
+        current.tenants.a.credentials.session,
+        current.tenants.b.credentials.session,
+      ]
+      const records = await Promise.all([
+        current.owner.inspectSession('a', sessions[0]!.id),
+        current.owner.inspectSession('b', sessions[1]!.id),
+      ])
+
+      expect(sessions[0]!.id).toBe(sessions[1]!.id)
+      expect(sessions[0]!.userId).toBe(sessions[1]!.userId)
+      expect(sessions[0]!.token).not.toBe(sessions[1]!.token)
+      for (const [index, record] of records.entries()) {
+        expect(record.fieldNames).toEqual(
+          expect.arrayContaining([
+            'userId',
+            'secretDigest',
+            'secretSalt',
+            'expiresAt',
+            'revokedAt',
+          ]),
+        )
+        expect(record.fieldNames).not.toEqual(expect.arrayContaining(['secret', 'token', 'bearer']))
+        expect(record.userId).toBe(sessions[index]!.userId)
+        expect(isVerifier(record.secretDigest)).toBe(true)
+        expect(isVerifier(record.secretSalt)).toBe(true)
+        expect(record.revokedAt).toBeNull()
+        const persisted = JSON.stringify(record)
+        expect(persisted).not.toContain(sessions[index]!.token)
+        expect(persisted).not.toContain(sessions[index]!.token.split('.').at(-1))
+      }
+      const canaryFailure = await current.owner
+        .assertNoSensitiveValues(sessions[0]!.token)
+        .catch((error: unknown) => error)
+      expect(String(canaryFailure)).toBe(
+        'Error: Tenant fixture sensitive value leaked into request diagnostics',
+      )
+    })
+
     test('authenticates each tenant-local key and rejects the other tenant secret', async () => {
       const current = initialized(fixture)
       const [authA, authB, teamsWriteOnly, usersReadOnly, usersWriteOnly, scopeDeficient] =
@@ -155,6 +196,34 @@ for (const driver of PLATFORM_FIXTURE_DRIVERS) {
         fields: { type: '/errors/unauthorized', code: 'credential_invalid' },
       })
       expect(String(failure).includes(current.tenants.b.credentials.full.token)).toBe(false)
+    })
+
+    test('authenticates each tenant-local session through its persisted user', async () => {
+      const current = initialized(fixture)
+      const [authA, authB] = await Promise.all([
+        current.owner.authenticateSession('a', current.tenants.a.credentials.session.token),
+        current.owner.authenticateSession('b', current.tenants.b.credentials.session.token),
+      ])
+
+      expect(authA).toEqual({
+        type: 'session',
+        sessionId: current.tenants.a.credentials.session.id,
+        userId: current.tenants.a.credentials.session.userId,
+        verified: true,
+        scopes: [],
+        labels: [],
+        teams: [],
+      })
+      expect(authB).toEqual(authA)
+
+      const failure = await current.owner
+        .authenticateSession('a', current.tenants.b.credentials.session.token)
+        .catch((error: unknown) => error)
+      expect(failure).toMatchObject({
+        status: 401,
+        fields: { type: '/errors/unauthorized', code: 'credential_invalid' },
+      })
+      expect(String(failure).includes(current.tenants.b.credentials.session.token)).toBe(false)
     })
 
     test('stores two encrypted tenant targets without exposing them in runtime options', async () => {

@@ -87,6 +87,13 @@ function apiKeyHeaders(
   })
 }
 
+function sessionHeaders(tenant: TenantFixture): Readonly<Record<string, string>> {
+  return Object.freeze({
+    ...publishableKeyHeaders(tenant),
+    [HEADERS.session]: tenant.credentials.session.token,
+  })
+}
+
 function schemaName(): string {
   return `it_request_${crypto.randomUUID().replaceAll('-', '').toLowerCase()}`
 }
@@ -197,6 +204,7 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
       fixture.tenants.a,
       fixture.tenants.a.credentials.teamsWriteOnly.token,
     )
+    const sessionHeadersA = sessionHeaders(fixture.tenants.a)
     const usersReadHeadersA = apiKeyHeaders(
       fixture.tenants.a,
       fixture.tenants.a.credentials.usersReadOnly.token,
@@ -569,6 +577,32 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
       code: 'team_not_found',
     })
 
+    const sessionCreatedTeamA = observe(
+      await client.v2.teams.post(
+        { name: `Tenant A session ${sharedName}` },
+        { headers: sessionHeadersA },
+      ),
+    )
+    expect(sessionCreatedTeamA.status).toBe(201)
+    expect(sessionCreatedTeamA.error).toBeNull()
+    expect(sessionCreatedTeamA.data).toMatchObject({
+      name: `Tenant A session ${sharedName}`,
+      total: 1,
+      prefs: {},
+    })
+    if (!sessionCreatedTeamA.data) throw new Error('Session team create response was empty')
+    const sessionTeamIdA = sessionCreatedTeamA.data.$id
+    expect(await fixture.owner.countTeamMemberships('a', sessionTeamIdA)).toBe(1)
+
+    const removedSessionTeamA = observe(
+      await client.v2
+        .teams({ teamId: sessionTeamIdA })
+        .delete(undefined, { headers: teamsWriteHeadersA }),
+    )
+    expect(removedSessionTeamA.status).toBe(204)
+    expect(removedSessionTeamA.error).toBeNull()
+    expect(await fixture.owner.countTeamMemberships('a', sessionTeamIdA)).toBe(0)
+
     const sharedUserId = entityId('user')
     const userEmailA = `${sharedUserId}.a@example.test`
     const userEmailB = `${sharedUserId}.b@example.test`
@@ -676,16 +710,14 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     const listedUsersB = observe(listedUsersBResult)
     expect(listedUsersA.status).toBe(200)
     expect(listedUsersB.status).toBe(200)
-    expect(listedUsersA.data?.data).toHaveLength(1)
-    expect(listedUsersB.data?.data).toHaveLength(1)
-    expect(listedUsersA.data?.data[0]).toMatchObject({
-      $id: sharedUserId,
-      email: userEmailA,
-    })
-    expect(listedUsersB.data?.data[0]).toMatchObject({
-      $id: sharedUserId,
-      email: userEmailB,
-    })
+    expect(listedUsersA.data?.data).toHaveLength(2)
+    expect(listedUsersB.data?.data).toHaveLength(2)
+    expect(listedUsersA.data?.data).toContainEqual(
+      expect.objectContaining({ $id: sharedUserId, email: userEmailA }),
+    )
+    expect(listedUsersB.data?.data).toContainEqual(
+      expect.objectContaining({ $id: sharedUserId, email: userEmailB }),
+    )
 
     const [fetchedUserAResult, fetchedUserBResult] = await Promise.all([
       client.v2.users({ userId: sharedUserId }).get({ headers: usersReadHeadersA }),

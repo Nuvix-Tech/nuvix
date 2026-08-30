@@ -339,14 +339,16 @@ AES-256-GCM encrypted at rest, and tenant internals use reserved schema `core`
 with namespace `nx`.
 
 Real tenant-local API keys prove correct-tenant access, wrong-tenant rejection,
-and scope failures. Missing, corrupt, malformed, and unreachable targets return
-the same redacted `503 project_unavailable`. Request completion awaits lease
-release, runtime close drains tenants before the platform, and the live suite
-asserts no retained PostgreSQL connections or SQLite files. Two narrow
-regressions were fixed by granting write-scope database roles only the document
-read permission needed for write preconditions, and by probing Bun SQL's lazy
-connection during tenant acquisition so unreachable targets cannot be
-misclassified as auth failures.
+and scope failures. A verifier-backed user session also creates a team and owner
+membership, which a `teams.write`-only key deletes without leaving an orphan.
+Missing, corrupt, malformed, and unreachable targets return the same redacted
+`503 project_unavailable`. Request completion awaits lease release, runtime close
+drains tenants before the platform, and the live suite asserts no retained
+PostgreSQL connections or SQLite files. Narrow regressions were fixed by granting
+write-scope database roles only the document permissions needed for write
+preconditions and aggregate cleanup, and by probing Bun SQL's lazy connection
+during tenant acquisition so unreachable targets cannot be misclassified as auth
+failures.
 
 This does **not** complete Phase 3. The active slice is Teams membership
 administration and the Users membership projection. Invitations, logs, and the

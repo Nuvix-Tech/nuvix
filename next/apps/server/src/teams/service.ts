@@ -111,6 +111,8 @@ function membershipPermissions(teamId: string, userId: string) {
     Permission.update(Role.team(teamId, 'owner')),
     Permission.delete(Role.user(userId)),
     Permission.delete(Role.team(teamId, 'owner')),
+    // A teams.write API key owns aggregate deletion, including the membership cascade.
+    Permission.delete(Role.label(apiScopeLabel('teams.write'))),
   ]
 }
 

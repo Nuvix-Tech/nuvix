@@ -1,4 +1,4 @@
-import { Database, Doc } from '@nuvix/db'
+import { Database, Doc, Permission, Query, Role } from '@nuvix/db'
 import type { AuthMode } from '../../../src/context/auth'
 import {
   createCredentialToken,
@@ -33,6 +33,9 @@ const TEAMS_WRITE_KEY_ID = 'integration_teams_write_key'
 const USERS_READ_KEY_ID = 'integration_users_read_key'
 const USERS_WRITE_KEY_ID = 'integration_users_write_key'
 const SCOPE_DEFICIENT_KEY_ID = 'integration_scope_deficient_key'
+const SESSION_USER_ID = 'integration_session_user'
+const SESSION_ID = 'integration_user_session'
+const SESSION_EXPIRES_AT = '2100-01-01T00:00:00.000Z'
 const FAILURE_PROJECT_IDS = Object.freeze({
   unknown: 'integration_unknown_project',
   disabled: 'integration_disabled_project',
@@ -69,10 +72,17 @@ export interface TenantApiKeyFixture {
   readonly modes: readonly AuthMode[]
 }
 
+export interface TenantSessionFixture {
+  readonly id: string
+  readonly token: string
+  readonly userId: string
+}
+
 export interface TenantFixture {
   readonly project: ProjectContext
   readonly publishableKey: string
   readonly credentials: {
+    readonly session: TenantSessionFixture
     readonly full: TenantApiKeyFixture
     readonly teamsWriteOnly: TenantApiKeyFixture
     readonly usersReadOnly: TenantApiKeyFixture
@@ -116,6 +126,16 @@ export interface TenantApiKeyInspection {
   readonly revokedAt: unknown
 }
 
+export interface TenantSessionInspection {
+  readonly id: string
+  readonly fieldNames: readonly string[]
+  readonly userId: unknown
+  readonly secretDigest: unknown
+  readonly secretSalt: unknown
+  readonly expiresAt: unknown
+  readonly revokedAt: unknown
+}
+
 export interface TwoTenantFixtureRuntimeOptions extends PlatformFixtureRuntimeOptions {
   readonly publishableKeyEnvironment: 'test'
 }
@@ -127,11 +147,14 @@ export interface TwoTenantFixtureOwner {
     schemaName: string,
   ): Promise<TenantSchemaMetadataInspection>
   inspectApiKey(tenant: TwoTenantName, keyId: string): Promise<TenantApiKeyInspection>
+  inspectSession(tenant: TwoTenantName, sessionId: string): Promise<TenantSessionInspection>
+  countTeamMemberships(tenant: TwoTenantName, teamId: string): Promise<number>
   authenticateApiKey(
     tenant: TwoTenantName,
     token: string,
     mode?: AuthMode,
   ): Promise<ProjectAuthContext>
+  authenticateSession(tenant: TwoTenantName, token: string): Promise<ProjectAuthContext>
   inspectTargetCiphertext(projectId: string): Promise<string>
   assertNoSensitiveValues(value: string): Promise<void>
   assertNoPlatformConnections(): Promise<void>
@@ -158,7 +181,13 @@ interface SeededApiKey {
   readonly verifier: SecretVerifier
 }
 
+interface SeededSession {
+  readonly fixture: TenantSessionFixture
+  readonly verifier: SecretVerifier
+}
+
 interface SeededCredentials {
+  readonly session: SeededSession
   readonly full: SeededApiKey
   readonly teamsWriteOnly: SeededApiKey
   readonly usersReadOnly: SeededApiKey
@@ -187,15 +216,29 @@ async function apiKey(id: string, scopes: readonly string[]): Promise<SeededApiK
   return Object.freeze({ fixture, verifier })
 }
 
+async function userSession(): Promise<SeededSession> {
+  const secret = randomSecret()
+  const verifier = await createSecretVerifier('session', secret)
+  const fixture = Object.freeze({
+    id: SESSION_ID,
+    token: createCredentialToken('session', SESSION_ID, secret),
+    userId: SESSION_USER_ID,
+  })
+  return Object.freeze({ fixture, verifier })
+}
+
 async function credentials(): Promise<SeededCredentials> {
-  const [full, teamsWriteOnly, usersReadOnly, usersWriteOnly, scopeDeficient] = await Promise.all([
-    apiKey(SHARED_KEY_ID, TENANT_FULL_SCOPES),
-    apiKey(TEAMS_WRITE_KEY_ID, ['teams.write']),
-    apiKey(USERS_READ_KEY_ID, ['users.read']),
-    apiKey(USERS_WRITE_KEY_ID, ['users.write']),
-    apiKey(SCOPE_DEFICIENT_KEY_ID, []),
-  ])
+  const [session, full, teamsWriteOnly, usersReadOnly, usersWriteOnly, scopeDeficient] =
+    await Promise.all([
+      userSession(),
+      apiKey(SHARED_KEY_ID, TENANT_FULL_SCOPES),
+      apiKey(TEAMS_WRITE_KEY_ID, ['teams.write']),
+      apiKey(USERS_READ_KEY_ID, ['users.read']),
+      apiKey(USERS_WRITE_KEY_ID, ['users.write']),
+      apiKey(SCOPE_DEFICIENT_KEY_ID, []),
+    ])
   return Object.freeze({
+    session,
     full,
     teamsWriteOnly,
     usersReadOnly,
@@ -315,18 +358,58 @@ async function seedApiKeys(
   }
 }
 
+async function seedUserSession(
+  resource: TenantDatabaseResource,
+  seeded: SeededSession,
+): Promise<void> {
+  const userFields = TENANT_AUTH_MODEL.fields.users
+  const sessionFields = TENANT_AUTH_MODEL.fields.sessions
+  // Fixture bootstrap is an owner-only boundary; only the salted HMAC verifier is persisted.
+  const system = resource.database.system()
+  await system.createDocument(
+    TENANT_AUTH_MODEL.collections.users,
+    new Doc({
+      $id: seeded.fixture.userId,
+      $permissions: [
+        Permission.read(Role.user(seeded.fixture.userId)),
+        Permission.update(Role.user(seeded.fixture.userId)),
+        Permission.delete(Role.user(seeded.fixture.userId)),
+      ],
+      [userFields.name]: 'Integration Session User',
+      [userFields.status]: true,
+      [userFields.emailVerified]: true,
+      [userFields.phoneVerified]: false,
+      [userFields.labels]: [],
+      [userFields.prefs]: {},
+    }),
+  )
+  await system.createDocument(
+    TENANT_AUTH_MODEL.collections.sessions,
+    new Doc({
+      $id: seeded.fixture.id,
+      [sessionFields.userId]: seeded.fixture.userId,
+      [sessionFields.secretDigest]: seeded.verifier.digest,
+      [sessionFields.secretSalt]: seeded.verifier.salt,
+      [sessionFields.expiresAt]: SESSION_EXPIRES_AT,
+      [sessionFields.revokedAt]: null,
+    }),
+  )
+}
+
 async function provision(selectedTarget: TenantDatabaseTarget, seeded: SeededCredentials) {
   await withTenantResource(selectedTarget, async (resource) => {
     if (!(await imageFoundation(resource))) {
       throw new Error('Tenant fixture requires the system.schemas image foundation')
     }
     await provisionTenantDatabase(resource.database)
+    await seedUserSession(resource, seeded.session)
     await seedApiKeys(resource, seeded)
   })
 }
 
 function publicCredentials(seeded: SeededCredentials): TenantFixture['credentials'] {
   return Object.freeze({
+    session: seeded.session.fixture,
     full: seeded.full.fixture,
     teamsWriteOnly: seeded.teamsWriteOnly.fixture,
     usersReadOnly: seeded.usersReadOnly.fixture,
@@ -419,6 +502,39 @@ async function inspectApiKey(
   })
 }
 
+async function inspectSession(
+  selected: OwnedTenant,
+  sessionId: string,
+): Promise<TenantSessionInspection> {
+  return await withTenantResource(selected.target, async (resource) => {
+    const fields = TENANT_AUTH_MODEL.fields.sessions
+    const document = await resource.database
+      .system()
+      .getDocument(TENANT_AUTH_MODEL.collections.sessions, sessionId)
+    if (document.empty()) throw new Error('Tenant fixture session was not found')
+
+    return Object.freeze({
+      id: document.getId(),
+      fieldNames: Object.freeze(Object.keys(document.getAll()).toSorted()),
+      userId: document.get(fields.userId),
+      secretDigest: document.get(fields.secretDigest),
+      secretSalt: document.get(fields.secretSalt),
+      expiresAt: document.get(fields.expiresAt),
+      revokedAt: document.get(fields.revokedAt),
+    })
+  })
+}
+
+async function countTeamMemberships(selected: OwnedTenant, teamId: string): Promise<number> {
+  return await withTenantResource(selected.target, async (resource) =>
+    resource.database
+      .system()
+      .count(TENANT_AUTH_MODEL.collections.memberships, [
+        Query.equal(TENANT_AUTH_MODEL.fields.memberships.teamId, [teamId]),
+      ]),
+  )
+}
+
 async function authenticateApiKey(
   selected: OwnedTenant,
   token: string,
@@ -427,6 +543,19 @@ async function authenticateApiKey(
   return await withTenantResource(selected.target, async (resource) =>
     createTenantAuthResolver().resolve({
       headers: new Headers({ [HEADERS.apiKey]: token, [HEADERS.mode]: mode }),
+      project: selected.fixture.project,
+      documents: resource.database.system(),
+    }),
+  )
+}
+
+async function authenticateSession(
+  selected: OwnedTenant,
+  token: string,
+): Promise<ProjectAuthContext> {
+  return await withTenantResource(selected.target, async (resource) =>
+    createTenantAuthResolver().resolve({
+      headers: new Headers({ [HEADERS.session]: token }),
       project: selected.fixture.project,
       documents: resource.database.system(),
     }),
@@ -554,8 +683,14 @@ export async function createTwoTenantFixture(
           inspectSchemaMetadata(tenant(ownedTenants, name), schemaName),
         inspectApiKey: (name: TwoTenantName, keyId: string) =>
           inspectApiKey(tenant(ownedTenants, name), keyId),
+        inspectSession: (name: TwoTenantName, sessionId: string) =>
+          inspectSession(tenant(ownedTenants, name), sessionId),
+        countTeamMemberships: (name: TwoTenantName, teamId: string) =>
+          countTeamMemberships(tenant(ownedTenants, name), teamId),
         authenticateApiKey: (name: TwoTenantName, token: string, mode: AuthMode = 'admin') =>
           authenticateApiKey(tenant(ownedTenants, name), token, mode),
+        authenticateSession: (name: TwoTenantName, token: string) =>
+          authenticateSession(tenant(ownedTenants, name), token),
         inspectTargetCiphertext: (projectId: string) =>
           selectedPlatform.owner.inspectTargetCiphertext(projectId),
         assertNoSensitiveValues: (value: string) =>
