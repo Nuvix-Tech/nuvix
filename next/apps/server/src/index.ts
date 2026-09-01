@@ -11,8 +11,8 @@ const runtime = await createPlatformRuntime({
   tenantTargetFilters,
   publishableKeyEnvironment: config.isProd ? 'live' : 'test',
   app: { isProduction: config.isProd },
-  onTenantCloseError: () => {
-    console.error('[nuvix] tenant database close failed')
+  onTenantCloseError: (_error, projectId) => {
+    console.error('[nuvix] tenant database close failed', { projectId })
   },
 })
 const processOwner = await startProcess(runtime, {

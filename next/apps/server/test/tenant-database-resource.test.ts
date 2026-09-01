@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 import { type CacheDriver, None } from '@nuvix/cache'
-import { Adapter, Database } from '@nuvix/db'
 import type { SchemaCatalog, SchemaRecord } from '../src/database/catalog'
 import type { TenantDatabaseTarget } from '../src/infrastructure/platform-persistence-model'
 import {
@@ -37,6 +36,7 @@ function construction(
       readonly schema: string
       readonly sql: FakeSql
     }) => void
+    readonly ready?: (postgres: FakePostgres) => Promise<void>
   } = {},
 ): TenantDatabaseConstruction<FakeSql, FakeAdapter, FakeDatabase, FakePostgres> {
   const schemas = new Map<string, SchemaRecord>()
@@ -70,6 +70,7 @@ function construction(
       options.onSql?.(sql)
       return { sql }
     },
+    ready: options.ready ?? (async () => {}),
     catalog: () => catalog,
     documentAdmin: (sql, cache, schema) => ({
       create: async (createdName) => {
@@ -85,12 +86,20 @@ const TARGET: TenantDatabaseTarget = {
   connectionString: 'postgresql://tenant.example.test/project_a',
 }
 
+function deferred() {
+  let resolve!: () => void
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('PostgreSQL tenant database resource factory', () => {
-  test('constructs and owns the resolved PostgreSQL resource', () => {
+  test('constructs and owns the resolved PostgreSQL resource', async () => {
     const cache = new None()
     const sharedSql: FakeSql[] = []
 
-    const resource = createTenantDatabaseResource(
+    const resource = await createTenantDatabaseResource(
       TARGET,
       cache,
       construction({ onSql: (sql) => sharedSql.push(sql) }),
@@ -103,6 +112,8 @@ describe('PostgreSQL tenant database resource factory', () => {
     expect(resource.database.cache).toBe(cache)
     expect(Object.keys(resource.schemas)).toEqual(['list', 'get', 'create', 'update', 'remove'])
     expect(Object.isFrozen(resource.schemas)).toBe(true)
+    expect('sql' in resource).toBe(false)
+    expect('client' in resource).toBe(false)
   })
 
   test('bootstraps document metadata through an isolated schema admin on the owner SQL', async () => {
@@ -113,7 +124,7 @@ describe('PostgreSQL tenant database resource factory', () => {
       readonly sql: FakeSql
     }> = []
     const cache = new None()
-    const resource = createTenantDatabaseResource(
+    const resource = await createTenantDatabaseResource(
       TARGET,
       cache,
       construction({ onDocumentAdmin: (input) => calls.push(input) }),
@@ -141,28 +152,7 @@ describe('PostgreSQL tenant database resource factory', () => {
     ])
   })
 
-  test('constructs production resources through public @nuvix/db exports', async () => {
-    const resource = createTenantDatabaseResource({
-      driver: 'postgresql',
-      connectionString: 'postgresql://user:password@127.0.0.1:5432/tenant',
-    })
-
-    try {
-      expect(resource.adapter).toBeInstanceOf(Adapter)
-      expect(resource.adapter.$schema).toBe('core')
-      expect(resource.adapter.$namespace).toBe('nx')
-      expect(resource.database).toBeInstanceOf(Database)
-      expect(resource.cache).toBeInstanceOf(None)
-      expect(typeof resource.postgres.table).toBe('function')
-      expect(Object.keys(resource.schemas)).toEqual(['list', 'get', 'create', 'update', 'remove'])
-      expect('sql' in resource).toBe(false)
-      expect('client' in resource).toBe(false)
-    } finally {
-      await resource.close()
-    }
-  })
-
-  test('selects the default cache only when none is supplied', () => {
+  test('selects the default cache only when none is supplied', async () => {
     const defaultCache = new None()
     let selections = 0
     const dependencies = construction({
@@ -172,9 +162,9 @@ describe('PostgreSQL tenant database resource factory', () => {
       },
     })
 
-    const generated = createTenantDatabaseResource(TARGET, undefined, dependencies)
+    const generated = await createTenantDatabaseResource(TARGET, undefined, dependencies)
     const suppliedCache = new None()
-    const supplied = createTenantDatabaseResource(TARGET, suppliedCache, dependencies)
+    const supplied = await createTenantDatabaseResource(TARGET, suppliedCache, dependencies)
 
     expect(generated.cache).toBe(defaultCache)
     expect(supplied.cache).toBe(suppliedCache)
@@ -189,7 +179,7 @@ describe('PostgreSQL tenant database resource factory', () => {
       connectionString: ' postgresql://example.test/tenant',
     },
     { driver: 'sqlite', filename: './secret/tenant.sqlite' },
-  ])('rejects unsupported or invalid targets before construction', (target) => {
+  ])('rejects unsupported or invalid targets before construction', async (target) => {
     let constructions = 0
     const dependencies = construction()
     const guarded: TenantDatabaseConstruction<FakeSql, FakeAdapter, FakeDatabase, FakePostgres> = {
@@ -200,13 +190,11 @@ describe('PostgreSQL tenant database resource factory', () => {
       },
     }
 
-    const failure = (() => {
-      try {
-        createTenantDatabaseResource(target as unknown as TenantDatabaseTarget, undefined, guarded)
-      } catch (error) {
-        return error
-      }
-    })()
+    const failure = await createTenantDatabaseResource(
+      target as unknown as TenantDatabaseTarget,
+      undefined,
+      guarded,
+    ).catch((error: unknown) => error)
 
     expect((failure as Error).message).toBe('Tenant database target is invalid')
     expect(String(failure)).not.toContain('secret')
@@ -216,7 +204,7 @@ describe('PostgreSQL tenant database resource factory', () => {
   test('closes the SQL owner once and preserves close failures', async () => {
     const failure = new Error('close failed')
     let closes = 0
-    const resource = createTenantDatabaseResource(
+    const resource = await createTenantDatabaseResource(
       TARGET,
       undefined,
       construction({
@@ -232,6 +220,86 @@ describe('PostgreSQL tenant database resource factory', () => {
     expect(resource.close()).toBe(first)
     await expect(first).rejects.toBe(failure)
     await expect(resource.close()).rejects.toBe(failure)
+    expect(closes).toBe(1)
+  })
+
+  test('awaits one SQL close when construction fails after allocation', async () => {
+    const constructionFailure = new Error('adapter construction failed')
+    const closeGate = deferred()
+    const events: string[] = []
+    const dependencies = construction({
+      close: async () => {
+        events.push('close:start')
+        await closeGate.promise
+        events.push('close:end')
+      },
+    })
+    const opening = createTenantDatabaseResource(TARGET, undefined, {
+      ...dependencies,
+      postgresql: () => {
+        events.push('construction:failed')
+        throw constructionFailure
+      },
+    })
+    let rejected = false
+    void opening.catch(() => {
+      rejected = true
+    })
+
+    await Promise.resolve()
+    expect(events).toEqual(['construction:failed', 'close:start'])
+    expect(rejected).toBe(false)
+    closeGate.resolve()
+
+    await expect(opening).rejects.toBe(constructionFailure)
+    expect(events).toEqual(['construction:failed', 'close:start', 'close:end'])
+  })
+
+  test('closes once and preserves the readiness failure when the probe rejects', async () => {
+    const readinessFailure = new Error('readiness failed')
+    let closes = 0
+
+    const failure = await createTenantDatabaseResource(
+      TARGET,
+      undefined,
+      construction({
+        close: async () => {
+          closes += 1
+        },
+        ready: async () => {
+          throw readinessFailure
+        },
+      }),
+    ).catch((error: unknown) => error)
+
+    expect(failure).toBe(readinessFailure)
+    expect(closes).toBe(1)
+  })
+
+  test('reports one failed readiness cleanup without replacing the primary failure', async () => {
+    const readinessFailure = new Error('readiness provider detail')
+    const closeFailure = new Error('close provider detail')
+    const reported: unknown[] = []
+    let closes = 0
+
+    const failure = await createTenantDatabaseResource(
+      TARGET,
+      undefined,
+      construction({
+        close: async () => {
+          closes += 1
+          throw closeFailure
+        },
+        ready: async () => {
+          throw readinessFailure
+        },
+      }),
+      (error) => reported.push(error),
+    ).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors).toEqual([readinessFailure, closeFailure])
+    expect(reported).toEqual([closeFailure])
     expect(closes).toBe(1)
   })
 })

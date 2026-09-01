@@ -128,11 +128,16 @@ Canonical adapter metadata is also shared by provisioning and runtime:
 | System `Session`                                        | internal-job lifetime    | internal job     |
 
 The registry remains metadata-neutral: its injected `create(projectId)` calls
-the metadata resolver and passes only the resolved connection value to the
-resource factory. The factory creates one caller-owned Bun `SQL`, shares that
-same client with `@nuvix/db` and `@nuvix/pg`, and closes it exactly once. Creating
-a `Session` does not create a pool; it shares the owning tenant resource's
-adapter and cache.
+the metadata resolver and passes the resolved connection value plus a
+project-bound, owner-only cleanup reporter to the resource factory. The factory
+creates one caller-owned Bun `SQL`, shares that
+same client with `@nuvix/db` and `@nuvix/pg`, and immediately establishes its
+idempotent close owner. Later construction and readiness-probe failures await
+that close before acquisition rejects. A simultaneous close failure is reported
+through the registry's owner-only `onCloseError` hook with the project ID while
+the construction/readiness failure remains first; requests still receive only
+the redacted `503 project_unavailable`. Creating a `Session` does not create a
+pool; it shares the owning tenant resource's adapter and cache.
 
 ### Request and owner capabilities
 

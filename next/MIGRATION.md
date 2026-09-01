@@ -411,8 +411,10 @@ platform metadata.service.ts                           ← platform
 - `@nuvix/pg@2.0.0` is a Bun/ESM-only sibling dependency at
   `file:../../../../pg-ts`; it requires Bun 1.4 and TypeScript 7 declarations.
 - The tenant resource creates one Bun `SQL` owner, shares it with `@nuvix/db`
-  and `@nuvix/pg`, and closes it exactly once. Neither package owns a borrowed
-  client.
+  and `@nuvix/pg`, and closes it exactly once. The close owner exists immediately
+  after allocation, so later construction or readiness failure awaits rollback;
+  cleanup failures remain owner-visible with project context while requests are
+  redacted. Neither package owns a borrowed client.
 - `@nuvix/pg` stays inside PostgreSQL tenant infrastructure. Routes receive
   narrow services, never SQL, the query facade, adapters, or lifecycle methods.
 - Builders are immutable and new code uses explicit `.execute()` boundaries.

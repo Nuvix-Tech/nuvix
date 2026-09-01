@@ -30,11 +30,14 @@ interface RegistryEntry<Database> {
 }
 
 export interface TenantDatabaseRegistryOptions<Database> {
-  readonly create: (projectId: string) => Promise<TenantDatabaseResource<Database>>
+  readonly create: (
+    projectId: string,
+    reportCloseError: (error: unknown) => void,
+  ) => Promise<TenantDatabaseResource<Database>>
   readonly maxTenants?: number
   readonly idleMs?: number
   readonly now?: () => number
-  /** Receives failures from cleanup started after acquire, where no caller can await the result. */
+  /** Receives failed-open rollback and detached cleanup failures with owner context. */
   readonly onCloseError: (error: unknown, projectId: string) => void
 }
 
@@ -175,7 +178,7 @@ export class TenantDatabaseRegistry<Database> implements TenantDatabases<Databas
       idleWaiters: new Set(),
     }
 
-    entry.ready = this.create(projectId)
+    entry.ready = this.create(projectId, (error) => this.reportCloseFailure({ error, projectId }))
       .then((resource) => {
         entry.resource = resource
       })

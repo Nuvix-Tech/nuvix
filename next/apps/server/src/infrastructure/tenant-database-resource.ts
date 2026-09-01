@@ -29,6 +29,7 @@ export interface TenantDatabaseConstruction<
   readonly postgresql: (sql: SqlResource) => AdapterResource
   readonly database: (adapter: AdapterResource, cache: CacheDriver) => DatabaseResource
   readonly postgres: (sql: SqlResource) => PostgresResource
+  readonly ready: (postgres: PostgresResource) => Promise<void>
   readonly catalog: (postgres: PostgresResource) => SchemaCatalog
   readonly documentAdmin: (
     sql: SqlResource,
@@ -54,6 +55,11 @@ const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<SQL, Adapter, Database, P
   postgresql: (sql) => new Adapter(sql).setMeta(DATABASE_METADATA.tenant.postgresql),
   database: (adapter, cache) => new Database(adapter, cache),
   postgres: (sql) => createPostgresDatabase(sql),
+  ready: async (postgres) => {
+    // Bun SQL connects lazily. Probe while the resource owner can still roll
+    // back construction, before authentication can misclassify the failure.
+    await postgres.raw<void>('select 1').execute()
+  },
   catalog: (postgres) => createSchemaCatalog(postgres),
   documentAdmin: (sql, cache, schema) =>
     new Database(
@@ -92,10 +98,21 @@ function validate(value: unknown): TenantDatabaseTarget {
   return { driver: 'postgresql', connectionString: value.connectionString }
 }
 
+function createCloseOwner(sql: TenantSqlOwner): () => Promise<void> {
+  let closePromise: Promise<void> | undefined
+
+  return () => {
+    closePromise ??= Promise.resolve().then(() => sql.close())
+    return closePromise
+  }
+}
+
 export function createTenantDatabaseResource(
   target: TenantDatabaseTarget,
   cache?: CacheDriver,
-): TenantDatabaseResource
+  construction?: undefined,
+  onCloseError?: (error: unknown) => void,
+): Promise<TenantDatabaseResource>
 export function createTenantDatabaseResource<
   SqlResource extends TenantSqlOwner,
   AdapterResource,
@@ -110,12 +127,14 @@ export function createTenantDatabaseResource<
     DatabaseResource,
     PostgresResource
   >,
-): TenantDatabaseResource<DatabaseResource, AdapterResource, PostgresResource>
-export function createTenantDatabaseResource(
+  onCloseError?: (error: unknown) => void,
+): Promise<TenantDatabaseResource<DatabaseResource, AdapterResource, PostgresResource>>
+export async function createTenantDatabaseResource(
   input: TenantDatabaseTarget,
   cache?: CacheDriver,
   construction?: unknown,
-) {
+  onCloseError?: (error: unknown) => void,
+): Promise<TenantDatabaseResource<unknown, unknown, unknown>> {
   const target = validate(input)
   const dependencies = (construction ?? DEFAULT_CONSTRUCTION) as TenantDatabaseConstruction<
     TenantSqlOwner,
@@ -124,26 +143,38 @@ export function createTenantDatabaseResource(
     unknown
   >
   const sql = dependencies.sql(target.connectionString)
-  const adapter = dependencies.postgresql(sql)
-  const selectedCache = cache ?? dependencies.none()
-  const database = dependencies.database(adapter, selectedCache)
-  const postgres = dependencies.postgres(sql)
-  const catalog = dependencies.catalog(postgres)
-  const bootstrap = createDocumentSchemaBootstrap({
-    forSchema: (schema) => dependencies.documentAdmin(sql, selectedCache, schema),
-  })
-  const schemas = createSchemaService({ catalog, bootstrap })
-  let closePromise: Promise<void> | undefined
+  const close = createCloseOwner(sql)
 
-  return {
-    adapter,
-    cache: selectedCache,
-    database,
-    postgres,
-    schemas,
-    close: () => {
-      closePromise ??= Promise.resolve().then(() => sql.close())
-      return closePromise
-    },
+  try {
+    const adapter = dependencies.postgresql(sql)
+    const selectedCache = cache ?? dependencies.none()
+    const database = dependencies.database(adapter, selectedCache)
+    const postgres = dependencies.postgres(sql)
+    const catalog = dependencies.catalog(postgres)
+    const bootstrap = createDocumentSchemaBootstrap({
+      forSchema: (schema) => dependencies.documentAdmin(sql, selectedCache, schema),
+    })
+    const schemas = createSchemaService({ catalog, bootstrap })
+    await dependencies.ready(postgres)
+
+    return {
+      adapter,
+      cache: selectedCache,
+      database,
+      postgres,
+      schemas,
+      close,
+    }
+  } catch (error) {
+    try {
+      await close()
+    } catch (closeError) {
+      onCloseError?.(closeError)
+      throw new AggregateError(
+        [error, closeError],
+        'Tenant database resource initialization and cleanup failed',
+      )
+    }
+    throw error
   }
 }

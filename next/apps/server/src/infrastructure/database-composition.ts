@@ -41,6 +41,7 @@ export interface DatabaseCompositionOptions {
   readonly tenantAuth: TenantAuthResolver
   readonly createResource?: (
     target: TenantDatabaseTarget,
+    reportCloseError: (error: unknown) => void,
   ) => CompositionTenantDatabaseResource | Promise<CompositionTenantDatabaseResource>
   readonly registryOptions: DatabaseRegistryOptions
 }
@@ -71,18 +72,9 @@ function requestResource(
 
 async function createReadyResource(
   target: TenantDatabaseTarget,
+  reportCloseError: (error: unknown) => void,
 ): Promise<CompositionTenantDatabaseResource> {
-  const resource = createTenantDatabaseResource(target)
-
-  try {
-    // Bun SQL connects lazily. Probing here keeps an unreachable target inside
-    // tenant acquisition, before tenant-local authentication can misclassify it.
-    await resource.postgres.raw<void>('select 1').execute()
-    return resource
-  } catch {
-    await resource.close().catch(() => undefined)
-    throw new Error('Tenant database resource initialization failed')
-  }
+  return createTenantDatabaseResource(target, undefined, undefined, reportCloseError)
 }
 
 /** Composes the only allowed project → tenant → auth request sequence. */
@@ -92,8 +84,10 @@ export function createDatabaseComposition(
   const createResource = options.createResource ?? createReadyResource
   const registry = new TenantDatabaseRegistry<RequestTenantDatabase>({
     ...options.registryOptions,
-    create: async (projectId) =>
-      requestResource(await createResource(await options.tenantTargets.resolve(projectId))),
+    create: async (projectId, reportCloseError) =>
+      requestResource(
+        await createResource(await options.tenantTargets.resolve(projectId), reportCloseError),
+      ),
   })
   const scope = new ProjectRequestScope(options.projectLocator, registry, options.tenantAuth)
 

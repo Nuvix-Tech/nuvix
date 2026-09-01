@@ -1,10 +1,19 @@
 import { describe, expect, test } from 'bun:test'
+import { None } from '@nuvix/cache'
 import type { Session } from '@nuvix/db'
 import type { ProjectLocator } from '../src/context/project-locator'
-import type { TenantAuthResolver } from '../src/context/project-request'
+import type { TenantAuthDocuments, TenantAuthResolver } from '../src/context/project-request'
+import type { SchemaCatalog } from '../src/database/catalog'
 import type { SchemaService } from '../src/database/service'
-import { createDatabaseComposition } from '../src/infrastructure/database-composition'
+import {
+  createDatabaseComposition,
+  type DatabaseCompositionOptions,
+} from '../src/infrastructure/database-composition'
 import type { TenantDatabaseTarget } from '../src/infrastructure/platform-persistence-model'
+import {
+  createTenantDatabaseResource,
+  type TenantDatabaseConstruction,
+} from '../src/infrastructure/tenant-database-resource'
 import { ServiceUnavailableError } from '../src/shared/errors'
 
 function harness() {
@@ -93,17 +102,21 @@ const headers = (projectId: string, credentialProject = projectId) =>
   })
 
 function failureHarness(options: {
+  readonly createResource?: NonNullable<DatabaseCompositionOptions['createResource']>
+  readonly onCloseError?: (error: unknown, projectId: string) => void
   readonly target?: TenantDatabaseTarget
   readonly targetError?: Error
   readonly resourceError?: Error
 }) {
   const events: string[] = []
-  const createResource = options.resourceError
-    ? async () => {
-        events.push('create')
-        throw options.resourceError
-      }
-    : undefined
+  const createResource =
+    options.createResource ??
+    (options.resourceError
+      ? async () => {
+          events.push('create')
+          throw options.resourceError
+        }
+      : undefined)
   const composition = createDatabaseComposition({
     projectLocator: {
       resolve: async () => {
@@ -130,7 +143,7 @@ function failureHarness(options: {
       },
     },
     ...(createResource ? { createResource } : {}),
-    registryOptions: { onCloseError: () => {} },
+    registryOptions: { onCloseError: options.onCloseError ?? (() => {}) },
   })
   return { composition, events }
 }
@@ -210,6 +223,69 @@ describe('database composition', () => {
       'driver-secret',
     ])
     expect(state.events).toEqual(['project', 'target', 'create'])
+  })
+
+  test('keeps failed initialization cleanup diagnostics at the project owner boundary', async () => {
+    const readinessFailure = new Error(
+      'readiness failed for postgresql://owner:tenant-secret@tenant.example/project_a',
+    )
+    const closeFailure = new Error('provider close failed with socket=/private/provider.sock')
+    const reported: Array<{ error: unknown; projectId: string }> = []
+    const catalog: SchemaCatalog = {
+      list: async () => [],
+      get: async () => undefined,
+      create: async () => {},
+      update: async () => undefined,
+      remove: async () => {},
+    }
+    let closes = 0
+    const construction: TenantDatabaseConstruction<
+      { close(): Promise<void> },
+      object,
+      { for(...roles: string[]): Session; system(): TenantAuthDocuments },
+      object
+    > = {
+      sql: () => ({
+        close: async () => {
+          closes += 1
+          throw closeFailure
+        },
+      }),
+      postgresql: () => ({}),
+      database: () => ({
+        for: () => ({}) as Session,
+        system: () => ({
+          find: async () => [],
+          getDocument: async () => ({}) as never,
+        }),
+      }),
+      postgres: () => ({}),
+      ready: async () => {
+        throw readinessFailure
+      },
+      catalog: () => catalog,
+      documentAdmin: () => ({ create: async () => {} }),
+      none: () => new None(),
+    }
+    const state = failureHarness({
+      createResource: (target, reportCloseError) =>
+        createTenantDatabaseResource(target, undefined, construction, reportCloseError),
+      onCloseError: (error, projectId) => reported.push({ error, projectId }),
+    })
+
+    const failure = await state.composition.requests
+      .withProject(headers('project_a'), async () => 'unexpected')
+      .catch((error: unknown) => error)
+
+    expectProjectUnavailable(failure, [
+      'tenant-secret',
+      'tenant.example',
+      'provider close failed',
+      '/private/provider.sock',
+    ])
+    expect(reported).toEqual([{ error: closeFailure, projectId: 'project_a' }])
+    expect(closes).toBe(1)
+    expect(state.events).toEqual(['project', 'target'])
   })
 
   test('selects target, constructs tenant, and authenticates inside it', async () => {

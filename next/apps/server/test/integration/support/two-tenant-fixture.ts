@@ -306,7 +306,7 @@ async function withTenantResource<Result>(
   selectedTarget: TenantDatabaseTarget,
   operation: (resource: TenantDatabaseResource) => Result | Promise<Result>,
 ): Promise<Result> {
-  const resource = createTenantDatabaseResource(selectedTarget)
+  const resource = await createTenantDatabaseResource(selectedTarget)
   const outcome = await Promise.resolve(operation(resource)).then(
     (value) => ({ ok: true, value }) as const,
     (error: unknown) => ({ ok: false, error }) as const,

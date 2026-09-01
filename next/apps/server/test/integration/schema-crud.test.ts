@@ -24,7 +24,7 @@ live('schema CRUD on nuvix/postgres:18.1', () => {
     const started = await startPostgresResource()
     postgres = started
     try {
-      resource = createTenantDatabaseResource({
+      resource = await createTenantDatabaseResource({
         driver: 'postgresql',
         connectionString: started.owner.connectionString(),
       })

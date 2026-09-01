@@ -131,6 +131,39 @@ describe('platform runtime', () => {
     expect(runtime.close()).toBe(first)
   })
 
+  test('forwards tenant cleanup diagnostics with project context to the process owner', async () => {
+    const closeFailure = new Error('tenant close failed')
+    const reported: Array<{ error: unknown; projectId: string }> = []
+    const construction: PlatformRuntimeConstruction = {
+      platform: async () => platformOwner(async () => {}),
+      composition: (options) => {
+        options.registryOptions.onCloseError(closeFailure, 'project-a')
+        return {
+          requests: {
+            withProject: async () => {
+              throw new Error('Unused project request')
+            },
+          },
+          close: async () => {},
+        }
+      },
+    }
+    const runtime = await createPlatformRuntime(
+      {
+        database: { driver: 'sqlite', filename: ':memory:' },
+        tenantTargetFilters: TENANT_TARGET_FILTERS,
+        publishableKeyEnvironment: 'test',
+        app: { isProduction: false, geoip: { lookup: () => null } },
+        onTenantCloseError: (error, projectId) => reported.push({ error, projectId }),
+      },
+      construction,
+    )
+
+    await runtime.close()
+
+    expect(reported).toEqual([{ error: closeFailure, projectId: 'project-a' }])
+  })
+
   test('rejects acquisition, drains both tenant owners, and closes the platform last', async () => {
     const events: string[] = []
     const closeCounts = new Map<string, number>()

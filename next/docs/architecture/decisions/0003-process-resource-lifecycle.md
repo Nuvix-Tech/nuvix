@@ -51,6 +51,12 @@ operations; it does not expose the selected driver as request policy.
 It composes live resources before calling `Bun.serve`. If HTTP startup fails, it
 closes every resource already constructed without masking the startup failure.
 Construction failure follows the same rule in reverse acquisition order.
+Tenant opening establishes an idempotent close owner immediately after Bun SQL
+allocation. Any later constructor or readiness-probe failure awaits that close;
+if both opening and close fail, the opening failure remains first and the close
+failure reaches the process-owned diagnostic hook with project ID context.
+Request acquisition still translates the failure to redacted
+`503 project_unavailable` problem details.
 
 The runtime boundary exposes only the app and an idempotent `close()` operation.
 It never imports or invokes a v2-specific migration runner; internal collection

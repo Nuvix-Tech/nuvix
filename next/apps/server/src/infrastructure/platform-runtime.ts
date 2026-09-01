@@ -24,7 +24,7 @@ export interface PlatformRuntimeOptions {
   readonly publishableKeyEnvironment: PublishableKeyEnvironment
   readonly app?: AppOptions
   readonly tenantRegistry?: Pick<DatabaseRegistryOptions, 'idleMs' | 'maxTenants'>
-  readonly onTenantCloseError?: (error: unknown) => void
+  readonly onTenantCloseError?: (error: unknown, projectId: string) => void
 }
 
 export interface PlatformRuntime {
@@ -80,7 +80,7 @@ export async function createPlatformRuntime(
       tenantAuth: createTenantAuthResolver(),
       registryOptions: {
         ...options.tenantRegistry,
-        onCloseError: (error) => options.onTenantCloseError?.(error),
+        onCloseError: (error, projectId) => options.onTenantCloseError?.(error, projectId),
       },
     })
     const app = await createApp({
