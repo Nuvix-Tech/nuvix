@@ -6,11 +6,11 @@ export const UserId = t.String({
   maxLength: 36,
   pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$',
 })
-const CreateUserId = t.Union([UserId, t.Literal('unique()')])
-const Name = t.String({ minLength: 1, maxLength: 128, pattern: '.*\\S.*' })
-const Email = t.String({ minLength: 3, maxLength: 320, format: 'email' })
-const Phone = t.String({ pattern: '^\\+[1-9]\\d{1,14}$' })
-const Label = t.String({
+export const CreateUserId = t.Union([UserId, t.Literal('unique()')])
+export const Name = t.String({ minLength: 1, maxLength: 128, pattern: '.*\\S.*' })
+export const Email = t.String({ minLength: 3, maxLength: 320, format: 'email' })
+export const Phone = t.String({ pattern: '^\\+[1-9]\\d{1,14}$' })
+export const Label = t.String({
   minLength: 1,
   maxLength: 64,
   pattern: '^[\\p{L}\\p{M}\\p{N}._-]+$',

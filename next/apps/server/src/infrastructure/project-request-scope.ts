@@ -1,4 +1,5 @@
 import type { Session } from '@nuvix/db'
+import { accountDocuments } from '../account/documents'
 import { rolesFor } from '../context/database-roles'
 import type { ProjectLocator } from '../context/project-locator'
 import type {
@@ -76,6 +77,7 @@ export class ProjectRequestScope {
         auth,
         session,
         schemas: lease.database.schemas,
+        account: accountDocuments(system as unknown as Session),
       })
       return await operation(context)
     } catch (error) {

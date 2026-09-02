@@ -1,6 +1,7 @@
 import { openapi } from '@elysia/openapi'
 import { TranslationLoader } from '@nuvix/i18n'
 import { Elysia, t } from 'elysia'
+import { accountRoutes } from './account/route'
 import { avatarRoutes } from './avatars/route'
 import { type AvatarService, createAvatarService } from './avatars/service'
 import { createGeoIP, type GeoIP } from './context/geoip'
@@ -93,6 +94,7 @@ export async function createApp(options: AppOptions = {}) {
     .use(schemaRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(teamRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(userRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
+    .use(accountRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(health)
 }
 

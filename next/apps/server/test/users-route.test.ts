@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Session } from '@nuvix/db'
 import { Elysia } from 'elysia'
+import type { AccountDocuments } from '../src/account/documents'
 import type { ProjectAuthContext } from '../src/context/project'
 import type { SchemaService } from '../src/database/service'
 import type { DatabaseRequestCapabilities } from '../src/infrastructure/database-composition'
@@ -51,6 +52,7 @@ function probe(auth: ProjectAuthContext) {
         auth,
         session: {} as Session,
         schemas: Object.freeze({}) as SchemaService,
+        account: {} as AccountDocuments,
       }),
   }
   const service = {

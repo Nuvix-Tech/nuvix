@@ -278,5 +278,6 @@
   "errors.users.alreadyExists": "User already exists.",
   "errors.users.emailExists": "A user with this email already exists.",
   "errors.users.phoneExists": "A user with this phone already exists.",
-  "errors.users.prefsTooLarge": "User preferences are too large."
+  "errors.users.prefsTooLarge": "User preferences are too large.",
+  "errors.users.sessionNotFound": "Session not found."
 }

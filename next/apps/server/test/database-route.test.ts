@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Session } from '@nuvix/db'
+import type { AccountDocuments } from '../src/account/documents'
 import { createApp } from '../src/app'
 import type { ProjectAuthContext } from '../src/context/project'
 import type { SchemaService } from '../src/database/service'
@@ -78,6 +79,7 @@ async function harness(auth: ProjectAuthContext, options: HarnessOptions = {}) {
         auth,
         session: {} as Session,
         schemas,
+        account: {} as AccountDocuments,
       })
     },
   }

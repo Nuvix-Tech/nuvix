@@ -1,4 +1,5 @@
 import type { Session } from '@nuvix/db'
+import type { AccountDocuments } from '../account/documents'
 import type { SchemaService } from '../database/service'
 import type { ProjectAuthContext, ProjectContext } from './project'
 
@@ -20,6 +21,7 @@ export interface ProjectRequestContext {
   readonly auth: ProjectAuthContext
   readonly session: Session
   readonly schemas: SchemaService
+  readonly account: AccountDocuments
 }
 
 export type ProjectRequestOperation<Result> = (

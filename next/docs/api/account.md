@@ -1,6 +1,6 @@
 # v2 Contract — Account & Authentication
 
-> Status: DRAFT / IN REVIEW — Phase 4 Account and Sessions core contract
+> Status: PHASE 4 CORE IMPLEMENTED & VERIFIED LIVE — Registration, email password sessions, profile management, and revocation verified live against nuvix/postgres:18.1
 > Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`, D5 (`Bun.password`),
 > D6 (`crypto.subtle` JWT), D23 (token-ready), D29 (legacy algos dropped),
 > D38 (`x-nuvix-publishable-key`), `../architecture/integrations.md`, `@nuvix/db`

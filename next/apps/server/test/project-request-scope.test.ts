@@ -109,10 +109,17 @@ describe('project request scope', () => {
 
     const result = await state.scope.run(HEADERS, async (context) => {
       state.order.push('handler')
-      expect(Object.keys(context).toSorted()).toEqual(['auth', 'project', 'schemas', 'session'])
+      expect(Object.keys(context).toSorted()).toEqual([
+        'account',
+        'auth',
+        'project',
+        'schemas',
+        'session',
+      ])
       expect(context.session).toBe(state.session)
       expect(context.schemas).toBe(state.schemas)
       expect(Object.isFrozen(context.schemas)).toBe(true)
+      expect(Object.isFrozen(context.account)).toBe(true)
       expect(Object.keys(context.schemas)).toEqual(['list', 'get', 'create', 'update', 'remove'])
       await context.schemas.list()
       return 'ok'

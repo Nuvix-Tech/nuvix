@@ -94,6 +94,16 @@ function sessionHeaders(tenant: TenantFixture): Readonly<Record<string, string>>
   })
 }
 
+function customSessionHeaders(
+  tenant: TenantFixture,
+  token: string,
+): Readonly<Record<string, string>> {
+  return Object.freeze({
+    ...publishableKeyHeaders(tenant),
+    [HEADERS.session]: token,
+  })
+}
+
 function schemaName(): string {
   return `it_request_${crypto.randomUUID().replaceAll('-', '').toLowerCase()}`
 }
@@ -200,6 +210,7 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     expect(fixture.tenants.a.project.id).not.toBe(fixture.tenants.b.project.id)
     const headersA = apiKeyHeaders(fixture.tenants.a)
     const headersB = apiKeyHeaders(fixture.tenants.b)
+    const publishableHeadersA = publishableKeyHeaders(fixture.tenants.a)
     const teamsWriteHeadersA = apiKeyHeaders(
       fixture.tenants.a,
       fixture.tenants.a.credentials.teamsWriteOnly.token,
@@ -1052,6 +1063,63 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     )
     expect(userAFilteredFromB.status).toBe(200)
     expect(userAFilteredFromB.data?.data).toEqual([])
+
+    // Account registration, login, session auth, and revocation on tenant A
+    const accountEmailA = `${entityId('acc')}@example.test`
+    const accountPasswordA = 'super-strong-password-123'
+
+    const registeredAccountA = observe(
+      await client.v2.account.post(
+        {
+          email: accountEmailA,
+          password: accountPasswordA,
+          name: 'Live Account User',
+        },
+        { headers: publishableHeadersA },
+      ),
+    )
+    expect(registeredAccountA.status).toBe(201)
+    expect(registeredAccountA.data?.email).toBe(accountEmailA)
+    expect(registeredAccountA.data?.name).toBe('Live Account User')
+
+    const loggedInSessionA = observe(
+      await client.v2.account.sessions.email.post(
+        {
+          email: accountEmailA,
+          password: accountPasswordA,
+        },
+        { headers: publishableHeadersA },
+      ),
+    )
+    expect(loggedInSessionA.status).toBe(201)
+    expect(loggedInSessionA.data?.userId).toBe(registeredAccountA.data?.$id)
+    expect(loggedInSessionA.data?.token).toBeDefined()
+    const newAccountHeadersA = customSessionHeaders(
+      fixture.tenants.a,
+      loggedInSessionA.data!.token!,
+    )
+
+    const accountProfileA = observe(await client.v2.account.get({ headers: newAccountHeadersA }))
+    expect(accountProfileA.status).toBe(200)
+    expect(accountProfileA.data?.$id).toBe(registeredAccountA.data?.$id)
+
+    const accountSessionsListA = observe(
+      await client.v2.account.sessions.get({ headers: newAccountHeadersA }),
+    )
+    expect(accountSessionsListA.status).toBe(200)
+    expect(accountSessionsListA.data?.data.length).toBeGreaterThanOrEqual(1)
+
+    const logoutCurrentA = observe(
+      await client.v2.account.sessions.current.delete(undefined, { headers: newAccountHeadersA }),
+    )
+    expect(logoutCurrentA.status).toBe(204)
+
+    const accessAfterLogoutA = observe(await client.v2.account.get({ headers: newAccountHeadersA }))
+    expectProblem(accessAfterLogoutA, {
+      status: 401,
+      type: '/errors/unauthorized',
+      code: 'credential_invalid',
+    })
 
     const requestDiagnostics = JSON.stringify(
       observedResults.map((result) => ({

@@ -274,6 +274,7 @@ export type TranslationKey =
   | 'errors.users.notFound'
   | 'errors.users.phoneExists'
   | 'errors.users.prefsTooLarge'
+  | 'errors.users.sessionNotFound'
   | 'errors.validation'
   | 'locale.country.unknown'
   | 'settings.direction'
