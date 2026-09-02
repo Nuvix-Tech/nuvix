@@ -1,7 +1,7 @@
 # v2 Contract — Teams
 
-> Status: PARTIALLY IMPLEMENTED — core team CRUD + preferences live-verified;
-> memberships/invites/logs deferred
+> Status: PARTIALLY IMPLEMENTED — core team CRUD, preferences, and
+> membership administration live-verified; invites/logs deferred
 > Depends on: `_conventions.md` (D19, D26–D28), `_i18n.md`,
 > `../architecture/integrations.md`, `@nuvix/db@1.0.0-alpha.2`,
 > `@nuvix/messaging@2.0.0`
@@ -9,8 +9,9 @@
 
 Team management plus the membership invite/accept lifecycle. Teams and
 memberships live in `@nuvix/db` collections inside the project's document
-schema. Core team CRUD and preferences are implemented; the membership and log
-sections below remain deferred to their named dependencies.
+schema. Core team CRUD, preferences, and membership administration
+(list/get/update roles/delete) are implemented; invites and audit logs
+remain deferred to their named dependencies.
 
 ## Auth posture
 
@@ -56,20 +57,21 @@ JWTs — same union as v1. Scopes: `teams.read`, `teams.write`.
 
 ## Endpoints — Memberships
 
-> Deferred: public membership endpoints require the Users projection, invite
-> secret/status contract, and messaging gateway. Core team creation already
-> creates an accepted owner membership transactionally for session creators.
+> Membership listing, retrieval, role management, and removal are implemented.
+> Invitation dispatch (`POST`) and confirmation (`PATCH .../status`) remain deferred
+> to messaging/auth phases. Core team creation already creates an accepted owner
+> membership transactionally for session creators.
 
 Nested under `/v2/teams/:teamId/memberships`:
 
-| Method | Path                                                 | Purpose               |
-| ------ | ---------------------------------------------------- | --------------------- |
-| POST   | `/v2/teams/:teamId/memberships`                      | Invite member         |
-| GET    | `/v2/teams/:teamId/memberships`                      | List memberships      |
-| GET    | `/v2/teams/:teamId/memberships/:membershipId`        | Get membership        |
-| PATCH  | `/v2/teams/:teamId/memberships/:membershipId`        | Update roles          |
-| PATCH  | `/v2/teams/:teamId/memberships/:membershipId/status` | Accept/decline invite |
-| DELETE | `/v2/teams/:teamId/memberships/:membershipId`        | Remove member         |
+| Method | Path                                                 | Purpose               | Status |
+| ------ | ---------------------------------------------------- | --------------------- | ------ |
+| POST   | `/v2/teams/:teamId/memberships`                      | Invite member         | Deferred to messaging |
+| GET    | `/v2/teams/:teamId/memberships`                      | List memberships      | Implemented |
+| GET    | `/v2/teams/:teamId/memberships/:membershipId`        | Get membership        | Implemented |
+| PATCH  | `/v2/teams/:teamId/memberships/:membershipId`        | Update roles          | Implemented |
+| PATCH  | `/v2/teams/:teamId/memberships/:membershipId/status` | Accept/decline invite | Deferred to messaging |
+| DELETE | `/v2/teams/:teamId/memberships/:membershipId`        | Remove member         | Implemented |
 
 ### Membership object
 

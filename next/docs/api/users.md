@@ -12,16 +12,16 @@ identities, password-hash imports, tokens/JWTs, sessions, MFA factors and
 recovery codes, push targets. Admin-facing surface (the end-user "account"
 surface lives in the future auth contract).
 
-Implemented first slice: create/list/get plus name, email, phone, preferences,
-labels, and status mutations. It is API-key-only (`users.read` / `users.write`)
-until a trusted administrative session claim exists. Passwords, hash imports,
-identities, tokens/JWTs, sessions, MFA, targets, usage, logs, deletion, and user
-membership projection remain deferred. Preferences replace the stored object;
-they do not merge.
+Implemented: create/list/get plus name, email, phone, preferences,
+labels, status mutations, and user membership projection. It is API-key-only
+(`users.read` / `users.write`) until a trusted administrative session claim
+exists. Passwords, hash imports, identities, tokens/JWTs, sessions, MFA,
+targets, usage, logs, and deletion remain deferred. Preferences replace the
+stored object; they do not merge.
 
 ## Auth posture
 
-The implemented first slice is API-key-only. Keys require `users.read` or
+The implemented users surface is API-key-only. Keys require `users.read` or
 `users.write`; mode does not grant authority. Guest, ordinary session, and JWT
 contexts receive `403`. A trusted administrative-session claim may be added in
 Phase 4 without changing route/service boundaries.
@@ -30,24 +30,24 @@ Phase 4 without changing route/service boundaries.
 
 ## Endpoints — Core
 
-| Method | Path                            | Purpose                             |
-| ------ | ------------------------------- | ----------------------------------- |
-| POST   | `/v2/users`                     | Create credentialless user profile  |
-| POST   | `/v2/users/argon2`              | Deferred to Phase 4                 |
-| POST   | `/v2/users/bcrypt`              | Deferred to Phase 4                 |
-| GET    | `/v2/users`                     | List users (portable exact filters) |
-| GET    | `/v2/users/usage`               | Deferred to stats phase             |
-| GET    | `/v2/users/:userId`             | Get user                            |
-| PATCH  | `/v2/users/:userId/name`        | Update name                         |
-| PATCH  | `/v2/users/:userId/password`    | Deferred to Phase 4                 |
-| PATCH  | `/v2/users/:userId/email`       | Update email                        |
-| PATCH  | `/v2/users/:userId/phone`       | Update phone                        |
-| GET    | `/v2/users/:userId/prefs`       | Get prefs                           |
-| PATCH  | `/v2/users/:userId/prefs`       | Replace prefs                       |
-| PUT    | `/v2/users/:userId/labels`      | Replace labels                      |
-| PATCH  | `/v2/users/:userId/status`      | Activate/block                      |
-| GET    | `/v2/users/:userId/memberships` | Deferred                            |
-| GET    | `/v2/users/:userId/logs`        | Deferred                            |
+| Method | Path                            | Purpose                                       |
+| ------ | ------------------------------- | --------------------------------------------- |
+| POST   | `/v2/users`                     | Create credentialless user profile            |
+| POST   | `/v2/users/argon2`              | Deferred to Phase 4                           |
+| POST   | `/v2/users/bcrypt`              | Deferred to Phase 4                           |
+| GET    | `/v2/users`                     | List users (portable exact filters)           |
+| GET    | `/v2/users/usage`               | Deferred to stats phase                       |
+| GET    | `/v2/users/:userId`             | Get user                                      |
+| PATCH  | `/v2/users/:userId/name`        | Update name                                   |
+| PATCH  | `/v2/users/:userId/password`    | Deferred to Phase 4                           |
+| PATCH  | `/v2/users/:userId/email`       | Update email                                  |
+| PATCH  | `/v2/users/:userId/phone`       | Update phone                                  |
+| GET    | `/v2/users/:userId/prefs`       | Get prefs                                     |
+| PATCH  | `/v2/users/:userId/prefs`       | Replace prefs                                 |
+| PUT    | `/v2/users/:userId/labels`      | Replace labels                                |
+| PATCH  | `/v2/users/:userId/status`      | Activate/block                                |
+| GET    | `/v2/users/:userId/memberships` | List user memberships (with team projection)  |
+| GET    | `/v2/users/:userId/logs`        | Deferred                                      |
 
 ### Legacy hash variants — REMOVED (D29)
 
