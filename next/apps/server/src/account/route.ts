@@ -16,7 +16,7 @@ import {
   UpdatePasswordBody,
   UserResponse,
 } from './contracts'
-import { type AccountService, createAccountService } from './service'
+import { type AccountService, createAccountService, userSessionAlreadyExists } from './service'
 
 export function authorizeAccount(auth: ProjectAuthContext): { userId: string } {
   if (auth.type !== 'session' && auth.type !== 'jwt') {
@@ -135,6 +135,20 @@ export function accountRoutes(
         requests.withProject(request.headers, async ({ account }) => {
           set.status = 201
           return await service.createEmailSession(account, body)
+        }),
+    )
+    .post(
+      '/account/sessions/anonymous',
+      {
+        response: SessionResponse,
+      },
+      async ({ request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          if (auth.type !== 'guest') {
+            throw userSessionAlreadyExists()
+          }
+          set.status = 201
+          return await service.createAnonymousSession(account)
         }),
     )
     .get(

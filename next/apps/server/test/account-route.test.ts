@@ -69,6 +69,7 @@ function probe(auth: ProjectAuthContext) {
     getSession: called('getSession', SESSION),
     deleteSession: called('deleteSession', undefined),
     deleteSessions: called('deleteSessions', undefined),
+    createAnonymousSession: called('createAnonymousSession', SESSION),
   } as unknown as AccountService
 
   const app = new Elysia({ prefix: '/v2' })
@@ -216,5 +217,19 @@ describe('account routes', () => {
     const res = await client.v2.account.delete()
     expect(res.status).toBe(204)
     expect(calls).toEqual(['deleteAccount'])
+  })
+
+  test('creates anonymous session for guest and rejects authenticated caller', async () => {
+    const guestState = probe({ type: 'guest' })
+    const res = await guestState.client.v2.account.sessions.anonymous.post({})
+    expect(res.status).toBe(201)
+    expect(res.data?.$id).toBe('session_1')
+    expect(res.data?.token).toBe('ses_v1.dGVzdA.abcdef')
+    expect(guestState.calls).toEqual(['createAnonymousSession'])
+
+    const authState = probe(SESSION_AUTH)
+    const conflictRes = await authState.client.v2.account.sessions.anonymous.post({})
+    expect(conflictRes.status).toBe(409)
+    expect(authState.calls).toEqual([])
   })
 })

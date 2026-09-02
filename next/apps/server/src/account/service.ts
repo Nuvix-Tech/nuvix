@@ -151,6 +151,13 @@ function invalidCredentials(): UnauthorizedError {
   })
 }
 
+export function userSessionAlreadyExists(): ConflictError {
+  return new ConflictError('User session already exists.', {
+    code: 'user_session_already_exists',
+    messageKey: 'errors.users.sessionAlreadyExists',
+  })
+}
+
 async function operation<Result>(name: string, run: () => Promise<Result>): Promise<Result> {
   try {
     return await run()
@@ -177,7 +184,7 @@ export function createAccountService(options: AccountServiceOptions = {}) {
   const sessionFields = TENANT_AUTH_MODEL.fields.sessions
   const membershipFields = TENANT_AUTH_MODEL.fields.memberships
 
-  return {
+  const self = {
     async register(documents: AccountDocuments, input: RegisterInput): Promise<UserResponse> {
       const email = normalizedEmail(input.email)
       const existing = await operation('check email uniqueness', () =>
@@ -521,7 +528,28 @@ export function createAccountService(options: AccountServiceOptions = {}) {
         }),
       )
     },
+
+    async createAnonymousSession(documents: AccountDocuments): Promise<SessionResponse> {
+      const userId = createId()
+      const timestamp = now()
+      await operation('create anonymous user', () =>
+        documents.createUser(
+          new Doc({
+            $id: userId,
+            $permissions: userPermissions(userId),
+            [userFields.status]: true,
+            [userFields.labels]: [],
+            [userFields.prefs]: {},
+            $createdAt: timestamp,
+            $updatedAt: timestamp,
+          }),
+        ),
+      )
+      return await self.createSessionForUser(documents, userId)
+    },
   }
+
+  return self
 }
 
 export type AccountService = ReturnType<typeof createAccountService>

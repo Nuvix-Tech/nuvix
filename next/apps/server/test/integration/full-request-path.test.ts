@@ -1121,6 +1121,34 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
       code: 'credential_invalid',
     })
 
+    const anonymousSessionA = observe(
+      await client.v2.account.sessions.anonymous.post({}, { headers: publishableHeadersA }),
+    )
+    expect(anonymousSessionA.status).toBe(201)
+    expect(anonymousSessionA.data?.$id).toBeDefined()
+    expect(anonymousSessionA.data?.userId).toBeDefined()
+    expect(anonymousSessionA.data?.token).toBeDefined()
+
+    const anonymousHeadersA = {
+      ...publishableHeadersA,
+      'x-nuvix-session': anonymousSessionA.data?.token ?? '',
+    }
+
+    const anonymousProfileA = observe(await client.v2.account.get({ headers: anonymousHeadersA }))
+    expect(anonymousProfileA.status).toBe(200)
+    expect(anonymousProfileA.data?.$id).toBe(anonymousSessionA.data?.userId)
+    expect(anonymousProfileA.data?.status).toBe(true)
+
+    const anonymousConflictA = observe(
+      await client.v2.account.sessions.anonymous.post({}, { headers: anonymousHeadersA }),
+    )
+    expect(anonymousConflictA.status).toBe(409)
+
+    const logoutAnonymousA = observe(
+      await client.v2.account.sessions.current.delete(undefined, { headers: anonymousHeadersA }),
+    )
+    expect(logoutAnonymousA.status).toBe(204)
+
     const requestDiagnostics = JSON.stringify(
       observedResults.map((result) => ({
         data: result.data,

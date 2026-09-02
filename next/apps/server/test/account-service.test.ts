@@ -279,4 +279,25 @@ describe('account service', () => {
     expect(docs.memberships.has('memb_1')).toBe(false)
     expect(docs.teamTotals.get('team_1')).toBe(0)
   })
+
+  test('creates anonymous session and permits setting initial password without oldPassword', async () => {
+    const docs = memoryDocuments()
+    const session = await service.createAnonymousSession(docs)
+
+    expect(session.userId).toBeDefined()
+    expect(session.token).toBeDefined()
+    expect(docs.users.has(session.userId)).toBe(true)
+
+    const user = docs.users.get(session.userId)
+    expect(user?.get('status')).toBe(true)
+    expect(user?.get('passwordHash')).toBeNull()
+
+    // Anonymous user can set initial password with no oldPassword
+    const updatedUser = await service.updatePassword(docs, session.userId, {
+      password: 'brand-new-password-123',
+    })
+    expect(updatedUser.$id).toBe(session.userId)
+    const storedWithPassword = docs.users.get(session.userId)
+    expect(storedWithPassword?.get('passwordHash')).toStartWith('$argon2id$')
+  })
 })

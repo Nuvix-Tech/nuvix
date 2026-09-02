@@ -280,5 +280,6 @@
   "errors.users.phoneExists": "A user with this phone already exists.",
   "errors.users.prefsTooLarge": "User preferences are too large.",
   "errors.users.sessionNotFound": "Session not found.",
-  "errors.users.blocked": "The current user has been blocked."
+  "errors.users.blocked": "The current user has been blocked.",
+  "errors.users.sessionAlreadyExists": "User session already exists."
 }

@@ -110,6 +110,7 @@ claims matching an active, unblocked user (`status: true`).
 | Method | Path | Purpose | Auth |
 | ------ | ---- | ------- | ---- |
 | POST | `/v2/account/sessions/email` | Login with email and password | Public (`x-nuvix-publishable-key`) |
+| POST | `/v2/account/sessions/anonymous` | Create anonymous session | Public (`x-nuvix-publishable-key`) |
 | GET | `/v2/account/sessions` | List active sessions for current user | Session / JWT |
 | GET | `/v2/account/sessions/:sessionId` | Get specific session details | Session / JWT |
 | DELETE | `/v2/account/sessions/current` | Logout current session | Session |
@@ -144,6 +145,15 @@ claims matching an active, unblocked user (`status: true`).
 - **Errors**:
   - `401 /errors/unauthorized` with `code: "invalid_credentials"` if user not found,
     password incorrect, or user account is disabled (`status: false`).
+
+### `POST /v2/account/sessions/anonymous` (Anonymous Login)
+
+- **Headers**: `x-nuvix-publishable-key`
+- **Request Body**: empty
+- **Response** (`201 Created`): `SessionResponse` (including `token`).
+- **Behavior**: Generates a new credentialless user with `status: true` and issues a session token. An anonymous user can subsequently set display name (`PATCH /v2/account/name`), attach email (`PATCH /v2/account/email`), and set an initial password without providing `oldPassword` (`PATCH /v2/account/password`).
+- **Errors**:
+  - `409 /errors/conflict` with `code: "user_session_already_exists"` if already authenticated with an existing session or credential.
 
 ---
 
