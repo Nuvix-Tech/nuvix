@@ -137,6 +137,13 @@ function userAlreadyExists(): ConflictError {
   })
 }
 
+function userBlocked(): UnauthorizedError {
+  return new UnauthorizedError('The current user has been blocked.', {
+    code: 'user_blocked',
+    messageKey: 'errors.users.blocked',
+  })
+}
+
 function invalidCredentials(): UnauthorizedError {
   return new UnauthorizedError('Invalid credentials.', {
     code: 'invalid_credentials',
@@ -234,6 +241,36 @@ export function createAccountService(options: AccountServiceOptions = {}) {
       if (typeof storedHash !== 'string' || !(await verifyPassword(input.password, storedHash))) {
         throw invalidCredentials()
       }
+
+      const sessionId = createId()
+      const secretBytes = crypto.getRandomValues(new Uint8Array(32))
+      const verifier = await createSecretVerifier('session', secretBytes)
+      const token = createCredentialToken('session', sessionId, secretBytes)
+      const expiresAt = new Date(now().getTime() + SESSION_DURATION_MS)
+
+      const session = await operation('create session', () =>
+        documents.createSession(
+          new Doc({
+            $id: sessionId,
+            [sessionFields.userId]: user.getId(),
+            [sessionFields.secretDigest]: verifier.digest,
+            [sessionFields.secretSalt]: verifier.salt,
+            [sessionFields.expiresAt]: expiresAt,
+            [sessionFields.revokedAt]: null,
+          }),
+        ),
+      )
+
+      return sessionResponse(session, token)
+    },
+
+    async createSessionForUser(
+      documents: AccountDocuments,
+      userId: string,
+    ): Promise<SessionResponse> {
+      const user = await operation('verify user exists', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+      if (!user.get(userFields.status, true)) throw userBlocked()
 
       const sessionId = createId()
       const secretBytes = crypto.getRandomValues(new Uint8Array(32))

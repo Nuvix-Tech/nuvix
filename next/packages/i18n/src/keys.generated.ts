@@ -270,6 +270,7 @@ export type TranslationKey =
   | 'errors.teams.notFound'
   | 'errors.unauthorized'
   | 'errors.users.alreadyExists'
+  | 'errors.users.blocked'
   | 'errors.users.emailExists'
   | 'errors.users.notFound'
   | 'errors.users.phoneExists'

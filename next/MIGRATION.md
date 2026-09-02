@@ -360,11 +360,12 @@ the remaining auth/session/MFA surface stay deferred to their documented phases.
 - [x] Contract first: sessions, MFA, recovery, OAuth2, JWT/API-key issuance (`docs/api/account.md`)
 - [x] Password hashing: bcrypt/argon2 only — legacy algos (MD5 etc.) NOT supported per D29 (`utils/passwords.ts`)
 - [x] Account registration & email/password session lifecycle (`POST /v2/account`, `POST /v2/account/sessions/email`, profile updates, session listing & revocation, verified live against `nuvix/postgres:18.1`)
+- [x] User administration endpoints (`DELETE /v2/users/:userId`, `POST /v2/users/argon2`, `POST /v2/users/bcrypt`, `PATCH /v2/users/:userId/password`, `GET /v2/users/:userId/sessions`, `POST /v2/users/:userId/sessions`, `DELETE /v2/users/:userId/sessions`, `DELETE /v2/users/:userId/sessions/:sessionId`)
 - [ ] Tenant JWT signing-key storage, strict JOSE/claims validation, issuance,
       and rotation (no process-global project JWT secret)
 - [ ] MFA: decide otplib vs hand-rolled RFC-6238 (gate: validated against real factors)
 
-Account registration, password hashing (argon2id), email session materialization with salted HMAC verifiers, profile management, session listing, and session revocation were implemented and verified live against `nuvix/postgres:18.1` on 2026-09-02.
+Account registration, password hashing (argon2id & bcrypt), email session materialization with salted HMAC verifiers, profile management, session listing, session revocation, user deletion with cascade, and administrative session management were implemented and verified live against `nuvix/postgres:18.1` on 2026-09-02.
 
 
 ### Phase 5 — Storage + Messaging + Webhooks

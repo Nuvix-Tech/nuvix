@@ -1,6 +1,12 @@
 import { t } from 'elysia'
 import { Preferences } from '../teams/contracts'
 
+export const SessionId = t.String({
+  minLength: 1,
+  maxLength: 36,
+  pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$',
+})
+
 export const UserId = t.String({
   minLength: 1,
   maxLength: 36,
@@ -97,3 +103,39 @@ export const UpdateLabelsBody = t.Object(
   { additionalProperties: false },
 )
 export const UpdateStatusBody = t.Object({ status: t.Boolean() }, { additionalProperties: false })
+
+export const Password = t.String({ minLength: 8, maxLength: 256 })
+
+export const CreateArgon2UserBody = t.Object(
+  {
+    userId: t.Optional(CreateUserId),
+    email: t.Optional(Email),
+    phone: t.Optional(Phone),
+    password: Password,
+    name: t.Optional(Name),
+  },
+  { additionalProperties: false },
+)
+
+export const CreateBcryptUserBody = t.Object(
+  {
+    userId: t.Optional(CreateUserId),
+    email: t.Optional(Email),
+    phone: t.Optional(Phone),
+    password: Password,
+    name: t.Optional(Name),
+  },
+  { additionalProperties: false },
+)
+
+export const UpdateUserPasswordBody = t.Object(
+  {
+    password: Password,
+  },
+  { additionalProperties: false },
+)
+
+export const UserSessionParams = t.Object({
+  userId: UserId,
+  sessionId: SessionId,
+})

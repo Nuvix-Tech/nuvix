@@ -70,6 +70,31 @@ function probe(auth: ProjectAuthContext) {
     updateLabels: called('labels', USER),
     updateStatus: called('status', USER),
     listMemberships: called('listMemberships', MEMBERSHIPS),
+    remove: called('remove', undefined),
+    createWithPassword: called('createWithPassword', USER),
+    updatePassword: called('updatePassword', USER),
+    listSessions: called('listSessions', {
+      data: [
+        {
+          $id: 'session_1',
+          userId: 'user_a',
+          expiresAt: '2026-10-02T12:00:00.000Z',
+          $createdAt: '2026-09-02T12:00:00.000Z',
+          $updatedAt: '2026-09-02T12:00:00.000Z',
+        },
+      ],
+      meta: { total: 1, limit: 25, offset: 0 },
+    }),
+    createSession: called('createSession', {
+      $id: 'session_1',
+      userId: 'user_a',
+      token: 'ses_v1.dGVzdA.abcdef',
+      expiresAt: '2026-10-02T12:00:00.000Z',
+      $createdAt: '2026-09-02T12:00:00.000Z',
+      $updatedAt: '2026-09-02T12:00:00.000Z',
+    }),
+    deleteSession: called('deleteSession', undefined),
+    deleteSessions: called('deleteSessions', undefined),
   } as unknown as UserService
   const app = new Elysia({ prefix: '/v2' })
     .use(
@@ -216,5 +241,122 @@ describe('users routes', () => {
 
     expect(response.status).toBe(422)
     expect(state.calls).toEqual([])
+  })
+
+  test('creates user with argon2 and bcrypt', async () => {
+    const state = probe({
+      type: 'apiKey',
+      keyId: 'key_a',
+      mode: 'admin',
+      scopes: ['users.write'],
+    })
+
+    const argonRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/users/argon2', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'ada@example.com',
+          password: 'password123',
+          name: 'Ada Lovelace',
+        }),
+      }),
+    )
+    expect(argonRes.status).toBe(201)
+
+    const bcryptRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/users/bcrypt', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'ada@example.com',
+          password: 'password123',
+          name: 'Ada Lovelace',
+        }),
+      }),
+    )
+    expect(bcryptRes.status).toBe(201)
+
+    expect(state.calls).toEqual(['createWithPassword', 'createWithPassword'])
+  })
+
+  test('updates password and deletes user', async () => {
+    const state = probe({
+      type: 'apiKey',
+      keyId: 'key_a',
+      mode: 'admin',
+      scopes: ['users.write'],
+    })
+
+    const passRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/users/user_a/password', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: 'new-password-123' }),
+      }),
+    )
+    expect(passRes.status).toBe(200)
+
+    const delRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/users/user_a', {
+        method: 'DELETE',
+      }),
+    )
+    expect(delRes.status).toBe(204)
+
+    expect(state.calls).toEqual(['updatePassword', 'remove'])
+  })
+
+  test('manages user sessions with appropriate scopes', async () => {
+    const writeOnly = probe({
+      type: 'apiKey',
+      keyId: 'key_write',
+      mode: 'admin',
+      scopes: ['users.write'],
+    })
+    const readOnly = probe({
+      type: 'apiKey',
+      keyId: 'key_read',
+      mode: 'admin',
+      scopes: ['users.read'],
+    })
+
+    // List sessions requires users.read
+    const listRes = await readOnly.app.handle(
+      new Request('http://nuvix.test/v2/users/user_a/sessions?limit=10'),
+    )
+    expect(listRes.status).toBe(200)
+    expect(readOnly.calls).toEqual(['listSessions'])
+
+    const listDenied = await writeOnly.app.handle(
+      new Request('http://nuvix.test/v2/users/user_a/sessions?limit=10'),
+    )
+    expect(listDenied.status).toBe(403)
+
+    // Create session requires users.write
+    const createRes = await writeOnly.app.handle(
+      new Request('http://nuvix.test/v2/users/user_a/sessions', {
+        method: 'POST',
+      }),
+    )
+    expect(createRes.status).toBe(201)
+
+    // Delete specific session requires users.write
+    const deleteSpecific = await writeOnly.app.handle(
+      new Request('http://nuvix.test/v2/users/user_a/sessions/session_1', {
+        method: 'DELETE',
+      }),
+    )
+    expect(deleteSpecific.status).toBe(204)
+
+    // Delete all sessions requires users.write
+    const deleteAll = await writeOnly.app.handle(
+      new Request('http://nuvix.test/v2/users/user_a/sessions', {
+        method: 'DELETE',
+      }),
+    )
+    expect(deleteAll.status).toBe(204)
+
+    expect(writeOnly.calls).toEqual(['createSession', 'deleteSession', 'deleteSessions'])
   })
 })

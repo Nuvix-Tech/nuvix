@@ -33,13 +33,14 @@ Phase 4 without changing route/service boundaries.
 | Method | Path                            | Purpose                                       |
 | ------ | ------------------------------- | --------------------------------------------- |
 | POST   | `/v2/users`                     | Create credentialless user profile            |
-| POST   | `/v2/users/argon2`              | Deferred to Phase 4                           |
-| POST   | `/v2/users/bcrypt`              | Deferred to Phase 4                           |
+| POST   | `/v2/users/argon2`              | Create user with Argon2id hash                |
+| POST   | `/v2/users/bcrypt`              | Create user with Bcrypt hash                  |
 | GET    | `/v2/users`                     | List users (portable exact filters)           |
 | GET    | `/v2/users/usage`               | Deferred to stats phase                       |
 | GET    | `/v2/users/:userId`             | Get user                                      |
+| DELETE | `/v2/users/:userId`             | Delete user with cascade                      |
 | PATCH  | `/v2/users/:userId/name`        | Update name                                   |
-| PATCH  | `/v2/users/:userId/password`    | Deferred to Phase 4                           |
+| PATCH  | `/v2/users/:userId/password`    | Update password (admin)                       |
 | PATCH  | `/v2/users/:userId/email`       | Update email                                  |
 | PATCH  | `/v2/users/:userId/phone`       | Update phone                                  |
 | GET    | `/v2/users/:userId/prefs`       | Get prefs                                     |

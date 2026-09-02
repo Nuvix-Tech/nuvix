@@ -1,6 +1,9 @@
 import { Elysia } from 'elysia'
+import { SessionListQuery, SessionListResponse, SessionResponse } from '../account/contracts'
 import type { DatabaseRequestCapabilities } from '../infrastructure/database-composition'
 import {
+  CreateArgon2UserBody,
+  CreateBcryptUserBody,
   CreateUserBody,
   UpdateEmailBody,
   UpdateLabelsBody,
@@ -8,12 +11,14 @@ import {
   UpdatePhoneBody,
   UpdatePrefsBody,
   UpdateStatusBody,
+  UpdateUserPasswordBody,
   UserListQuery,
   UserListResponse,
   UserMembershipListQuery,
   UserMembershipListResponse,
   UserParams,
   UserResponse,
+  UserSessionParams,
 } from './contracts'
 import { userDocuments } from './documents'
 import { authorizeUsers, createUserService, type UserService } from './service'
@@ -35,6 +40,34 @@ export function userRoutes(
           authorizeUsers(auth, 'users.write')
           set.status = 201
           return await service.create(userDocuments(session), body)
+        }),
+    )
+    .post(
+      '/users/argon2',
+      {
+        body: CreateArgon2UserBody,
+        response: UserResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ body, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          authorizeUsers(auth, 'users.write')
+          set.status = 201
+          return await service.createWithPassword(account, body, 'argon2id')
+        }),
+    )
+    .post(
+      '/users/bcrypt',
+      {
+        body: CreateBcryptUserBody,
+        response: UserResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ body, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          authorizeUsers(auth, 'users.write')
+          set.status = 201
+          return await service.createWithPassword(account, body, 'bcrypt')
         }),
     )
     .get(
@@ -64,6 +97,20 @@ export function userRoutes(
           return await service.get(userDocuments(session), params.userId)
         }),
     )
+    .delete(
+      '/users/:userId',
+      {
+        params: UserParams,
+        detail: { tags: ['users'] },
+      },
+      async ({ params, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          authorizeUsers(auth, 'users.write')
+          await service.remove(account, params.userId)
+          set.status = 204
+          return null
+        }),
+    )
     .patch(
       '/users/:userId/name',
       {
@@ -76,6 +123,20 @@ export function userRoutes(
         requests.withProject(request.headers, async ({ auth, session }) => {
           authorizeUsers(auth, 'users.write')
           return await service.updateName(userDocuments(session), params.userId, body.name)
+        }),
+    )
+    .patch(
+      '/users/:userId/password',
+      {
+        params: UserParams,
+        body: UpdateUserPasswordBody,
+        response: UserResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, body, request }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          authorizeUsers(auth, 'users.write')
+          return await service.updatePassword(account, params.userId, body.password)
         }),
     )
     .patch(
@@ -173,6 +234,67 @@ export function userRoutes(
             query.limit ?? 25,
             query.offset ?? 0,
           )
+        }),
+    )
+    .get(
+      '/users/:userId/sessions',
+      {
+        params: UserParams,
+        query: SessionListQuery,
+        response: SessionListResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, query, request }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          authorizeUsers(auth, 'users.read')
+          return await service.listSessions(
+            account,
+            params.userId,
+            query.limit ?? 25,
+            query.offset ?? 0,
+          )
+        }),
+    )
+    .post(
+      '/users/:userId/sessions',
+      {
+        params: UserParams,
+        response: SessionResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          authorizeUsers(auth, 'users.write')
+          set.status = 201
+          return await service.createSession(account, params.userId)
+        }),
+    )
+    .delete(
+      '/users/:userId/sessions',
+      {
+        params: UserParams,
+        detail: { tags: ['users'] },
+      },
+      async ({ params, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          authorizeUsers(auth, 'users.write')
+          await service.deleteSessions(account, params.userId)
+          set.status = 204
+          return null
+        }),
+    )
+    .delete(
+      '/users/:userId/sessions/:sessionId',
+      {
+        params: UserSessionParams,
+        detail: { tags: ['users'] },
+      },
+      async ({ params, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account }) => {
+          authorizeUsers(auth, 'users.write')
+          await service.deleteSession(account, params.userId, params.sessionId)
+          set.status = 204
+          return null
         }),
     )
 }

@@ -3,6 +3,7 @@ import { Doc, type Query, QueryType, Role } from '@nuvix/db'
 import { apiScopeLabel } from '../src/context/database-roles'
 import type { UserDocuments } from '../src/users/documents'
 import { createUserService } from '../src/users/service'
+import { memoryDocuments } from './helpers/memory-documents'
 
 const NOW = new Date('2026-08-30T10:00:00.000Z')
 
@@ -248,5 +249,140 @@ describe('users service', () => {
       .catch((error) => error)
 
     expect((failure as { fields: { code?: string } }).fields.code).toBe('user_not_found')
+  })
+
+  test('creates users with argon2id and bcrypt and verifies password hashes', async () => {
+    const docs = memoryDocuments()
+    const service = createUserService({ id: () => 'user_pwd' })
+
+    const argonUser = await service.createWithPassword(
+      docs,
+      {
+        userId: 'user_argon',
+        email: 'argon@example.com',
+        password: 'secure-argon-password',
+        name: 'Argon User',
+      },
+      'argon2id',
+    )
+    expect(argonUser.$id).toBe('user_argon')
+    expect(argonUser.email).toBe('argon@example.com')
+    const storedArgon = docs.users.get('user_argon')
+    expect(storedArgon?.get('passwordHash')).toStartWith('$argon2id$')
+
+    const bcryptUser = await service.createWithPassword(
+      docs,
+      {
+        userId: 'user_bcrypt',
+        email: 'bcrypt@example.com',
+        password: 'secure-bcrypt-password',
+        name: 'Bcrypt User',
+      },
+      'bcrypt',
+    )
+    expect(bcryptUser.$id).toBe('user_bcrypt')
+    const storedBcrypt = docs.users.get('user_bcrypt')
+    expect(storedBcrypt?.get('passwordHash')).toStartWith('$2b$')
+  })
+
+  test('updates password, hashes it, and revokes active sessions', async () => {
+    const docs = memoryDocuments()
+    const service = createUserService()
+
+    await service.createWithPassword(
+      docs,
+      {
+        userId: 'user_pwd_change',
+        email: 'change@example.com',
+        password: 'initial-password-123',
+      },
+      'argon2id',
+    )
+
+    // Create 2 sessions
+    await service.createSession(docs, 'user_pwd_change')
+    await service.createSession(docs, 'user_pwd_change')
+    expect(docs.sessions.size).toBe(2)
+
+    // Update password
+    const updated = await service.updatePassword(docs, 'user_pwd_change', 'new-super-password-123')
+    expect(updated.$id).toBe('user_pwd_change')
+    const stored = docs.users.get('user_pwd_change')
+    expect(stored?.get('passwordHash')).toStartWith('$argon2id$')
+
+    // Active sessions should be revoked
+    const activeSessions = await service.listSessions(docs, 'user_pwd_change')
+    expect(activeSessions.meta.total).toBe(0)
+  })
+
+  test('removes user with cascading cleanup of memberships and sessions', async () => {
+    const docs = memoryDocuments()
+    const service = createUserService()
+
+    await service.createWithPassword(
+      docs,
+      {
+        userId: 'user_to_delete',
+        email: 'delete_me@example.com',
+        password: 'initial-password-123',
+      },
+      'argon2id',
+    )
+
+    // Seed session
+    await service.createSession(docs, 'user_to_delete')
+    expect(docs.sessions.size).toBe(1)
+
+    // Seed membership & team total
+    docs.teamTotals.set('team_1', 1)
+    docs.memberships.set(
+      'mem_1',
+      new Doc({
+        $id: 'mem_1',
+        userId: 'user_to_delete',
+        teamId: 'team_1',
+        status: 'accepted',
+      }),
+    )
+
+    await service.remove(docs, 'user_to_delete')
+
+    expect(docs.users.has('user_to_delete')).toBe(false)
+    expect(docs.sessions.size).toBe(0)
+    expect(docs.memberships.has('mem_1')).toBe(false)
+    expect(docs.teamTotals.get('team_1')).toBe(0)
+  })
+
+  test('manages user sessions (list, create, delete, deleteAll)', async () => {
+    const docs = memoryDocuments()
+    const service = createUserService()
+
+    await service.createWithPassword(
+      docs,
+      {
+        userId: 'user_sess',
+        email: 'sess@example.com',
+        password: 'password123',
+      },
+      'argon2id',
+    )
+
+    const sessionA = await service.createSession(docs, 'user_sess')
+    expect(sessionA.userId).toBe('user_sess')
+    expect(sessionA.token).toBeDefined()
+
+    const sessionB = await service.createSession(docs, 'user_sess')
+    expect(sessionB.userId).toBe('user_sess')
+
+    const list = await service.listSessions(docs, 'user_sess')
+    expect(list.meta.total).toBe(2)
+
+    await service.deleteSession(docs, 'user_sess', sessionA.$id)
+    const listAfterOneDelete = await service.listSessions(docs, 'user_sess')
+    expect(listAfterOneDelete.meta.total).toBe(1)
+
+    await service.deleteSessions(docs, 'user_sess')
+    const listAfterDeleteAll = await service.listSessions(docs, 'user_sess')
+    expect(listAfterDeleteAll.meta.total).toBe(0)
   })
 })

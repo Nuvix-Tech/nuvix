@@ -166,30 +166,34 @@ async function waitUntilReady(
 async function assertNoClientConnections(
   processes: PostgresResourceProcesses,
   containerName: string,
+  attempts = 10,
+  intervalMs = 100,
 ): Promise<void> {
   // Inspect over the container-local socket so generated credentials never
   // enter process arguments; exclude the inspection session itself.
-  const result = await requireSuccess(
-    processes,
-    [
-      'docker',
-      'exec',
-      containerName,
-      'psql',
-      '--username',
-      POSTGRES_INSPECTION_USER,
-      '--dbname',
-      POSTGRES_DATABASE,
-      '--tuples-only',
-      '--no-align',
-      '--command',
-      'select count(*) from pg_stat_activity where datname = current_database() and client_addr is not null',
-    ],
-    'connection inspection',
-  )
-  if (result.stdout.trim() !== '0') {
-    throw new PostgresResourceError('PostgreSQL test resource retained client connections')
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = await requireSuccess(
+      processes,
+      [
+        'docker',
+        'exec',
+        containerName,
+        'psql',
+        '--username',
+        POSTGRES_INSPECTION_USER,
+        '--dbname',
+        POSTGRES_DATABASE,
+        '--tuples-only',
+        '--no-align',
+        '--command',
+        'select count(*) from pg_stat_activity where datname = current_database() and client_addr is not null',
+      ],
+      'connection inspection',
+    )
+    if (result.stdout.trim() === '0') return
+    if (attempt < attempts) await processes.sleep(intervalMs)
   }
+  throw new PostgresResourceError('PostgreSQL test resource retained client connections')
 }
 
 async function assertRemoved(
