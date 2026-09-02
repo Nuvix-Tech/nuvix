@@ -162,7 +162,7 @@ long-running connections during AOT dry-run.
 | `@nestjs/schedule`                                   | `Bun.cron` (D22)                                                                |
 | `@nestjs/event-emitter`                              | typed emitter on `EventTarget`                                                  |
 | `sharp`                                              | `Bun.Image` (D21)                                                               |
-| `otplib`                                             | evaluate at Auth phase: RFC-6238 TOTP on `crypto.subtle`, else keep temporarily |
+| `otplib`                                             | deleted — replaced by zero-dependency RFC-6238 TOTP on `crypto.subtle` (`utils/totp.ts`) |
 
 ### Kept (justified)
 
@@ -363,7 +363,7 @@ the remaining auth/session/MFA surface stay deferred to their documented phases.
 - [x] User administration endpoints (`DELETE /v2/users/:userId`, `POST /v2/users/argon2`, `POST /v2/users/bcrypt`, `PATCH /v2/users/:userId/password`, `GET /v2/users/:userId/sessions`, `POST /v2/users/:userId/sessions`, `DELETE /v2/users/:userId/sessions`, `DELETE /v2/users/:userId/sessions/:sessionId`)
 - [x] Tenant JWT signing-key storage, strict JOSE/claims validation, issuance,
       and rotation (no process-global project JWT secret, verified live against `nuvix/postgres:18.1`)
-- [ ] MFA: decide otplib vs hand-rolled RFC-6238 (gate: validated against real factors)
+- [x] MFA: decide otplib vs hand-rolled RFC-6238 (decided: zero-dependency hand-rolled RFC-6238 on `crypto.subtle`, 100% test-vector verified against RFC 4226/6238 in `utils/totp.ts`)
 
 Account registration, anonymous sessions, tenant JWT signing-key storage, token issuance (`POST /v2/account/jwt`, `POST /v2/users/:userId/jwts`), JWT authentication (`x-nuvix-jwt`), password hashing (argon2id & bcrypt), email session materialization with salted HMAC verifiers, profile management, session listing, session revocation, user deletion with cascade, and administrative session management were implemented and verified live against `nuvix/postgres:18.1` on 2026-09-02.
 
@@ -511,10 +511,10 @@ Tracked here so nothing gets decided silently:
 5. ✅ **SVG avatars** → keep `@resvg/resvg-js` for now; revisit a zero-dep custom SVG rasterizer later
 6. ✅ **Auth at launch** → token-ready design (D23); final call on shipping tokens vs sessions at Phase 4 gate
 7. ✅ **Project locator / auth headers** → `x-nuvix-publishable-key` selects a tenant; `x-nuvix-session`, `x-nuvix-jwt`, and secret `x-nuvix-key` authenticate inside it (D38)
+8. ✅ **TOTP** → hand-rolled RFC-6238 on `crypto.subtle` with zero dependencies, validated against RFC 4226/6238 test vectors (`utils/totp.ts`), eliminating `otplib`
 
 **Still open:**
 
-8. **TOTP** — hand-rolled RFC-6238 on `crypto.subtle` vs keep otplib. _(Phase 4)_
 9. **Realtime/WebSocket** — Elysia 2's generator-based `.ws()`; in v2 core scope or post-v2? _(after Phase 3)_
 
 ---
