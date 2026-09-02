@@ -594,6 +594,206 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     const sessionTeamIdA = sessionCreatedTeamA.data.$id
     expect(await fixture.owner.countTeamMemberships('a', sessionTeamIdA)).toBe(1)
 
+    const sessionMembershipsA = observe(
+      await client.v2.teams({ teamId: sessionTeamIdA }).memberships.get({ headers: headersA }),
+    )
+    expect(sessionMembershipsA.status).toBe(200)
+    expect(sessionMembershipsA.data?.meta).toEqual({
+      total: 1,
+      limit: 25,
+      offset: 0,
+    })
+    expect(sessionMembershipsA.data?.data).toHaveLength(1)
+    const sessionMembershipA = sessionMembershipsA.data?.data[0]
+    if (!sessionMembershipA) throw new Error('Session team membership list was empty')
+    expect(sessionMembershipA).toMatchObject({
+      userId: 'integration_session_user',
+      userName: 'Integration Session User',
+      roles: ['owner'],
+      status: 'accepted',
+    })
+    expect(sessionMembershipA.invited).toBeInstanceOf(Date)
+    expect(sessionMembershipA.joined).toBeInstanceOf(Date)
+    expect(sessionMembershipA).not.toHaveProperty('email')
+
+    const fetchedSessionMembershipA = observe(
+      await client.v2
+        .teams({ teamId: sessionTeamIdA })
+        .memberships({ membershipId: sessionMembershipA.$id })
+        .get({ headers: headersA }),
+    )
+    expect(fetchedSessionMembershipA.status).toBe(200)
+    expect(fetchedSessionMembershipA.data?.$id).toBe(sessionMembershipA.$id)
+
+    const missingMembershipA = observe(
+      await client.v2
+        .teams({ teamId: sessionTeamIdA })
+        .memberships({ membershipId: entityId('membership') })
+        .get({ headers: headersA }),
+    )
+    expectProblem(missingMembershipA, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'membership_not_found',
+    })
+
+    const crossTenantMembershipsA = observe(
+      await client.v2.teams({ teamId: sessionTeamIdA }).memberships.get({ headers: headersB }),
+    )
+    expectProblem(crossTenantMembershipsA, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'team_not_found',
+    })
+
+    const rolesUpdatedByKeyA = observe(
+      await client.v2
+        .teams({ teamId: sessionTeamIdA })
+        .memberships({ membershipId: sessionMembershipA.$id })
+        .patch({ roles: ['owner', 'viewer'] }, { headers: teamsWriteHeadersA }),
+    )
+    expect(rolesUpdatedByKeyA.status).toBe(200)
+    expect(rolesUpdatedByKeyA.data?.roles).toEqual(['owner', 'viewer'])
+
+    const rolesUpdatedByOwnerA = observe(
+      await client.v2
+        .teams({ teamId: sessionTeamIdA })
+        .memberships({ membershipId: sessionMembershipA.$id })
+        .patch({ roles: ['owner'] }, { headers: sessionHeadersA }),
+    )
+    expect(rolesUpdatedByOwnerA.status).toBe(200)
+    expect(rolesUpdatedByOwnerA.data?.roles).toEqual(['owner'])
+
+    const scopeDeficientMembershipPatchA = observe(
+      await client.v2
+        .teams({ teamId: sessionTeamIdA })
+        .memberships({ membershipId: sessionMembershipA.$id })
+        .patch({ roles: ['owner'] }, { headers: scopeDeficientHeadersA }),
+    )
+    expectStableProblem(scopeDeficientMembershipPatchA, STABLE_PROBLEMS.forbidden)
+
+    const secondSessionTeamA = observe(
+      await client.v2.teams.post(
+        { name: `Tenant A session two ${sharedName}` },
+        { headers: sessionHeadersA },
+      ),
+    )
+    expect(secondSessionTeamA.status).toBe(201)
+    const secondSessionTeamIdA = secondSessionTeamA.data?.$id
+    if (!secondSessionTeamIdA) throw new Error('Second session team response was empty')
+
+    const mismatchedMembershipA = observe(
+      await client.v2
+        .teams({ teamId: secondSessionTeamIdA })
+        .memberships({ membershipId: sessionMembershipA.$id })
+        .get({ headers: headersA }),
+    )
+    expectProblem(mismatchedMembershipA, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'membership_not_found',
+    })
+
+    const sessionUserMembershipsA = observe(
+      await client.v2
+        .users({ userId: 'integration_session_user' })
+        .memberships.get({ headers: usersReadHeadersA }),
+    )
+    expect(sessionUserMembershipsA.status).toBe(200)
+    expect(sessionUserMembershipsA.data?.meta).toEqual({
+      total: 2,
+      limit: 25,
+      offset: 0,
+    })
+    expect(sessionUserMembershipsA.data?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          $id: sessionMembershipA.$id,
+          teamId: sessionTeamIdA,
+          teamName: `Tenant A session ${sharedName}`,
+          roles: ['owner'],
+          status: 'accepted',
+        }),
+        expect.objectContaining({
+          teamId: secondSessionTeamIdA,
+          teamName: `Tenant A session two ${sharedName}`,
+          roles: ['owner'],
+          status: 'accepted',
+        }),
+      ]),
+    )
+    const secondMembershipA = sessionUserMembershipsA.data?.data.find(
+      (membership) => membership.teamId === secondSessionTeamIdA,
+    )
+    if (!secondMembershipA) throw new Error('Second session membership projection was missing')
+
+    const sessionUserMembershipsB = observe(
+      await client.v2
+        .users({ userId: 'integration_session_user' })
+        .memberships.get({ headers: usersReadHeadersB }),
+    )
+    expect(sessionUserMembershipsB.status).toBe(200)
+    expect(sessionUserMembershipsB.data?.data).toEqual([])
+    expect(sessionUserMembershipsB.data?.meta).toEqual({
+      total: 0,
+      limit: 25,
+      offset: 0,
+    })
+
+    const writeOnlyMembershipProjectionA = observe(
+      await client.v2
+        .users({ userId: 'integration_session_user' })
+        .memberships.get({ headers: usersWriteHeadersA }),
+    )
+    expect(writeOnlyMembershipProjectionA.status).toBe(403)
+
+    const removedSecondMembershipA = observe(
+      await client.v2
+        .teams({ teamId: secondSessionTeamIdA })
+        .memberships({ membershipId: secondMembershipA.$id })
+        .delete(undefined, { headers: sessionHeadersA }),
+    )
+    expect(removedSecondMembershipA.status).toBe(204)
+    const secondTeamAfterMembershipRemovalA = observe(
+      await client.v2.teams({ teamId: secondSessionTeamIdA }).get({ headers: headersA }),
+    )
+    expect(secondTeamAfterMembershipRemovalA.data?.total).toBe(0)
+    expect(await fixture.owner.countTeamMemberships('a', secondSessionTeamIdA)).toBe(0)
+
+    const removedSecondMembershipAgainA = observe(
+      await client.v2
+        .teams({ teamId: secondSessionTeamIdA })
+        .memberships({ membershipId: secondMembershipA.$id })
+        .delete(undefined, { headers: teamsWriteHeadersA }),
+    )
+    expectProblem(removedSecondMembershipAgainA, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'membership_not_found',
+    })
+
+    const evictedUserAccessA = observe(
+      await client.v2.teams({ teamId: secondSessionTeamIdA }).get({ headers: sessionHeadersA }),
+    )
+    expectProblem(evictedUserAccessA, {
+      status: 404,
+      type: '/errors/not-found',
+      code: 'team_not_found',
+    })
+
+    const removedOwnerMembershipA = observe(
+      await client.v2
+        .teams({ teamId: sessionTeamIdA })
+        .memberships({ membershipId: sessionMembershipA.$id })
+        .delete(undefined, { headers: teamsWriteHeadersA }),
+    )
+    expect(removedOwnerMembershipA.status).toBe(204)
+    expect(await fixture.owner.countTeamMemberships('a', sessionTeamIdA)).toBe(0)
+    const sessionTeamAfterMembershipRemovalA = observe(
+      await client.v2.teams({ teamId: sessionTeamIdA }).get({ headers: headersA }),
+    )
+    expect(sessionTeamAfterMembershipRemovalA.data?.total).toBe(0)
+
     const removedSessionTeamA = observe(
       await client.v2
         .teams({ teamId: sessionTeamIdA })

@@ -21,6 +21,21 @@ const USER = {
   $updatedAt: '2026-08-30T10:00:00.000Z',
 }
 
+const MEMBERSHIPS = {
+  data: [
+    {
+      $id: 'membership_a',
+      teamId: 'team_a',
+      teamName: 'Core',
+      roles: ['owner'],
+      status: 'accepted',
+      invited: '2026-08-30T10:00:00.000Z',
+      joined: '2026-08-30T10:00:00.000Z',
+    },
+  ],
+  meta: { total: 1, limit: 25, offset: 0 },
+}
+
 function probe(auth: ProjectAuthContext) {
   const calls: string[] = []
   const called =
@@ -52,6 +67,7 @@ function probe(auth: ProjectAuthContext) {
     updatePrefs: called('prefs', {}),
     updateLabels: called('labels', USER),
     updateStatus: called('status', USER),
+    listMemberships: called('listMemberships', MEMBERSHIPS),
   } as unknown as UserService
   const app = new Elysia({ prefix: '/v2' })
     .use(
@@ -148,6 +164,32 @@ describe('users routes', () => {
     expect(writeResponse.status).toBe(403)
     expect(readResponse.status).toBe(403)
     expect(readOnly.calls).toEqual([])
+    expect(writeOnly.calls).toEqual([])
+  })
+
+  test('lists user memberships through the read scope only', async () => {
+    const readOnly = probe({
+      type: 'apiKey',
+      keyId: 'key_read',
+      mode: 'admin',
+      scopes: ['users.read'],
+    })
+    const writeOnly = probe({
+      type: 'apiKey',
+      keyId: 'key_write',
+      mode: 'admin',
+      scopes: ['users.write'],
+    })
+
+    const [readResponse, writeResponse] = await Promise.all([
+      readOnly.app.handle(new Request('http://nuvix.test/v2/users/user_a/memberships')),
+      writeOnly.app.handle(new Request('http://nuvix.test/v2/users/user_a/memberships')),
+    ])
+
+    expect(readResponse.status).toBe(200)
+    expect(await readResponse.json()).toEqual(MEMBERSHIPS)
+    expect(readOnly.calls).toEqual(['listMemberships'])
+    expect(writeResponse.status).toBe(403)
     expect(writeOnly.calls).toEqual([])
   })
 

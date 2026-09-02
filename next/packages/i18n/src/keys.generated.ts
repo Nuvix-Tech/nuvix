@@ -266,6 +266,7 @@ export type TranslationKey =
   | 'errors.generic'
   | 'errors.notFound'
   | 'errors.rateLimited'
+  | 'errors.teams.membershipNotFound'
   | 'errors.teams.notFound'
   | 'errors.unauthorized'
   | 'errors.users.alreadyExists'

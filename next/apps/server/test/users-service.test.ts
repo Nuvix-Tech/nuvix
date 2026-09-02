@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { Doc, type Query, QueryType } from '@nuvix/db'
+import { Doc, type Query, QueryType, Role } from '@nuvix/db'
+import { apiScopeLabel } from '../src/context/database-roles'
 import type { UserDocuments } from '../src/users/documents'
 import { createUserService } from '../src/users/service'
 
@@ -11,38 +12,68 @@ function matches(document: Doc, queries: Query[] = []): boolean {
     .every((query) => query.getValues().includes(document.get(query.getAttribute()) as never))
 }
 
+function stored(document: Doc): Doc {
+  return new Doc({
+    ...document.getAll(),
+    $createdAt: document.createdAt() ?? NOW,
+    $updatedAt: document.updatedAt() ?? NOW,
+  })
+}
+
 function harness() {
-  const users = new Map<string, Doc>()
+  const collections = new Map<string, Map<string, Doc>>()
+  const collection = (id: string) => {
+    const existing = collections.get(id) ?? new Map<string, Doc>()
+    collections.set(id, existing)
+    return existing
+  }
+  const users = collection('users')
   const documents: UserDocuments = {
-    find: async (_collection, queries) =>
-      [...users.values()].filter((user) => matches(user, queries)),
-    findOne: async (_collection, queries) =>
-      [...users.values()].find((user) => matches(user, queries)) ?? new Doc(),
-    count: async (_collection, queries) =>
-      [...users.values()].filter((user) => matches(user, queries)).length,
-    get: async (_collection, id) => users.get(id) ?? new Doc(),
-    create: async (_collection, document) => {
-      const created = new Doc({
-        ...document.getAll(),
-        $createdAt: NOW,
-        $updatedAt: NOW,
-      })
-      users.set(created.getId(), created)
+    find: async (collectionId, queries) =>
+      [...collection(collectionId).values()].filter((doc) => matches(doc, queries)),
+    findOne: async (collectionId, queries) =>
+      [...collection(collectionId).values()].find((doc) => matches(doc, queries)) ?? new Doc(),
+    count: async (collectionId, queries) =>
+      [...collection(collectionId).values()].filter((doc) => matches(doc, queries)).length,
+    get: async (collectionId, id) => collection(collectionId).get(id) ?? new Doc(),
+    create: async (collectionId, document) => {
+      const created = stored(document)
+      collection(collectionId).set(created.getId(), created)
       return created
     },
-    update: async (_collection, id, changes) => {
-      const current = users.get(id)
+    update: async (collectionId, id, changes) => {
+      const current = collection(collectionId).get(id)
       if (!current) return new Doc()
-      const updated = new Doc({
-        ...current.getAll(),
-        ...changes.getAll(),
-        $updatedAt: NOW,
-      })
-      users.set(id, updated)
+      const updated = stored(new Doc({ ...current.getAll(), ...changes.getAll() }))
+      collection(collectionId).set(id, updated)
       return updated
     },
   }
-  return { documents, users }
+  return { documents, users, collection }
+}
+
+function seedMembership(
+  state: ReturnType<typeof harness>,
+  id: string,
+  userId: string,
+  teamId: string,
+  extra: Record<string, unknown> = {},
+): void {
+  state.collection('memberships').set(
+    id,
+    stored(
+      new Doc({
+        $id: id,
+        userId,
+        teamId,
+        roles: ['owner'],
+        status: 'accepted',
+        invited: NOW,
+        joined: NOW,
+        ...extra,
+      }),
+    ),
+  )
 }
 
 describe('users service', () => {
@@ -66,6 +97,18 @@ describe('users service', () => {
       phoneVerification: false,
     })
     expect(state.users.get('user_a')?.get('password')).toBeNull()
+  })
+
+  test('grants team scopes read access to user documents for membership projection', async () => {
+    const state = harness()
+    const service = createUserService({ id: () => 'user_a' })
+    await service.create(state.documents, { email: 'ada@example.com' })
+
+    expect(state.users.get('user_a')?.getRead()).toEqual([
+      Role.user('user_a').toString(),
+      Role.label(apiScopeLabel('teams.read')).toString(),
+      Role.label(apiScopeLabel('teams.write')).toString(),
+    ])
   })
 
   test('rejects empty identity and duplicate normalized email', async () => {
@@ -143,5 +186,67 @@ describe('users service', () => {
 
     expect((missing as { fields: { code?: string } }).fields.code).toBe('user_not_found')
     expect((reserved as { status: number }).status).toBe(400)
+  })
+
+  test('lists user memberships with the team projection', async () => {
+    const state = harness()
+    const service = createUserService({ id: () => 'user_a' })
+    await service.create(state.documents, {
+      userId: 'user_a',
+      email: 'ada@example.com',
+    })
+    state
+      .collection('teams')
+      .set('team_a', stored(new Doc({ $id: 'team_a', name: 'Design', total: 1, prefs: {} })))
+    seedMembership(state, 'membership_a', 'user_a', 'team_a')
+
+    const result = await service.listMemberships(state.documents, 'user_a', 25, 0)
+
+    expect(result.meta).toEqual({ total: 1, limit: 25, offset: 0 })
+    expect(result.data).toEqual([
+      {
+        $id: 'membership_a',
+        teamId: 'team_a',
+        teamName: 'Design',
+        roles: ['owner'],
+        status: 'accepted',
+        invited: NOW.toISOString(),
+        joined: NOW.toISOString(),
+      },
+    ])
+  })
+
+  test('omits unjoined timestamps and unreadable team names', async () => {
+    const state = harness()
+    const service = createUserService({ id: () => 'user_a' })
+    await service.create(state.documents, { userId: 'user_a' })
+    seedMembership(state, 'membership_pending', 'user_a', 'team_ghost', {
+      status: 'invited',
+      roles: ['viewer'],
+      joined: null,
+    })
+
+    const result = await service.listMemberships(state.documents, 'user_a', 25, 0)
+
+    expect(result.data).toEqual([
+      {
+        $id: 'membership_pending',
+        teamId: 'team_ghost',
+        roles: ['viewer'],
+        status: 'invited',
+        invited: NOW.toISOString(),
+      },
+    ])
+  })
+
+  test('reports user_not_found before projecting memberships', async () => {
+    const state = harness()
+    const service = createUserService()
+
+    const failure = await service
+      .listMemberships(state.documents, 'missing', 25, 0)
+      .catch((error) => error)
+
+    expect((failure as { fields: { code?: string } }).fields.code).toBe('user_not_found')
   })
 })

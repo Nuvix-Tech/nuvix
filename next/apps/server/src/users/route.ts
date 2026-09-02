@@ -10,6 +10,8 @@ import {
   UpdateStatusBody,
   UserListQuery,
   UserListResponse,
+  UserMembershipListQuery,
+  UserMembershipListResponse,
   UserParams,
   UserResponse,
 } from './contracts'
@@ -152,6 +154,25 @@ export function userRoutes(
         requests.withProject(request.headers, async ({ auth, session }) => {
           authorizeUsers(auth, 'users.write')
           return await service.updateStatus(userDocuments(session), params.userId, body.status)
+        }),
+    )
+    .get(
+      '/users/:userId/memberships',
+      {
+        params: UserParams,
+        query: UserMembershipListQuery,
+        response: UserMembershipListResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, query, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeUsers(auth, 'users.read')
+          return await service.listMemberships(
+            userDocuments(session),
+            params.userId,
+            query.limit ?? 25,
+            query.offset ?? 0,
+          )
         }),
     )
 }

@@ -1,7 +1,6 @@
 # Nuvix v2 — Bun-Native Rewrite Plan
 
-> **Status**: EXECUTION — Phase 3 infrastructure/core-data gate complete;
-> membership administration is the active Phase 3 slice
+> **Status**: EXECUTION — Phase 3 teams memberships and user projection complete
 > **Scope**: Full rewrite of the Nuvix backend from NestJS/Fastify/Node to a
 > Bun-native stack built on Elysia (`elysia@next`). This is a **rewrite**, not
 > a mechanical migration.
@@ -315,7 +314,7 @@ next/
 - [x] Implement the reviewed database schema CRUD service and five routes
 - [x] Teams core CRUD/preferences, including accepted owner membership creation
 - [x] Users core identity/profile administration
-- [ ] Teams memberships and user membership projection; invitations and logs
+- [x] Teams memberships and user membership projection; invitations and logs
       remain assigned to messaging/audit phases
 - [ ] Users auth/session/MFA/targets/usage/logs/deletion remain assigned to
       their dedicated later phases
@@ -350,9 +349,11 @@ preconditions and aggregate cleanup, and by probing Bun SQL's lazy connection
 during tenant acquisition so unreachable targets cannot be misclassified as auth
 failures.
 
-This does **not** complete Phase 3. The active slice is Teams membership
-administration and the Users membership projection. Invitations, logs, and the
-remaining auth/session/MFA surface stay deferred to their documented phases.
+Teams membership administration and the Users membership projection were
+verified live against `nuvix/postgres:18.1` on 2026-09-02: listing, retrieval,
+role updates, and membership removal with atomic `total` decrement, projection
+scoping, and team access revocation upon member eviction. Invitations, logs, and
+the remaining auth/session/MFA surface stay deferred to their documented phases.
 
 ### Phase 4 — Account/Auth (highest risk)
 

@@ -41,6 +41,34 @@ export const UserListResponse = t.Object({
 })
 
 export const UserParams = t.Object({ userId: UserId })
+export const UserMembershipListQuery = t.Object({
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 25 })),
+  offset: t.Optional(t.Integer({ minimum: 0, default: 0 })),
+})
+export const UserMembershipResponse = t.Object({
+  $id: t.String({ minLength: 1, maxLength: 36 }),
+  teamId: t.String({ minLength: 1, maxLength: 36 }),
+  teamName: t.Optional(t.String()),
+  roles: t.Array(
+    t.String({
+      minLength: 1,
+      maxLength: 32,
+      pattern: '^[\\p{L}\\p{M}\\p{N}._-]+$',
+    }),
+    { maxItems: 100 },
+  ),
+  status: t.String({ minLength: 1, maxLength: 32 }),
+  invited: t.String({ format: 'date-time' }),
+  joined: t.Optional(t.String({ format: 'date-time' })),
+})
+export const UserMembershipListResponse = t.Object({
+  data: t.Array(UserMembershipResponse),
+  meta: t.Object({
+    total: t.Integer({ minimum: 0 }),
+    limit: t.Integer({ minimum: 1, maximum: 100 }),
+    offset: t.Integer({ minimum: 0 }),
+  }),
+})
 export const CreateUserBody = t.Object(
   {
     userId: t.Optional(CreateUserId),

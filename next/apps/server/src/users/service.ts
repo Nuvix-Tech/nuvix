@@ -1,5 +1,5 @@
 import { Doc, ID, Permission, Query, Role } from '@nuvix/db'
-import { API_SCOPE_ROLE_PREFIX } from '../context/database-roles'
+import { API_SCOPE_ROLE_PREFIX, apiScopeLabel } from '../context/database-roles'
 import type { ProjectAuthContext } from '../context/project'
 import { TENANT_AUTH_MODEL } from '../context/tenant-auth-model'
 import { translatePackageError } from '../infrastructure/package-errors'
@@ -10,6 +10,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from '../shared/errors'
+import { TEAM_MODEL } from '../teams/model'
 import type { JsonValue, TeamPreferences } from '../teams/service'
 import type { UserDocuments } from './documents'
 
@@ -30,6 +31,23 @@ export interface UserResponse {
 
 export interface UserList {
   data: UserResponse[]
+  meta: { total: number; limit: number; offset: number }
+}
+
+export interface UserMembershipResponse {
+  readonly $id: string
+  readonly teamId: string
+  /** Omitted when the caller's session cannot read the referenced team. */
+  readonly teamName?: string
+  readonly roles: string[]
+  readonly status: string
+  readonly invited: string
+  /** Omitted while the membership has not joined. */
+  readonly joined?: string
+}
+
+export interface UserMembershipList {
+  data: UserMembershipResponse[]
   meta: { total: number; limit: number; offset: number }
 }
 
@@ -55,6 +73,12 @@ export function authorizeUsers(
 function iso(value: Date | string | null): string {
   const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null
   if (!date || Number.isNaN(date.getTime())) throw new Error('User timestamp is invalid')
+  return date.toISOString()
+}
+
+function optionalIso(value: Date | string | null): string | undefined {
+  const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null
+  if (!date || Number.isNaN(date.getTime())) return undefined
   return date.toISOString()
 }
 
@@ -132,10 +156,16 @@ async function operation<Result>(name: string, run: () => Promise<Result>): Prom
   }
 }
 
+type MutableUserMembershipResponse = {
+  -readonly [K in keyof UserMembershipResponse]: UserMembershipResponse[K]
+}
+
 export function createUserService(options: { id?: () => string } = {}) {
   const createId = options.id ?? (() => ID.unique())
   const collection = TENANT_AUTH_MODEL.collections.users
   const fields = TENANT_AUTH_MODEL.fields.users
+  const membershipCollection = TENANT_AUTH_MODEL.collections.memberships
+  const membershipFields = TENANT_AUTH_MODEL.fields.memberships
 
   const get = async (documents: UserDocuments, userId: string): Promise<UserResponse> => {
     const user = await operation('get user', () => documents.get(collection, userId))
@@ -196,6 +226,9 @@ export function createUserService(options: { id?: () => string } = {}) {
             $id: userId,
             $permissions: [
               Permission.read(Role.user(userId)),
+              // Team membership administration projects user identity fields.
+              Permission.read(Role.label(apiScopeLabel('teams.read'))),
+              Permission.read(Role.label(apiScopeLabel('teams.write'))),
               Permission.update(Role.user(userId)),
               Permission.delete(Role.user(userId)),
             ],
@@ -327,6 +360,52 @@ export function createUserService(options: { id?: () => string } = {}) {
           documents.update(collection, userId, new Doc({ [fields.status]: status })),
         ),
       )
+    },
+
+    async listMemberships(
+      documents: UserDocuments,
+      userId: string,
+      limit = 25,
+      offset = 0,
+    ): Promise<UserMembershipList> {
+      await get(documents, userId)
+      const filter = [Query.equal(membershipFields.userId, [userId])]
+      const [memberships, total] = await operation('list user memberships', () =>
+        Promise.all([
+          documents.find(membershipCollection, [
+            ...filter,
+            Query.orderDesc('$createdAt'),
+            Query.orderDesc('$id'),
+            Query.limit(limit),
+            Query.offset(offset),
+          ]),
+          documents.count(membershipCollection, filter),
+        ]),
+      )
+
+      const data = await Promise.all(
+        memberships.map(async (membership) => {
+          const teamId: unknown = membership.get(membershipFields.teamId)
+          const result: MutableUserMembershipResponse = {
+            $id: membership.getId(),
+            teamId: typeof teamId === 'string' ? teamId : '',
+            roles: strings(membership.get(membershipFields.roles)),
+            status: membership.get(membershipFields.status, 'accepted'),
+            invited: iso(membership.get(membershipFields.invited)),
+          }
+          const joined = optionalIso(membership.get(membershipFields.joined))
+          if (joined) result.joined = joined
+          if (result.teamId) {
+            const team = await operation('read membership team', () =>
+              documents.get(TEAM_MODEL.collection, result.teamId),
+            )
+            const teamName: unknown = team.empty() ? null : team.get(TEAM_MODEL.fields.name)
+            if (typeof teamName === 'string' && teamName.length > 0) result.teamName = teamName
+          }
+          return Object.freeze(result)
+        }),
+      )
+      return { data, meta: { total, limit, offset } }
     },
   }
 }

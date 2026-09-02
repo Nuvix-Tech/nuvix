@@ -2,10 +2,15 @@ import { Elysia } from 'elysia'
 import type { DatabaseRequestCapabilities } from '../infrastructure/database-composition'
 import {
   CreateTeamBody,
+  MembershipListQuery,
+  MembershipListResponse,
+  MembershipParams,
+  MembershipResponse,
   TeamListQuery,
   TeamListResponse,
   TeamParams,
   TeamResponse,
+  UpdateMembershipRolesBody,
   UpdateTeamBody,
   UpdateTeamPrefsBody,
 } from './contracts'
@@ -101,6 +106,77 @@ export function teamRoutes(
         requests.withProject(request.headers, async ({ auth, session }) => {
           authorizeTeams(auth, 'teams.write')
           return await service.updatePrefs(teamDocuments(session), params.teamId, body.prefs)
+        }),
+    )
+    .get(
+      '/teams/:teamId/memberships',
+      {
+        params: TeamParams,
+        query: MembershipListQuery,
+        response: MembershipListResponse,
+        detail: { tags: ['teams'] },
+      },
+      ({ params, query, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeTeams(auth, 'teams.read')
+          return await service.listMemberships(
+            teamDocuments(session),
+            params.teamId,
+            query.limit ?? 25,
+            query.offset ?? 0,
+          )
+        }),
+    )
+    .get(
+      '/teams/:teamId/memberships/:membershipId',
+      {
+        params: MembershipParams,
+        response: MembershipResponse,
+        detail: { tags: ['teams'] },
+      },
+      ({ params, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeTeams(auth, 'teams.read')
+          return await service.getMembership(
+            teamDocuments(session),
+            params.teamId,
+            params.membershipId,
+          )
+        }),
+    )
+    .patch(
+      '/teams/:teamId/memberships/:membershipId',
+      {
+        params: MembershipParams,
+        body: UpdateMembershipRolesBody,
+        response: MembershipResponse,
+        detail: { tags: ['teams'] },
+      },
+      ({ params, body, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeTeams(auth, 'teams.write')
+          return await service.updateMembershipRoles(
+            teamDocuments(session),
+            params.teamId,
+            params.membershipId,
+            auth,
+            body,
+          )
+        }),
+    )
+    .delete(
+      '/teams/:teamId/memberships/:membershipId',
+      { params: MembershipParams, detail: { tags: ['teams'] } },
+      ({ params, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeTeams(auth, 'teams.write')
+          await service.removeMembership(
+            teamDocuments(session),
+            params.teamId,
+            params.membershipId,
+            auth,
+          )
+          set.status = 204
         }),
     )
 }

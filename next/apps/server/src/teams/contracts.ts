@@ -5,7 +5,11 @@ export const TeamId = t.String({
   maxLength: 36,
   pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$',
 })
-
+export const MembershipId = t.String({
+  minLength: 1,
+  maxLength: 36,
+  pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$',
+})
 export const TeamName = t.String({
   minLength: 1,
   maxLength: 128,
@@ -36,8 +40,36 @@ export const TeamListResponse = t.Object({
   }),
 })
 
+export const MembershipResponse = t.Object({
+  $id: MembershipId,
+  userId: t.String({ minLength: 1, maxLength: 36 }),
+  userName: t.Optional(t.String()),
+  email: t.Optional(t.String()),
+  roles: t.Array(TeamRole, { maxItems: 100 }),
+  status: t.String({ minLength: 1, maxLength: 32 }),
+  invited: t.String({ format: 'date-time' }),
+  joined: t.Optional(t.String({ format: 'date-time' })),
+})
+
+export const MembershipListResponse = t.Object({
+  data: t.Array(MembershipResponse),
+  meta: t.Object({
+    total: t.Integer({ minimum: 0 }),
+    limit: t.Integer({ minimum: 1, maximum: 100 }),
+    offset: t.Integer({ minimum: 0 }),
+  }),
+})
+
 export const TeamParams = t.Object({ teamId: TeamId })
+export const MembershipParams = t.Object({
+  teamId: TeamId,
+  membershipId: MembershipId,
+})
 export const TeamListQuery = t.Object({
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 25 })),
+  offset: t.Optional(t.Integer({ minimum: 0, default: 0 })),
+})
+export const MembershipListQuery = t.Object({
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 25 })),
   offset: t.Optional(t.Integer({ minimum: 0, default: 0 })),
 })
@@ -47,3 +79,7 @@ export const CreateTeamBody = t.Object({
 })
 export const UpdateTeamBody = t.Object({ name: TeamName })
 export const UpdateTeamPrefsBody = t.Object({ prefs: Preferences })
+export const UpdateMembershipRolesBody = t.Object(
+  { roles: t.Array(TeamRole, { maxItems: 100 }) },
+  { additionalProperties: false },
+)

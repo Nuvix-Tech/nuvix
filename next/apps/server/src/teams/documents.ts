@@ -8,6 +8,13 @@ export interface TeamDocuments {
   update(collection: string, id: string, document: Doc): Promise<Doc>
   remove(collection: string, id: string): Promise<boolean>
   removeMany(collection: string, queries?: Query[]): Promise<string[]>
+  decreaseDocumentAttribute(
+    collection: string,
+    id: string,
+    attribute: string,
+    value: number,
+    min: number,
+  ): Promise<Doc>
   transaction<Result>(operation: (documents: TeamDocuments) => Promise<Result>): Promise<Result>
 }
 
@@ -25,6 +32,13 @@ export function teamDocuments(session: Session): TeamDocuments {
     remove: (collection: string, id: string) => session.deleteDocument(collection, id),
     removeMany: (collection: string, queries?: Query[]) =>
       session.deleteDocuments(collection, queries),
+    decreaseDocumentAttribute: (
+      collection: string,
+      id: string,
+      attribute: string,
+      value: number,
+      min: number,
+    ) => session.decreaseDocumentAttribute(collection, id, attribute, value, min),
     transaction: <Result>(operation: (documents: TeamDocuments) => Promise<Result>) =>
       session.withTransaction((transaction) => operation(teamDocuments(transaction))),
   })

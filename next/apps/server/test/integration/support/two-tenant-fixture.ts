@@ -5,6 +5,7 @@ import {
   createSecretVerifier,
   type SecretVerifier,
 } from '../../../src/context/credential-secret'
+import { apiScopeLabel } from '../../../src/context/database-roles'
 import type { ProjectAuthContext, ProjectContext } from '../../../src/context/project'
 import { createPublishableKey } from '../../../src/context/publishable-key'
 import { createTenantAuthResolver } from '../../../src/context/tenant-auth'
@@ -372,6 +373,9 @@ async function seedUserSession(
       $id: seeded.fixture.userId,
       $permissions: [
         Permission.read(Role.user(seeded.fixture.userId)),
+        // Mirrors the production user-document template for team projection.
+        Permission.read(Role.label(apiScopeLabel('teams.read'))),
+        Permission.read(Role.label(apiScopeLabel('teams.write'))),
         Permission.update(Role.user(seeded.fixture.userId)),
         Permission.delete(Role.user(seeded.fixture.userId)),
       ],

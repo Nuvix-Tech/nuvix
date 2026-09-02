@@ -17,6 +17,15 @@ const TEAM = {
   $updatedAt: '2026-08-29T12:00:00.000Z',
 }
 
+const MEMBERSHIP = {
+  $id: 'membership_a',
+  userId: 'user_a',
+  roles: ['owner'],
+  status: 'accepted',
+  invited: '2026-08-29T12:00:00.000Z',
+  joined: '2026-08-29T12:00:00.000Z',
+}
+
 function probe(auth: ProjectAuthContext) {
   const calls: string[] = []
   const requests: DatabaseRequestCapabilities = {
@@ -55,6 +64,21 @@ function probe(auth: ProjectAuthContext) {
     updatePrefs: async () => {
       calls.push('updatePrefs')
       return { theme: 'dark' }
+    },
+    listMemberships: async () => {
+      calls.push('listMemberships')
+      return { data: [MEMBERSHIP], meta: { total: 1, limit: 25, offset: 0 } }
+    },
+    getMembership: async () => {
+      calls.push('getMembership')
+      return MEMBERSHIP
+    },
+    updateMembershipRoles: async () => {
+      calls.push('updateMembershipRoles')
+      return MEMBERSHIP
+    },
+    removeMembership: async () => {
+      calls.push('removeMembership')
     },
   } as unknown as TeamService
   const app = new Elysia({ prefix: '/v2' })
@@ -148,5 +172,104 @@ describe('teams routes', () => {
     expect(response.status).toBe(204)
     expect(await response.text()).toBe('')
     expect(state.calls).toEqual(['remove'])
+  })
+
+  test('lists and reads memberships through the read scope', async () => {
+    const state = probe({
+      type: 'apiKey',
+      keyId: 'key_a',
+      mode: 'admin',
+      scopes: ['teams.read'],
+    })
+
+    const [list, single] = await Promise.all([
+      state.app.handle(new Request('http://nuvix.test/v2/teams/team_a/memberships')),
+      state.app.handle(new Request('http://nuvix.test/v2/teams/team_a/memberships/membership_a')),
+    ])
+
+    expect(list.status).toBe(200)
+    expect(await list.json()).toEqual({
+      data: [MEMBERSHIP],
+      meta: { total: 1, limit: 25, offset: 0 },
+    })
+    expect(single.status).toBe(200)
+    expect(await single.json()).toEqual(MEMBERSHIP)
+    expect(state.calls).toEqual(['listMemberships', 'getMembership'])
+  })
+
+  test('keeps membership mutation behind the write scope', async () => {
+    const readOnly = probe({
+      type: 'apiKey',
+      keyId: 'key_read',
+      mode: 'admin',
+      scopes: ['teams.read'],
+    })
+
+    const [patched, deleted] = await Promise.all([
+      readOnly.app.handle(
+        new Request('http://nuvix.test/v2/teams/team_a/memberships/membership_a', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ roles: ['owner'] }),
+        }),
+      ),
+      readOnly.app.handle(
+        new Request('http://nuvix.test/v2/teams/team_a/memberships/membership_a', {
+          method: 'DELETE',
+        }),
+      ),
+    ])
+
+    expect(patched.status).toBe(403)
+    expect(deleted.status).toBe(403)
+    expect(readOnly.calls).toEqual([])
+  })
+
+  test('updates membership roles with 200 and removes with 204', async () => {
+    const state = probe({
+      type: 'apiKey',
+      keyId: 'key_a',
+      mode: 'admin',
+      scopes: ['teams.write'],
+    })
+
+    const patched = await state.app.handle(
+      new Request('http://nuvix.test/v2/teams/team_a/memberships/membership_a', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ roles: ['owner', 'viewer'] }),
+      }),
+    )
+    const removed = await state.app.handle(
+      new Request('http://nuvix.test/v2/teams/team_a/memberships/membership_a', {
+        method: 'DELETE',
+      }),
+    )
+
+    expect(patched.status).toBe(200)
+    expect(await patched.json()).toEqual(MEMBERSHIP)
+    expect(removed.status).toBe(204)
+    expect(await removed.text()).toBe('')
+    expect(state.calls).toEqual(['updateMembershipRoles', 'removeMembership'])
+  })
+
+  test('rejects malformed membership role bodies before service invocation', async () => {
+    const state = probe({
+      type: 'apiKey',
+      keyId: 'key_a',
+      mode: 'admin',
+      scopes: ['teams.write'],
+    })
+
+    const response = await state.app.handle(
+      new Request('http://nuvix.test/v2/teams/team_a/memberships/membership_a', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ roles: ['bad role!'] }),
+      }),
+    )
+
+    expect(response.status).toBe(422)
+    expect(state.calls).toEqual([])
   })
 })
