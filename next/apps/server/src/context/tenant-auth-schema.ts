@@ -68,6 +68,8 @@ export function createTenantAuthCollectionDefinitions(
           required: true,
           default: {},
         }),
+        string(fields.users.passwordHash, 256, false),
+        timestamp(fields.users.passwordUpdate, false),
       ],
       indexes: [
         index('name', IndexType.Key, [fields.users.name]),

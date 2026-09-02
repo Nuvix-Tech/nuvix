@@ -15,6 +15,8 @@ export interface TenantAuthModel {
       readonly phoneVerified: string
       readonly labels: string
       readonly prefs: string
+      readonly passwordHash: string
+      readonly passwordUpdate: string
     }
     readonly sessions: {
       readonly userId: string
@@ -63,6 +65,8 @@ export const TENANT_AUTH_MODEL = {
       phoneVerified: 'phoneVerified',
       labels: 'labels',
       prefs: 'prefs',
+      passwordHash: 'passwordHash',
+      passwordUpdate: 'passwordUpdate',
     },
     sessions: {
       userId: 'userId',

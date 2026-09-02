@@ -58,6 +58,8 @@ describe('tenant auth schema', () => {
 
     expect(attributes).toContain('secretDigest')
     expect(attributes).toContain('secretSalt')
+    expect(attributes).toContain('passwordHash')
+    expect(attributes).toContain('passwordUpdate')
     expect(attributes).not.toContain('secret')
     expect(attributes).not.toContain('password')
     expect(attributes).toEqual(expect.arrayContaining(['name', 'email', 'phone', 'prefs']))
