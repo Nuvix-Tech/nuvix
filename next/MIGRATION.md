@@ -1,6 +1,6 @@
 # Nuvix v2 — Bun-Native Rewrite Plan
 
-> **Status**: EXECUTION — Phase 3 teams memberships and user projection complete
+> **Status**: EXECUTION — Phase 4 Account & Auth contract drafted; password hashing & sessions active
 > **Scope**: Full rewrite of the Nuvix backend from NestJS/Fastify/Node to a
 > Bun-native stack built on Elysia (`elysia@next`). This is a **rewrite**, not
 > a mechanical migration.
@@ -357,10 +357,10 @@ the remaining auth/session/MFA surface stay deferred to their documented phases.
 
 ### Phase 4 — Account/Auth (highest risk)
 
-- [ ] Contract first: sessions, MFA, recovery, OAuth2, JWT/API-key issuance
+- [x] Contract first: sessions, MFA, recovery, OAuth2, JWT/API-key issuance (`docs/api/account.md`)
+- [ ] Password hashing: bcrypt/argon2 only — legacy algos (MD5 etc.) NOT supported per D29
 - [ ] Tenant JWT signing-key storage, strict JOSE/claims validation, issuance,
       and rotation (no process-global project JWT secret)
-- [ ] Password hashing: bcrypt/argon2 only — legacy algos (MD5 etc.) NOT supported per D29
 - [ ] MFA: decide otplib vs hand-rolled RFC-6238 (gate: validated against real factors)
 
 ### Phase 5 — Storage + Messaging + Webhooks
