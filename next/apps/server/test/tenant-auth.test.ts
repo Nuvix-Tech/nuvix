@@ -10,10 +10,15 @@ import type { TenantAuthInput } from '../src/context/project-request'
 import { createTenantAuthResolver } from '../src/context/tenant-auth'
 import { TENANT_AUTH_MODEL } from '../src/context/tenant-auth-model'
 import { HEADERS } from '../src/shared/constants'
+import { signJwt } from '../src/utils/jwt'
 
 const SECRET = new Uint8Array(32).fill(7)
 const OTHER_SECRET = new Uint8Array(32).fill(9)
+const JWT_SECRET = 'test-tenant-jwt-secret-material-123456789'
 const NOW = new Date('2026-08-29T12:00:00.000Z')
+const NOW_SECONDS = Math.floor(NOW.getTime() / 1000)
+const sign = (payload: Parameters<typeof signJwt>[0], secret: string, ttl: number) =>
+  signJwt(payload, secret, ttl, NOW_SECONDS)
 
 async function authHarness(
   options: {
@@ -21,6 +26,7 @@ async function authHarness(
     user?: Record<string, unknown>
     memberships?: Doc[]
     apiKey?: Record<string, unknown>
+    jwtKeys?: Doc[]
     persistenceError?: Error
   } = {},
 ) {
@@ -75,9 +81,21 @@ async function authHarness(
         if (options.persistenceError) throw options.persistenceError
         return records.get(`${collection}:${id}`) ?? new Doc()
       },
-      find: async () => {
+      find: async (collection: string) => {
         reads += 1
         if (options.persistenceError) throw options.persistenceError
+        if (collection === TENANT_AUTH_MODEL.collections.jwtKeys) {
+          return (
+            options.jwtKeys ?? [
+              new Doc({
+                signingKey: JWT_SECRET,
+                algorithm: 'HS256',
+                active: true,
+                expiresAt: null,
+              }),
+            ]
+          )
+        }
         return memberships
       },
     },
@@ -217,15 +235,170 @@ describe('tenant-local authentication', () => {
     expect((failure as { fields: { code?: string } }).fields.code).toBe('credential_invalid')
   })
 
-  test('fails JWT authentication closed until tenant signing keys are implemented', async () => {
+  test('authenticates valid JWT and resolves user claims', async () => {
     const state = await authHarness()
+    const token = await sign(
+      {
+        sub: 'user_a',
+        iss: 'nuvix:project_a',
+        aud: 'nuvix:project',
+      },
+      JWT_SECRET,
+      900,
+    )
+
+    const auth = await resolver.resolve(state.input(new Headers({ [HEADERS.jwt]: token })))
+
+    expect(auth).toEqual({
+      type: 'jwt',
+      userId: 'user_a',
+      verified: true,
+      labels: ['beta', 'staff'],
+      teams: [{ teamId: 'team_a', roles: ['owner', 'viewer'] }],
+      scopes: [],
+    })
+  })
+
+  test('authenticates valid JWT with active backing session', async () => {
+    const state = await authHarness()
+    const token = await sign(
+      {
+        sub: 'user_a',
+        sid: 'session_a',
+        iss: 'nuvix:project_a',
+        aud: 'nuvix:project',
+      },
+      JWT_SECRET,
+      900,
+    )
+
+    const auth = await resolver.resolve(state.input(new Headers({ [HEADERS.jwt]: token })))
+
+    expect(auth).toEqual({
+      type: 'jwt',
+      userId: 'user_a',
+      sessionId: 'session_a',
+      verified: true,
+      labels: ['beta', 'staff'],
+      teams: [{ teamId: 'team_a', roles: ['owner', 'viewer'] }],
+      scopes: [],
+    })
+  })
+
+  test('rejects JWT when backing session is revoked or expired', async () => {
+    const state = await authHarness({
+      session: { revokedAt: NOW.toISOString() },
+    })
+    const token = await sign(
+      {
+        sub: 'user_a',
+        sid: 'session_a',
+        iss: 'nuvix:project_a',
+        aud: 'nuvix:project',
+      },
+      JWT_SECRET,
+      900,
+    )
 
     const failure = await resolver
-      .resolve(state.input(new Headers({ [HEADERS.jwt]: 'header.payload.signature' })))
+      .resolve(state.input(new Headers({ [HEADERS.jwt]: token })))
       .catch((error: unknown) => error)
 
     expect((failure as { fields: { code?: string } }).fields.code).toBe('credential_invalid')
-    expect(state.reads()).toBe(0)
+  })
+
+  test('rejects JWT when issuer does not match project', async () => {
+    const state = await authHarness()
+    const token = await sign(
+      {
+        sub: 'user_a',
+        iss: 'nuvix:different_project',
+        aud: 'nuvix:project',
+      },
+      JWT_SECRET,
+      900,
+    )
+
+    const failure = await resolver
+      .resolve(state.input(new Headers({ [HEADERS.jwt]: token })))
+      .catch((error: unknown) => error)
+
+    expect((failure as { fields: { code?: string } }).fields.code).toBe('credential_invalid')
+  })
+
+  test('rejects expired or tampered JWT', async () => {
+    const state = await authHarness()
+    const expiredToken = await sign(
+      {
+        sub: 'user_a',
+        iss: 'nuvix:project_a',
+        aud: 'nuvix:project',
+      },
+      JWT_SECRET,
+      -10,
+    )
+
+    const failure = await resolver
+      .resolve(state.input(new Headers({ [HEADERS.jwt]: expiredToken })))
+      .catch((error: unknown) => error)
+
+    expect((failure as { fields: { code?: string } }).fields.code).toBe('credential_invalid')
+
+    const tamperedToken = `${expiredToken.slice(0, -5)}abcde`
+    const tamperedFailure = await resolver
+      .resolve(state.input(new Headers({ [HEADERS.jwt]: tamperedToken })))
+      .catch((error: unknown) => error)
+
+    expect((tamperedFailure as { fields: { code?: string } }).fields.code).toBe(
+      'credential_invalid',
+    )
+  })
+
+  test('supports key rotation: verifies unexpired retired keys and rejects expired keys', async () => {
+    const retiredSecret = 'retired-jwt-signing-key-123456789012'
+    const expiredSecret = 'expired-jwt-signing-key-123456789012'
+    const state = await authHarness({
+      jwtKeys: [
+        new Doc({
+          signingKey: JWT_SECRET,
+          algorithm: 'HS256',
+          active: true,
+          expiresAt: null,
+        }),
+        new Doc({
+          signingKey: retiredSecret,
+          algorithm: 'HS256',
+          active: false,
+          expiresAt: new Date(NOW.getTime() + 3600_000).toISOString(),
+        }),
+        new Doc({
+          signingKey: expiredSecret,
+          algorithm: 'HS256',
+          active: false,
+          expiresAt: new Date(NOW.getTime() - 1000).toISOString(),
+        }),
+      ],
+    })
+
+    const retiredToken = await sign(
+      { sub: 'user_a', iss: 'nuvix:project_a', aud: 'nuvix:project' },
+      retiredSecret,
+      900,
+    )
+    const retiredAuth = await resolver.resolve(
+      state.input(new Headers({ [HEADERS.jwt]: retiredToken })),
+    )
+    expect(retiredAuth.type).toBe('jwt')
+
+    const expiredKeyToken = await sign(
+      { sub: 'user_a', iss: 'nuvix:project_a', aud: 'nuvix:project' },
+      expiredSecret,
+      900,
+    )
+    const failure = await resolver
+      .resolve(state.input(new Headers({ [HEADERS.jwt]: expiredKeyToken })))
+      .catch((error: unknown) => error)
+    expect((failure as { fields: { code?: string } }).fields.code).toBe('credential_invalid')
   })
 
   test('turns tenant persistence failures into a redacted availability error', async () => {

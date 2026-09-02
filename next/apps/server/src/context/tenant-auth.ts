@@ -1,6 +1,7 @@
 import { type Doc, Query } from '@nuvix/db'
 import { HEADERS } from '../shared/constants'
 import { BadRequestError, ServiceUnavailableError, UnauthorizedError } from '../shared/errors'
+import { type JwtPayload, verifyJwt } from '../utils/jwt'
 import type { AuthMode } from './auth'
 import {
   type ParsedCredential,
@@ -224,7 +225,88 @@ async function apiKey(
   })
 }
 
-/** Concrete tenant-local auth. JWTs remain fail-closed until tenant key storage lands. */
+async function jwt(
+  input: TenantAuthInput,
+  token: string,
+  model: TenantAuthModel,
+  now: Date,
+): Promise<ProjectAuthContext> {
+  const jwtFields = model.fields.jwtKeys
+  const keys = await input.documents
+    .find(model.collections.jwtKeys, [
+      Query.select([jwtFields.signingKey, jwtFields.expiresAt, jwtFields.active]),
+      Query.limit(20),
+    ])
+    .catch(() => {
+      throw unavailable()
+    })
+
+  const nowSeconds = Math.floor(now.getTime() / 1000)
+  let verifiedPayload: JwtPayload | null = null
+
+  for (const keyDoc of keys) {
+    const expiresAt = date(keyDoc.get(jwtFields.expiresAt))
+    if (expiresAt && expiresAt.getTime() <= now.getTime()) {
+      continue
+    }
+    const secret = keyDoc.get(jwtFields.signingKey)
+    if (typeof secret !== 'string' || secret.length === 0) continue
+
+    const payload = await verifyJwt(token, secret, nowSeconds)
+    if (payload) {
+      verifiedPayload = payload
+      break
+    }
+  }
+
+  if (!verifiedPayload) throw invalid()
+
+  const sub = typeof verifiedPayload.sub === 'string' ? verifiedPayload.sub : null
+  if (!sub || sub.length === 0) throw invalid()
+
+  const expectedIssuer = `nuvix:${input.project.id}`
+  if (typeof verifiedPayload.iss === 'string' && verifiedPayload.iss !== expectedIssuer) {
+    throw invalid()
+  }
+
+  if (typeof verifiedPayload.aud === 'string' && verifiedPayload.aud !== 'nuvix:project') {
+    throw invalid()
+  }
+
+  const sid =
+    typeof verifiedPayload.sid === 'string'
+      ? verifiedPayload.sid
+      : typeof verifiedPayload.sessionId === 'string'
+        ? (verifiedPayload.sessionId as string)
+        : undefined
+
+  if (sid) {
+    const sessionFields = model.fields.sessions
+    const sessionDoc = await get(input.documents, model.collections.sessions, sid, [
+      sessionFields.userId,
+      sessionFields.expiresAt,
+      sessionFields.revokedAt,
+    ])
+    if (
+      sessionDoc.empty() ||
+      sessionDoc.get(sessionFields.userId) !== sub ||
+      !active(sessionDoc.get(sessionFields.expiresAt), sessionDoc.get(sessionFields.revokedAt), now)
+    ) {
+      throw invalid()
+    }
+  }
+
+  const claims = await userClaims(input.documents, sub, model)
+  return Object.freeze({
+    type: 'jwt',
+    userId: sub,
+    ...(sid ? { sessionId: sid } : {}),
+    scopes: Object.freeze([]),
+    ...claims,
+  })
+}
+
+/** Concrete tenant-local auth resolver with strict session, API key, and JWT verification. */
 export function createTenantAuthResolver(options: TenantAuthOptions = {}): TenantAuthResolver {
   const model = options.model ?? TENANT_AUTH_MODEL
   const now = options.now ?? (() => new Date())
@@ -247,8 +329,10 @@ export function createTenantAuthResolver(options: TenantAuthOptions = {}): Tenan
       if (credentials[0] === HEADERS.apiKey) {
         return await apiKey(input, input.headers.get(HEADERS.apiKey)!, model, now())
       }
+      if (credentials[0] === HEADERS.jwt) {
+        return await jwt(input, input.headers.get(HEADERS.jwt)!, model, now())
+      }
 
-      // Tenant signing-key storage and strict JWT claims are implemented in Phase 4.
       throw invalid()
     },
   })

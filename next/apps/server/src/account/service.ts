@@ -6,7 +6,9 @@ import { translatePackageError } from '../infrastructure/package-errors'
 import { AppError, ConflictError, NotFoundError, UnauthorizedError } from '../shared/errors'
 import type { TeamPreferences } from '../teams/service'
 import type { UserResponse } from '../users/service'
+import { signJwt } from '../utils/jwt'
 import { hashPassword, verifyPassword } from '../utils/passwords'
+import type { JwtResponse } from './contracts'
 import type { AccountDocuments } from './documents'
 
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
@@ -175,6 +177,71 @@ function userPermissions(userId: string) {
     Permission.update(Role.user(userId)),
     Permission.delete(Role.user(userId)),
   ]
+}
+
+async function getOrGenerateSigningKey(
+  documents: AccountDocuments,
+  now: Date,
+  createId: () => string,
+): Promise<string> {
+  const jwtFields = TENANT_AUTH_MODEL.fields.jwtKeys
+  const keys = await documents.findJwtKeys([Query.equal(jwtFields.active, [true]), Query.limit(1)])
+  const firstKey = keys[0]
+  if (firstKey) {
+    const existingSecret = firstKey.get(jwtFields.signingKey)
+    if (typeof existingSecret === 'string' && existingSecret.length > 0) {
+      return existingSecret
+    }
+  }
+
+  const secretBytes = crypto.getRandomValues(new Uint8Array(32))
+  const secret = Buffer.from(secretBytes).toString('base64url')
+  const keyId = createId()
+  await documents.createJwtKey(
+    new Doc({
+      $id: keyId,
+      [jwtFields.signingKey]: secret,
+      [jwtFields.algorithm]: 'HS256',
+      [jwtFields.active]: true,
+      $createdAt: now,
+      $updatedAt: now,
+    }),
+  )
+  return secret
+}
+
+async function rotateTenantSigningKey(
+  documents: AccountDocuments,
+  now: Date,
+  createId: () => string,
+): Promise<string> {
+  const jwtFields = TENANT_AUTH_MODEL.fields.jwtKeys
+  const activeKeys = await documents.findJwtKeys([Query.equal(jwtFields.active, [true])])
+  const retireExpiration = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  for (const k of activeKeys) {
+    await documents.updateJwtKey(
+      k.getId(),
+      new Doc({
+        [jwtFields.active]: false,
+        [jwtFields.expiresAt]: retireExpiration,
+      }),
+    )
+  }
+
+  const secretBytes = crypto.getRandomValues(new Uint8Array(32))
+  const secret = Buffer.from(secretBytes).toString('base64url')
+  const keyId = createId()
+  await documents.createJwtKey(
+    new Doc({
+      $id: keyId,
+      [jwtFields.signingKey]: secret,
+      [jwtFields.algorithm]: 'HS256',
+      [jwtFields.active]: true,
+      $createdAt: now,
+      $updatedAt: now,
+    }),
+  )
+  return secret
 }
 
 export function createAccountService(options: AccountServiceOptions = {}) {
@@ -546,6 +613,56 @@ export function createAccountService(options: AccountServiceOptions = {}) {
         ),
       )
       return await self.createSessionForUser(documents, userId)
+    },
+
+    async createJWT(
+      documents: AccountDocuments,
+      projectId: string,
+      userId: string,
+      sessionId?: string,
+      durationSeconds: number = 900,
+    ): Promise<JwtResponse> {
+      const user = await operation('verify user for jwt', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+      if (!user.get(userFields.status, true)) throw userBlocked()
+
+      if (sessionId) {
+        const session = await operation('verify session for jwt', () =>
+          documents.getSession(sessionId),
+        )
+        if (
+          session.empty() ||
+          session.get(sessionFields.userId) !== userId ||
+          session.get(sessionFields.revokedAt) !== null
+        ) {
+          throw sessionNotFound()
+        }
+      }
+
+      const secret = await operation('get signing key', () =>
+        getOrGenerateSigningKey(documents, now(), createId),
+      )
+
+      const payload: Record<string, unknown> = {
+        sub: userId,
+        userId,
+        iss: `nuvix:${projectId}`,
+        aud: 'nuvix:project',
+      }
+      if (sessionId) {
+        payload.sid = sessionId
+        payload.sessionId = sessionId
+      }
+
+      const token = await signJwt(payload as never, secret, durationSeconds)
+      return { jwt: token }
+    },
+
+    async rotateSigningKey(documents: AccountDocuments): Promise<{ secret: string }> {
+      const secret = await operation('rotate signing key', () =>
+        rotateTenantSigningKey(documents, now(), createId),
+      )
+      return { secret }
     },
   }
 

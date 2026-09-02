@@ -147,6 +147,21 @@ export function createTenantAuthCollectionDefinitions(
       permissions: [],
       documentSecurity: false,
     },
+    {
+      id: collections.jwtKeys,
+      attributes: [
+        string(fields.jwtKeys.signingKey, 256),
+        string(fields.jwtKeys.algorithm, 32),
+        boolean(fields.jwtKeys.active, true),
+        timestamp(fields.jwtKeys.expiresAt, false),
+      ],
+      indexes: [
+        index('active', IndexType.Key, [fields.jwtKeys.active]),
+        index('expires_at', IndexType.Key, [fields.jwtKeys.expiresAt]),
+      ],
+      permissions: [],
+      documentSecurity: false,
+    },
   ]
 }
 

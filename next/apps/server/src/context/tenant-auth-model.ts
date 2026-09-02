@@ -4,6 +4,7 @@ export interface TenantAuthModel {
     readonly sessions: string
     readonly memberships: string
     readonly apiKeys: string
+    readonly jwtKeys: string
   }
   readonly fields: {
     readonly users: {
@@ -45,6 +46,12 @@ export interface TenantAuthModel {
       readonly expiresAt: string
       readonly revokedAt: string
     }
+    readonly jwtKeys: {
+      readonly signingKey: string
+      readonly algorithm: string
+      readonly active: string
+      readonly expiresAt: string
+    }
   }
 }
 
@@ -54,6 +61,7 @@ export const TENANT_AUTH_MODEL = {
     sessions: 'sessions',
     memberships: 'memberships',
     apiKeys: 'api_keys',
+    jwtKeys: 'jwt_keys',
   },
   fields: {
     users: {
@@ -94,6 +102,12 @@ export const TENANT_AUTH_MODEL = {
       enabled: 'enabled',
       expiresAt: 'expiresAt',
       revokedAt: 'revokedAt',
+    },
+    jwtKeys: {
+      signingKey: 'signingKey',
+      algorithm: 'algorithm',
+      active: 'active',
+      expiresAt: 'expiresAt',
     },
   },
 } as const satisfies TenantAuthModel

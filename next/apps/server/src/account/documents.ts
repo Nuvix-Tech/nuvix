@@ -23,6 +23,11 @@ export interface AccountDocuments {
   deleteMembership(membershipId: string): Promise<boolean>
   decreaseTeamTotal(teamId: string): Promise<Doc>
 
+  // JWT signing keys
+  findJwtKeys(queries?: Query[]): Promise<Doc[]>
+  createJwtKey(document: Doc): Promise<Doc>
+  updateJwtKey(keyId: string, document: Doc): Promise<Doc>
+
   // Transaction support
   transaction<Result>(operation: (documents: AccountDocuments) => Promise<Result>): Promise<Result>
 }
@@ -31,6 +36,7 @@ export function accountDocuments(session: Session): AccountDocuments {
   const usersCollection = TENANT_AUTH_MODEL.collections.users
   const sessionsCollection = TENANT_AUTH_MODEL.collections.sessions
   const membershipsCollection = TENANT_AUTH_MODEL.collections.memberships
+  const jwtKeysCollection = TENANT_AUTH_MODEL.collections.jwtKeys
   const teamsCollection = TEAM_MODEL.collection
   const teamTotalField = TEAM_MODEL.fields.total
 
@@ -56,6 +62,11 @@ export function accountDocuments(session: Session): AccountDocuments {
       session.deleteDocument(membershipsCollection, membershipId),
     decreaseTeamTotal: (teamId: string) =>
       session.decreaseDocumentAttribute(teamsCollection, teamId, teamTotalField, 1, 0),
+
+    findJwtKeys: (queries?: Query[]) => session.find(jwtKeysCollection, queries),
+    createJwtKey: (document: Doc) => session.createDocument(jwtKeysCollection, document),
+    updateJwtKey: (keyId: string, document: Doc) =>
+      session.updateDocument(jwtKeysCollection, keyId, document),
 
     transaction: <Result>(operation: (documents: AccountDocuments) => Promise<Result>) =>
       session.withTransaction((tx) => operation(accountDocuments(tx))),

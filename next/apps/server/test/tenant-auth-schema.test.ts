@@ -44,6 +44,7 @@ describe('tenant auth schema', () => {
       'sessions',
       'memberships',
       'api_keys',
+      'jwt_keys',
     ])
     expect(
       state.created.flatMap(({ indexes = [] }) => indexes.map((item) => item.get('type'))),
@@ -60,6 +61,7 @@ describe('tenant auth schema', () => {
     expect(attributes).toContain('secretSalt')
     expect(attributes).toContain('passwordHash')
     expect(attributes).toContain('passwordUpdate')
+    expect(attributes).toContain('signingKey')
     expect(attributes).not.toContain('secret')
     expect(attributes).not.toContain('password')
     expect(attributes).toEqual(expect.arrayContaining(['name', 'email', 'phone', 'prefs']))

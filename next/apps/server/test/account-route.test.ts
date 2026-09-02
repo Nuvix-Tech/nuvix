@@ -70,6 +70,7 @@ function probe(auth: ProjectAuthContext) {
     deleteSession: called('deleteSession', undefined),
     deleteSessions: called('deleteSessions', undefined),
     createAnonymousSession: called('createAnonymousSession', SESSION),
+    createJWT: called('createJWT', { jwt: 'mock.jwt.token' }),
   } as unknown as AccountService
 
   const app = new Elysia({ prefix: '/v2' })
@@ -231,5 +232,18 @@ describe('account routes', () => {
     const conflictRes = await authState.client.v2.account.sessions.anonymous.post({})
     expect(conflictRes.status).toBe(409)
     expect(authState.calls).toEqual([])
+  })
+
+  test('creates JWT for authenticated session and rejects unauthenticated caller', async () => {
+    const sessionState = probe(SESSION_AUTH)
+    const res = await sessionState.client.v2.account.jwt.post({})
+    expect(res.status).toBe(201)
+    expect(res.data?.jwt).toBe('mock.jwt.token')
+    expect(sessionState.calls).toEqual(['createJWT'])
+
+    const guestState = probe(GUEST_AUTH)
+    const rejectRes = await guestState.client.v2.account.jwt.post({})
+    expect(rejectRes.status).toBe(401)
+    expect(guestState.calls).toEqual([])
   })
 })

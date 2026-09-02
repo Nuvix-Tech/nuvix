@@ -61,6 +61,7 @@ export const TENANT_FIXTURE_COLLECTIONS = Object.freeze([
   TENANT_AUTH_MODEL.collections.sessions,
   TENANT_AUTH_MODEL.collections.memberships,
   TENANT_AUTH_MODEL.collections.apiKeys,
+  TENANT_AUTH_MODEL.collections.jwtKeys,
   TEAM_MODEL.collection,
 ] as const)
 

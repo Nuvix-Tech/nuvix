@@ -95,6 +95,7 @@ function probe(auth: ProjectAuthContext) {
     }),
     deleteSession: called('deleteSession', undefined),
     deleteSessions: called('deleteSessions', undefined),
+    createJwt: called('createJwt', { jwt: 'mock.admin.jwt' }),
   } as unknown as UserService
   const app = new Elysia({ prefix: '/v2' })
     .use(
@@ -358,5 +359,45 @@ describe('users routes', () => {
     expect(deleteAll.status).toBe(204)
 
     expect(writeOnly.calls).toEqual(['createSession', 'deleteSession', 'deleteSessions'])
+  })
+
+  test('creates a JWT for user with users.write permission', async () => {
+    const { app, calls } = probe({
+      type: 'apiKey',
+      keyId: 'key_write',
+      mode: 'admin',
+      scopes: ['users.write'],
+    })
+    const res = await app.handle(
+      new Request('http://localhost/v2/users/user_a/jwts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ duration: 600 }),
+      }),
+    )
+
+    expect(res.status).toBe(201)
+    const data = (await res.json()) as { jwt: string }
+    expect(data.jwt).toBe('mock.admin.jwt')
+    expect(calls).toEqual(['createJwt'])
+  })
+
+  test('rejects JWT creation for user without users.write permission', async () => {
+    const { app, calls } = probe({
+      type: 'apiKey',
+      keyId: 'key_read',
+      mode: 'admin',
+      scopes: ['users.read'],
+    })
+    const res = await app.handle(
+      new Request('http://localhost/v2/users/user_a/jwts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ duration: 600 }),
+      }),
+    )
+
+    expect(res.status).toBe(403)
+    expect(calls).toEqual([])
   })
 })

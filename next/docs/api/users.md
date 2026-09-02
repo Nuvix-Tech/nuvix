@@ -48,6 +48,7 @@ Phase 4 without changing route/service boundaries.
 | PUT    | `/v2/users/:userId/labels`      | Replace labels                                |
 | PATCH  | `/v2/users/:userId/status`      | Activate/block                                |
 | GET    | `/v2/users/:userId/memberships` | List user memberships (with team projection)  |
+| POST   | `/v2/users/:userId/jwts`        | Issue JWT for user (admin)                    |
 | GET    | `/v2/users/:userId/logs`        | Deferred                                      |
 
 ### Legacy hash variants — REMOVED (D29)

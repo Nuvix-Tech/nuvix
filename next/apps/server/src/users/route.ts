@@ -5,6 +5,8 @@ import {
   CreateArgon2UserBody,
   CreateBcryptUserBody,
   CreateUserBody,
+  CreateUserJwtBody,
+  JwtResponse,
   UpdateEmailBody,
   UpdateLabelsBody,
   UpdateNameBody,
@@ -295,6 +297,27 @@ export function userRoutes(
           await service.deleteSession(account, params.userId, params.sessionId)
           set.status = 204
           return null
+        }),
+    )
+    .post(
+      '/users/:userId/jwts',
+      {
+        params: UserParams,
+        body: CreateUserJwtBody,
+        response: JwtResponse,
+        detail: { tags: ['users'] },
+      },
+      async ({ params, body, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account, project }) => {
+          authorizeUsers(auth, 'users.write')
+          set.status = 201
+          return await service.createJwt(
+            account,
+            project.id,
+            params.userId,
+            body.duration ?? 900,
+            body.sessionId,
+          )
         }),
     )
 }

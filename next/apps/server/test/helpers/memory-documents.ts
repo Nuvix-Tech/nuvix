@@ -6,6 +6,7 @@ export interface MemoryAccountDocuments extends AccountDocuments {
   readonly sessions: Map<string, Doc>
   readonly memberships: Map<string, Doc>
   readonly teamTotals: Map<string, number>
+  readonly jwtKeys: Map<string, Doc>
 }
 
 export function memoryDocuments(): MemoryAccountDocuments {
@@ -13,6 +14,7 @@ export function memoryDocuments(): MemoryAccountDocuments {
   const sessions = new Map<string, Doc>()
   const memberships = new Map<string, Doc>()
   const teamTotals = new Map<string, number>()
+  const jwtKeys = new Map<string, Doc>()
 
   const self: AccountDocuments = {
     getUser: async (id: string) => users.get(id) ?? new Doc(),
@@ -117,6 +119,41 @@ export function memoryDocuments(): MemoryAccountDocuments {
       return new Doc({ $id: teamId, total: next })
     },
 
+    findJwtKeys: async (queries: Query[] = []) => {
+      let result = [...jwtKeys.values()]
+      for (const q of queries) {
+        if (q.getMethod() === 'equal' && q.getAttribute() === 'active') {
+          const target = (q.getValues() as boolean[])[0]
+          result = result.filter((k) => k.get('active') === target)
+        }
+      }
+      return result
+    },
+    createJwtKey: async (doc: Doc) => {
+      const now = new Date()
+      const stored = new Doc({
+        ...doc.getAll(),
+        $id: doc.getId(),
+        $createdAt: doc.createdAt() ?? now,
+        $updatedAt: doc.updatedAt() ?? now,
+      })
+      jwtKeys.set(stored.getId(), stored)
+      return stored
+    },
+    updateJwtKey: async (id: string, doc: Doc) => {
+      const existing = jwtKeys.get(id) ?? new Doc({ $id: id })
+      const now = new Date()
+      const merged = new Doc({
+        ...existing.getAll(),
+        ...doc.getAll(),
+        $id: id,
+        $createdAt: existing.createdAt() ?? now,
+        $updatedAt: now,
+      })
+      jwtKeys.set(id, merged)
+      return merged
+    },
+
     transaction: async <Result>(op: (docs: AccountDocuments) => Promise<Result>) => op(self),
   }
 
@@ -126,5 +163,6 @@ export function memoryDocuments(): MemoryAccountDocuments {
     sessions,
     memberships,
     teamTotals,
+    jwtKeys,
   }
 }

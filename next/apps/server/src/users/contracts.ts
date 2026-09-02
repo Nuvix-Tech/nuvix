@@ -139,3 +139,13 @@ export const UserSessionParams = t.Object({
   userId: UserId,
   sessionId: SessionId,
 })
+
+export const CreateUserJwtBody = t.Object(
+  {
+    duration: t.Optional(t.Integer({ minimum: 1, maximum: 3600 })),
+    sessionId: t.Optional(SessionId),
+  },
+  { additionalProperties: false },
+)
+
+export { JwtResponse } from '../account/contracts'

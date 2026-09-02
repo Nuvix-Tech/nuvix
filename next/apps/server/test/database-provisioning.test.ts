@@ -132,6 +132,8 @@ describe('database provisioning', () => {
       'create:memberships',
       'exists:api_keys',
       'create:api_keys',
+      'exists:jwt_keys',
+      'create:jwt_keys',
       'exists:teams',
       'create:teams',
     ])

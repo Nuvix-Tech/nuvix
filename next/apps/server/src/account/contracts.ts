@@ -85,4 +85,14 @@ export const UpdateAccountPrefsBody = t.Object(
   { additionalProperties: false },
 )
 
+export const JwtResponse = t.Object(
+  {
+    jwt: t.String(),
+  },
+  { additionalProperties: false },
+)
+export interface JwtResponse {
+  readonly jwt: string
+}
+
 export { UserResponse }

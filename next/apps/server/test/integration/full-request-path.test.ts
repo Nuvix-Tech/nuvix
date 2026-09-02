@@ -1109,6 +1109,33 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     expect(accountSessionsListA.status).toBe(200)
     expect(accountSessionsListA.data?.data.length).toBeGreaterThanOrEqual(1)
 
+    const jwtResultA = observe(
+      await client.v2.account.jwt.post({}, { headers: newAccountHeadersA }),
+    )
+    expect(jwtResultA.status).toBe(201)
+    expect(jwtResultA.data?.jwt).toBeDefined()
+    expect(jwtResultA.data?.jwt.split('.')).toHaveLength(3)
+
+    const jwtHeadersA = {
+      'x-nuvix-publishable-key': fixture.tenants.a.publishableKey,
+      'x-nuvix-jwt': jwtResultA.data?.jwt ?? '',
+    }
+
+    const accountProfileViaJwtA = observe(await client.v2.account.get({ headers: jwtHeadersA }))
+    expect(accountProfileViaJwtA.status).toBe(200)
+    expect(accountProfileViaJwtA.data?.$id).toBe(registeredAccountA.data?.$id)
+
+    const tamperedJwtHeadersA = {
+      'x-nuvix-publishable-key': fixture.tenants.a.publishableKey,
+      'x-nuvix-jwt': `${jwtResultA.data?.jwt}tampered`,
+    }
+    const tamperedJwtA = observe(await client.v2.account.get({ headers: tamperedJwtHeadersA }))
+    expectProblem(tamperedJwtA, {
+      status: 401,
+      type: '/errors/unauthorized',
+      code: 'credential_invalid',
+    })
+
     const logoutCurrentA = observe(
       await client.v2.account.sessions.current.delete(undefined, { headers: newAccountHeadersA }),
     )
@@ -1116,6 +1143,13 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
 
     const accessAfterLogoutA = observe(await client.v2.account.get({ headers: newAccountHeadersA }))
     expectProblem(accessAfterLogoutA, {
+      status: 401,
+      type: '/errors/unauthorized',
+      code: 'credential_invalid',
+    })
+
+    const jwtAfterLogoutA = observe(await client.v2.account.get({ headers: jwtHeadersA }))
+    expectProblem(jwtAfterLogoutA, {
       status: 401,
       type: '/errors/unauthorized',
       code: 'credential_invalid',

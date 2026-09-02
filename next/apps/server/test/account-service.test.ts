@@ -300,4 +300,33 @@ describe('account service', () => {
     const storedWithPassword = docs.users.get(session.userId)
     expect(storedWithPassword?.get('passwordHash')).toStartWith('$argon2id$')
   })
+
+  test('creates tenant JWT with active session and signing key bootstrap', async () => {
+    const docs = memoryDocuments()
+    await service.register(docs, {
+      userId: 'user_1',
+      email: 'user@example.com',
+      password: 'password123',
+    })
+    const session = await service.createEmailSession(docs, {
+      email: 'user@example.com',
+      password: 'password123',
+    })
+
+    const jwtRes = await service.createJWT(docs, 'project_a', 'user_1', session.$id)
+    expect(jwtRes.jwt).toBeDefined()
+    expect(typeof jwtRes.jwt).toBe('string')
+    expect(jwtRes.jwt.split('.')).toHaveLength(3)
+
+    expect(docs.jwtKeys.size).toBe(1)
+    const storedKey = [...docs.jwtKeys.values()][0]!
+    expect(storedKey.get('active')).toBe(true)
+    expect(storedKey.get('signingKey')).toBeDefined()
+
+    const rotateRes = await service.rotateSigningKey(docs)
+    expect(rotateRes.secret).toBeDefined()
+    const updatedPriorKey = docs.jwtKeys.get(storedKey.getId())
+    expect(updatedPriorKey?.get('active')).toBe(false)
+    expect(updatedPriorKey?.get('expiresAt')).toBeDefined()
+  })
 })

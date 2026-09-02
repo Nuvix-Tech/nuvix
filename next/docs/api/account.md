@@ -103,6 +103,22 @@ claims matching an active, unblocked user (`status: true`).
 - **Response** (`200 OK`): `UserResponse`.
 - **Errors**: `401 /errors/unauthorized` with `code: "invalid_credentials"` if `oldPassword` is incorrect.
 
+### `POST /v2/account/jwt`
+
+- **Headers**: `x-nuvix-publishable-key`, `x-nuvix-session`
+- **Request Body**: empty
+- **Response** (`201 Created`):
+  ```json
+  {
+    "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+  ```
+- **Behavior**: Issues a short-lived (15-minute) JSON Web Token signed with the tenant's dedicated HMAC signing key (`jwt_keys`). The token encodes `sub: userId`, `sid: sessionId`, `iss: nuvix:<projectId>`, `aud: nuvix:project`, `iat`, and `exp`.
+- **Usage**: Token can be passed in `x-nuvix-jwt` header to authenticate subsequent requests without session secrets.
+- **Errors**:
+  - `401 /errors/unauthorized` (`code: "credential_invalid"`) if session is missing, expired, or revoked.
+  - `401 /errors/unauthorized` (`code: "user_blocked"`) if user is disabled (`status: false`).
+
 ---
 
 ## 5. Endpoints — Account Sessions (`/v2/account/sessions`)

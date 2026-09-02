@@ -1,4 +1,5 @@
 import { Doc, ID, Permission, Query, Role } from '@nuvix/db'
+import type { JwtResponse } from '../account/contracts'
 import type { AccountDocuments } from '../account/documents'
 import {
   type AccountService,
@@ -574,6 +575,16 @@ export function createUserService(options: UserServiceOptions = {}) {
 
     async deleteSessions(documents: AccountDocuments, userId: string): Promise<void> {
       await account.deleteSessions(documents, userId)
+    },
+
+    async createJwt(
+      documents: AccountDocuments,
+      projectId: string,
+      userId: string,
+      durationSeconds = 900,
+      sessionId?: string,
+    ): Promise<JwtResponse> {
+      return await account.createJWT(documents, projectId, userId, sessionId, durationSeconds)
     },
   }
 }

@@ -6,6 +6,7 @@ import { Preferences } from '../teams/contracts'
 import {
   CreateAccountBody,
   CreateEmailSessionBody,
+  JwtResponse,
   SessionListQuery,
   SessionListResponse,
   SessionParams,
@@ -124,6 +125,23 @@ export function accountRoutes(
         set.status = 204
         return null
       }),
+    )
+    .post(
+      '/account/jwt',
+      {
+        response: JwtResponse,
+      },
+      async ({ request, set }) =>
+        requests.withProject(request.headers, async ({ auth, account, project }) => {
+          if (auth.type !== 'session') {
+            throw new UnauthorizedError('Session authentication required to create a JWT', {
+              code: 'credential_invalid',
+              messageKey: 'errors.unauthorized',
+            })
+          }
+          set.status = 201
+          return await service.createJWT(account, project.id, auth.userId, auth.sessionId)
+        }),
     )
     .post(
       '/account/sessions/email',
