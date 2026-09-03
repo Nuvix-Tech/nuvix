@@ -376,9 +376,9 @@ Account registration, anonymous sessions, tenant JWT signing-key storage, token 
 
 ### Phase 6 — Async jobs
 
-- [ ] BullMQ over Bun adapter: audits, batch, deletes, logs, mails, messaging, stats
-- [ ] Cron scheduler on `Bun.cron`
-- [ ] Typed event emitter
+- [x] Memory-buffered batch queues and workers: audits, generic batch queues, cascade deletes, API access logs with deep sensitive data redaction, metrics aggregation, messaging and webhooks delivery
+- [x] Cron scheduler on `Bun.cron` (D22): native job scheduling, lifecycle control (`stop()`, `ref()`, `unref()`), manual triggers, and standard maintenance tasks (sessions, audits, stats, schedules)
+- [x] Typed event emitter: strongly typed `EventBus` with wildcard matching and ReDoS protection for asynchronous decoupled event handling
 
 ### Phase 7 — Platform app
 
