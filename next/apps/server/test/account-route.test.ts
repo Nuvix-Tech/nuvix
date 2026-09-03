@@ -71,6 +71,77 @@ function probe(auth: ProjectAuthContext) {
     deleteSessions: called('deleteSessions', undefined),
     createAnonymousSession: called('createAnonymousSession', SESSION),
     createJWT: called('createJWT', { jwt: 'mock.jwt.token' }),
+    updatePhone: called('updatePhone', USER),
+    updateStatus: called('updateStatus', USER),
+    createMagicUrlToken: called('createMagicUrlToken', {
+      $id: 'tok_1',
+      userId: 'user_a',
+      secret: 'sec_1',
+      expire: '2026-09-02T13:00:00.000Z',
+      $createdAt: '2026-09-02T12:00:00.000Z',
+    }),
+    confirmMagicUrlSession: called('confirmMagicUrlSession', SESSION),
+    createPhoneToken: called('createPhoneToken', {
+      $id: 'tok_2',
+      userId: 'user_a',
+      secret: '123456',
+      expire: '2026-09-02T13:00:00.000Z',
+      $createdAt: '2026-09-02T12:00:00.000Z',
+    }),
+    confirmPhoneSession: called('confirmPhoneSession', SESSION),
+    createVerification: called('createVerification', {
+      $id: 'tok_3',
+      userId: 'user_a',
+      secret: 'sec_3',
+      expire: '2026-09-02T13:00:00.000Z',
+      $createdAt: '2026-09-02T12:00:00.000Z',
+    }),
+    confirmVerification: called('confirmVerification', {
+      $id: 'tok_3',
+      userId: 'user_a',
+      secret: '',
+      expire: '2026-09-02T13:00:00.000Z',
+      $createdAt: '2026-09-02T12:00:00.000Z',
+    }),
+    createPasswordRecovery: called('createPasswordRecovery', {
+      $id: 'tok_4',
+      userId: 'user_a',
+      secret: 'sec_4',
+      expire: '2026-09-02T13:00:00.000Z',
+      $createdAt: '2026-09-02T12:00:00.000Z',
+    }),
+    confirmPasswordRecovery: called('confirmPasswordRecovery', {
+      $id: 'tok_4',
+      userId: 'user_a',
+      secret: '',
+      expire: '2026-09-02T13:00:00.000Z',
+      $createdAt: '2026-09-02T12:00:00.000Z',
+    }),
+    updateMfa: called('updateMfa', USER),
+    getMfaFactors: called('getMfaFactors', {
+      totp: true,
+      email: true,
+      phone: false,
+      recoveryCodes: true,
+    }),
+    createMfaAuthenticator: called('createMfaAuthenticator', {
+      $id: 'auth_1',
+      type: 'totp',
+      secret: 'secret',
+      uri: 'otpauth://...',
+    }),
+    verifyMfaAuthenticator: called('verifyMfaAuthenticator', USER),
+    deleteMfaAuthenticator: called('deleteMfaAuthenticator', undefined),
+    createMfaRecoveryCodes: called('createMfaRecoveryCodes', { recoveryCodes: ['c1', 'c2'] }),
+    updateMfaRecoveryCodes: called('updateMfaRecoveryCodes', { recoveryCodes: ['c1', 'c2'] }),
+    getMfaRecoveryCodes: called('getMfaRecoveryCodes', { recoveryCodes: ['c1', 'c2'] }),
+    createMfaChallenge: called('createMfaChallenge', {
+      $id: 'ch_1',
+      userId: 'user_a',
+      factor: 'totp',
+      expiresAt: '2026-09-02T12:10:00.000Z',
+    }),
+    verifyMfaChallenge: called('verifyMfaChallenge', true),
   } as unknown as AccountService
 
   const app = new Elysia({ prefix: '/v2' })
@@ -245,5 +316,130 @@ describe('account routes', () => {
     const rejectRes = await guestState.client.v2.account.jwt.post({})
     expect(rejectRes.status).toBe(401)
     expect(guestState.calls).toEqual([])
+  })
+
+  test('updates phone and account status', async () => {
+    const { calls, client } = probe(SESSION_AUTH)
+
+    const phoneRes = await client.v2.account.phone.patch({
+      phone: '+1234567890',
+      password: 'password123',
+    })
+    expect(phoneRes.status).toBe(200)
+
+    const statusRes = await client.v2.account.status.patch({
+      status: false,
+    })
+    expect(statusRes.status).toBe(200)
+
+    expect(calls).toEqual(['updatePhone', 'updateStatus'])
+  })
+
+  test('magic-URL token creation and confirmation routes', async () => {
+    const { calls, client } = probe(GUEST_AUTH)
+
+    const tokenRes = await client.v2.account.tokens['magic-url'].post({
+      userId: 'user_a',
+    })
+    expect(tokenRes.status).toBe(201)
+    expect(tokenRes.data?.$id).toBe('tok_1')
+
+    const sessionRes = await client.v2.account.sessions['magic-url'].put({
+      userId: 'user_a',
+      secret: 'sec_1',
+    })
+    expect(sessionRes.status).toBe(200)
+    expect(sessionRes.data?.$id).toBe('session_1')
+
+    expect(calls).toEqual(['createMagicUrlToken', 'confirmMagicUrlSession'])
+  })
+
+  test('phone token creation and confirmation routes', async () => {
+    const { calls, client } = probe(GUEST_AUTH)
+
+    const tokenRes = await client.v2.account.tokens.phone.post({
+      userId: 'user_a',
+    })
+    expect(tokenRes.status).toBe(201)
+
+    const sessionRes = await client.v2.account.sessions.phone.put({
+      userId: 'user_a',
+      secret: '123456',
+    })
+    expect(sessionRes.status).toBe(200)
+
+    expect(calls).toEqual(['createPhoneToken', 'confirmPhoneSession'])
+  })
+
+  test('email verification routes', async () => {
+    const { calls, client } = probe(SESSION_AUTH)
+
+    const createRes = await client.v2.account.verification.post({})
+    expect(createRes.status).toBe(201)
+
+    const confirmRes = await client.v2.account.verification.put({
+      userId: 'user_a',
+      secret: 'sec_3',
+    })
+    expect(confirmRes.status).toBe(200)
+
+    expect(calls).toEqual(['createVerification', 'confirmVerification'])
+  })
+
+  test('password recovery routes', async () => {
+    const { calls, client } = probe(GUEST_AUTH)
+
+    const createRes = await client.v2.account.recovery.post({
+      email: 'user@example.com',
+    })
+    expect(createRes.status).toBe(201)
+
+    const confirmRes = await client.v2.account.recovery.put({
+      userId: 'user_a',
+      secret: 'sec_4',
+      password: 'new-password-123',
+    })
+    expect(confirmRes.status).toBe(200)
+
+    expect(calls).toEqual(['createPasswordRecovery', 'confirmPasswordRecovery'])
+  })
+
+  test('MFA management and challenge routes', async () => {
+    const { client } = probe(SESSION_AUTH)
+
+    const mfaRes = await client.v2.account.mfa.patch({ mfa: true })
+    expect(mfaRes.status).toBe(200)
+
+    const factorsRes = await client.v2.account.mfa.factors.get()
+    expect(factorsRes.status).toBe(200)
+    expect(factorsRes.data?.totp).toBe(true)
+
+    const authRes = await client.v2.account.mfa.authenticators({ type: 'totp' }).post({})
+    expect(authRes.status).toBe(201)
+    expect(authRes.data?.type).toBe('totp')
+
+    const verifyAuthRes = await client.v2.account.mfa.authenticators({ type: 'totp' }).put({
+      otp: '123456',
+    })
+    expect(verifyAuthRes.status).toBe(200)
+
+    const deleteAuthRes = await client.v2.account.mfa.authenticators({ type: 'totp' }).delete()
+    expect(deleteAuthRes.status).toBe(204)
+
+    const createCodesRes = await client.v2.account.mfa['recovery-codes'].post({})
+    expect(createCodesRes.status).toBe(201)
+
+    const getCodesRes = await client.v2.account.mfa['recovery-codes'].get()
+    expect(getCodesRes.status).toBe(200)
+
+    const challengeRes = await client.v2.account.mfa.challenge.post({ factor: 'totp' })
+    expect(challengeRes.status).toBe(201)
+
+    const verifyChallengeRes = await client.v2.account.mfa.challenge.put({
+      otp: '123456',
+      challengeId: 'ch_1',
+    })
+    expect(verifyChallengeRes.status).toBe(200)
+    expect(verifyChallengeRes.data?.success).toBe(true)
   })
 })

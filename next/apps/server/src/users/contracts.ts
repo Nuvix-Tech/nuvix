@@ -32,6 +32,7 @@ export const UserResponse = t.Object({
   prefs: Preferences,
   emailVerification: t.Boolean(),
   phoneVerification: t.Boolean(),
+  mfa: t.Optional(t.Boolean()),
   registration: t.String({ format: 'date-time' }),
   $createdAt: t.String({ format: 'date-time' }),
   $updatedAt: t.String({ format: 'date-time' }),
@@ -149,3 +150,25 @@ export const CreateUserJwtBody = t.Object(
 )
 
 export { JwtResponse } from '../account/contracts'
+
+export const UpdateMfaBody = t.Object({
+  mfa: t.Boolean(),
+})
+
+export const MfaFactorsResponse = t.Object({
+  totp: t.Boolean(),
+  email: t.Boolean(),
+  phone: t.Boolean(),
+  recoveryCode: t.Boolean(),
+})
+
+export const MfaRecoveryCodesResponse = t.Object({
+  $id: UserId,
+  total: t.Integer({ minimum: 0 }),
+  recoveryCodes: t.Optional(t.Array(t.String())),
+})
+
+export const MfaAuthenticatorParams = t.Object({
+  userId: UserId,
+  type: t.String(),
+})

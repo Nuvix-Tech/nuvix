@@ -10,6 +10,19 @@ export interface AccountDocuments {
   updateUser(userId: string, document: Doc): Promise<Doc>
   deleteUser(userId: string): Promise<boolean>
 
+  // Token operations
+  getToken(tokenId: string): Promise<Doc>
+  findTokens(queries?: Query[]): Promise<Doc[]>
+  createToken(document: Doc): Promise<Doc>
+  deleteToken(tokenId: string): Promise<boolean>
+
+  // Authenticator operations
+  getAuthenticator(authenticatorId: string): Promise<Doc>
+  findAuthenticators(queries?: Query[]): Promise<Doc[]>
+  createAuthenticator(document: Doc): Promise<Doc>
+  updateAuthenticator(authenticatorId: string, document: Doc): Promise<Doc>
+  deleteAuthenticator(authenticatorId: string): Promise<boolean>
+
   // Session operations
   getSession(sessionId: string): Promise<Doc>
   findSessions(queries?: Query[]): Promise<Doc[]>
@@ -37,6 +50,8 @@ export function accountDocuments(session: Session): AccountDocuments {
   const sessionsCollection = TENANT_AUTH_MODEL.collections.sessions
   const membershipsCollection = TENANT_AUTH_MODEL.collections.memberships
   const jwtKeysCollection = TENANT_AUTH_MODEL.collections.jwtKeys
+  const tokensCollection = TENANT_AUTH_MODEL.collections.tokens
+  const authenticatorsCollection = TENANT_AUTH_MODEL.collections.authenticators
   const teamsCollection = TEAM_MODEL.collection
   const teamTotalField = TEAM_MODEL.fields.total
 
@@ -47,6 +62,21 @@ export function accountDocuments(session: Session): AccountDocuments {
     updateUser: (userId: string, document: Doc) =>
       session.updateDocument(usersCollection, userId, document),
     deleteUser: (userId: string) => session.deleteDocument(usersCollection, userId),
+
+    getToken: (tokenId: string) => session.getDocument(tokensCollection, tokenId),
+    findTokens: (queries?: Query[]) => session.find(tokensCollection, queries),
+    createToken: (document: Doc) => session.createDocument(tokensCollection, document),
+    deleteToken: (tokenId: string) => session.deleteDocument(tokensCollection, tokenId),
+
+    getAuthenticator: (authenticatorId: string) =>
+      session.getDocument(authenticatorsCollection, authenticatorId),
+    findAuthenticators: (queries?: Query[]) => session.find(authenticatorsCollection, queries),
+    createAuthenticator: (document: Doc) =>
+      session.createDocument(authenticatorsCollection, document),
+    updateAuthenticator: (authenticatorId: string, document: Doc) =>
+      session.updateDocument(authenticatorsCollection, authenticatorId, document),
+    deleteAuthenticator: (authenticatorId: string) =>
+      session.deleteDocument(authenticatorsCollection, authenticatorId),
 
     getSession: (sessionId: string) => session.getDocument(sessionsCollection, sessionId),
     findSessions: (queries?: Query[]) => session.find(sessionsCollection, queries),

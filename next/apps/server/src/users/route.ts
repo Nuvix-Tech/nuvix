@@ -7,8 +7,12 @@ import {
   CreateUserBody,
   CreateUserJwtBody,
   JwtResponse,
+  MfaAuthenticatorParams,
+  MfaFactorsResponse,
+  MfaRecoveryCodesResponse,
   UpdateEmailBody,
   UpdateLabelsBody,
+  UpdateMfaBody,
   UpdateNameBody,
   UpdatePhoneBody,
   UpdatePrefsBody,
@@ -30,6 +34,86 @@ export function userRoutes(
   service: UserService = createUserService(),
 ) {
   return new Elysia({ name: 'user-routes' })
+    .patch(
+      '/users/:userId/mfa',
+      {
+        params: UserParams,
+        body: UpdateMfaBody,
+        response: UserResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, body, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeUsers(auth, 'users.write')
+          return await service.updateMfa(userDocuments(session), params.userId, body.mfa)
+        }),
+    )
+    .get(
+      '/users/:userId/mfa/factors',
+      {
+        params: UserParams,
+        response: MfaFactorsResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeUsers(auth, 'users.read')
+          return await service.getMfaFactors(userDocuments(session), params.userId)
+        }),
+    )
+    .get(
+      '/users/:userId/mfa/recovery-codes',
+      {
+        params: UserParams,
+        response: MfaRecoveryCodesResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeUsers(auth, 'users.read')
+          return await service.getMfaRecoveryCodes(userDocuments(session), params.userId)
+        }),
+    )
+    .patch(
+      '/users/:userId/mfa/recovery-codes',
+      {
+        params: UserParams,
+        response: MfaRecoveryCodesResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeUsers(auth, 'users.write')
+          return await service.regenerateMfaRecoveryCodes(userDocuments(session), params.userId)
+        }),
+    )
+    .put(
+      '/users/:userId/mfa/recovery-codes',
+      {
+        params: UserParams,
+        response: MfaRecoveryCodesResponse,
+        detail: { tags: ['users'] },
+      },
+      ({ params, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeUsers(auth, 'users.write')
+          return await service.regenerateMfaRecoveryCodes(userDocuments(session), params.userId)
+        }),
+    )
+    .delete(
+      '/users/:userId/mfa/authenticators/:type',
+      {
+        params: MfaAuthenticatorParams,
+        detail: { tags: ['users'] },
+      },
+      ({ params, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeUsers(auth, 'users.write')
+          await service.deleteMfaAuthenticator(userDocuments(session), params.userId, params.type)
+          set.status = 204
+        }),
+    )
+
     .post(
       '/users',
       {

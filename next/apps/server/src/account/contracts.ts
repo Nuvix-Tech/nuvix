@@ -1,6 +1,6 @@
 import { t } from 'elysia'
 import { Preferences } from '../teams/contracts'
-import { Email, Name, UserId, UserResponse } from '../users/contracts'
+import { Email, Name, Phone, UserId, UserResponse } from '../users/contracts'
 
 export const SessionId = t.String({
   minLength: 1,
@@ -85,6 +85,151 @@ export const UpdateAccountPrefsBody = t.Object(
   { additionalProperties: false },
 )
 
+export const UpdateAccountPhoneBody = t.Object(
+  {
+    phone: Phone,
+    password: Password,
+  },
+  { additionalProperties: false },
+)
+
+export const UpdateAccountStatusBody = t.Object(
+  {
+    status: t.Boolean(),
+  },
+  { additionalProperties: false },
+)
+
+export const CreateMagicUrlTokenBody = t.Object(
+  {
+    userId: UserId,
+    url: t.Optional(t.String()),
+  },
+  { additionalProperties: false },
+)
+
+export const ConfirmMagicUrlSessionBody = t.Object(
+  {
+    userId: UserId,
+    secret: t.String(),
+  },
+  { additionalProperties: false },
+)
+
+export const CreatePhoneTokenBody = t.Object(
+  {
+    userId: UserId,
+  },
+  { additionalProperties: false },
+)
+
+export const ConfirmPhoneSessionBody = t.Object(
+  {
+    userId: UserId,
+    secret: t.String(),
+  },
+  { additionalProperties: false },
+)
+
+export const CreateVerificationBody = t.Object(
+  {
+    url: t.Optional(t.String()),
+  },
+  { additionalProperties: false },
+)
+
+export const ConfirmVerificationBody = t.Object(
+  {
+    userId: UserId,
+    secret: t.String(),
+  },
+  { additionalProperties: false },
+)
+
+export const CreatePasswordRecoveryBody = t.Object(
+  {
+    email: Email,
+    url: t.Optional(t.String()),
+  },
+  { additionalProperties: false },
+)
+
+export const ConfirmPasswordRecoveryBody = t.Object(
+  {
+    userId: UserId,
+    secret: t.String(),
+    password: Password,
+  },
+  { additionalProperties: false },
+)
+
+export const TokenResponse = t.Object({
+  $id: t.String(),
+  userId: UserId,
+  secret: t.String(),
+  expire: t.String({ format: 'date-time' }),
+  $createdAt: t.String({ format: 'date-time' }),
+})
+
+export const UpdateAccountMfaBody = t.Object(
+  {
+    mfa: t.Boolean(),
+  },
+  { additionalProperties: false },
+)
+
+export const MfaFactorsResponse = t.Object({
+  totp: t.Boolean(),
+  email: t.Boolean(),
+  phone: t.Boolean(),
+  recoveryCodes: t.Boolean(),
+})
+
+export const MfaAuthenticatorResponse = t.Object({
+  $id: t.String(),
+  type: t.String(),
+  secret: t.String(),
+  uri: t.String(),
+})
+
+export const VerifyMfaAuthenticatorBody = t.Object(
+  {
+    otp: t.String({ minLength: 6, maxLength: 6 }),
+  },
+  { additionalProperties: false },
+)
+
+export const MfaRecoveryCodesResponse = t.Object({
+  recoveryCodes: t.Array(t.String()),
+})
+
+export const CreateMfaChallengeBody = t.Object(
+  {
+    factor: t.Union([
+      t.Literal('totp'),
+      t.Literal('recoveryCode'),
+      t.Literal('email'),
+      t.Literal('phone'),
+    ]),
+  },
+  { additionalProperties: false },
+)
+
+export const VerifyMfaChallengeBody = t.Object(
+  {
+    challengeId: t.Optional(t.String()),
+    otp: t.String(),
+  },
+  { additionalProperties: false },
+)
+
+export const MfaChallengeResponse = t.Object({
+  $id: t.String(),
+  userId: UserId,
+  factor: t.String(),
+  expiresAt: t.String({ format: 'date-time' }),
+})
+
 export const JwtResponse = t.Object(
   {
     jwt: t.String(),
@@ -95,4 +240,4 @@ export interface JwtResponse {
   readonly jwt: string
 }
 
-export { UserResponse }
+export { Phone, UserResponse }

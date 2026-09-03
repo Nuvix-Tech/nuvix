@@ -85,6 +85,14 @@ export interface StorageService {
     bucketId: string,
     key: string,
     range?: RangeOption,
+    action?: 'preview' | 'view' | 'download',
+    query?: {
+      width?: number
+      height?: number
+      quality?: number
+      format?: 'jpg' | 'jpeg' | 'png' | 'webp'
+      gravity?: string
+    },
   ): Promise<{
     object: Doc
     data: Buffer
@@ -384,7 +392,7 @@ export function createStorageService(
       return await documents.createObject(newDoc)
     },
 
-    async getObject(documents, devices, auth, bucketId, rawKey, range) {
+    async getObject(documents, devices, auth, bucketId, rawKey, range, action, query) {
       const key = normalizeKey(rawKey)
       const bucket = await this.getBucket(documents, bucketId)
       const object = await documents.findObjectByBucketAndKey(bucketId, key)
@@ -414,7 +422,7 @@ export function createStorageService(
       const device = devices.get()
       const totalSize = Number(object.get(fields.objects.size, 0))
 
-      if (range && (range.start !== undefined || range.end !== undefined)) {
+      if (range && (range.start !== undefined || range.end !== undefined) && action !== 'preview') {
         const start = Math.max(range.start ?? 0, 0)
         const end = Math.min(range.end ?? totalSize - 1, totalSize - 1)
         const length = Math.max(end - start + 1, 0)
@@ -422,7 +430,41 @@ export function createStorageService(
         return { object, data, range: { start, end, total: totalSize } }
       }
 
-      const data = await device.read(devicePath)
+      let data = await device.read(devicePath)
+
+      if (action === 'preview') {
+        try {
+          let img = new Bun.Image(data)
+          if (query?.width || query?.height) {
+            // Check bun-types signature; if only width is provided, height can be undefined? No, we supply both or 0?
+            // Wait, we can supply (width, height) and undefined is fine? Wait, img.resize() does not take undefined.
+            if (query.width && query.height) {
+              img = img.resize(query.width, query.height)
+            } else if (query.width) {
+              img = img.resize(query.width, query.width)
+            } else if (query.height) {
+              img = img.resize(query.height, query.height)
+            }
+          }
+          if (query?.format) {
+            const q = query.quality ?? 80
+            if (query.format === 'jpg' || query.format === 'jpeg') {
+              img = img.jpeg({ quality: q })
+              object.set(fields.objects.mimeType, 'image/jpeg')
+            } else if (query.format === 'webp') {
+              img = img.webp({ quality: q })
+              object.set(fields.objects.mimeType, 'image/webp')
+            } else if (query.format === 'png') {
+              img = img.png()
+              object.set(fields.objects.mimeType, 'image/png')
+            }
+          }
+          data = await img.toBuffer()
+        } catch (_e) {
+          // If image processing fails, fallback to returning original data
+        }
+      }
+
       return { object, data }
     },
 

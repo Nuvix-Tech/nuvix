@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { Doc, ID, Permission, Query, Role } from '@nuvix/db'
 import type { JwtResponse } from '../account/contracts'
 import type { AccountDocuments } from '../account/documents'
@@ -33,6 +34,7 @@ export interface UserResponse {
   prefs: TeamPreferences
   emailVerification: boolean
   phoneVerification: boolean
+  mfa?: boolean
   registration: string
   $createdAt: string
   $updatedAt: string
@@ -125,6 +127,7 @@ function response(document: Doc): UserResponse {
     prefs: preferences(document.get(fields.prefs, {})),
     emailVerification: document.get(fields.emailVerified, false),
     phoneVerification: document.get(fields.phoneVerified, false),
+    mfa: document.get(fields.mfa, false),
     registration: createdAt,
     $createdAt: createdAt,
     $updatedAt: iso(document.updatedAt()),
@@ -306,6 +309,75 @@ export function createUserService(options: UserServiceOptions = {}) {
     },
 
     get,
+
+    async updateMfa(documents: UserDocuments, userId: string, mfa: boolean): Promise<UserResponse> {
+      await get(documents, userId)
+      const updated = await operation('update mfa', () =>
+        documents.update(collection, userId, new Doc({ [fields.mfa]: mfa })),
+      )
+      return response(updated)
+    },
+
+    async getMfaFactors(documents: UserDocuments, userId: string) {
+      const user = await operation('get user', () => documents.get(collection, userId))
+      if (user.empty()) throw new NotFoundError('User', { code: 'user_not_found' })
+      const authenticators = await operation('get authenticators', () =>
+        documents.find(TENANT_AUTH_MODEL.collections.authenticators, [
+          Query.equal(TENANT_AUTH_MODEL.fields.authenticators.userId, [userId]),
+        ]),
+      )
+      const codes = user.get(fields.mfaRecoveryCodes) as string[] | undefined
+      return {
+        totp: authenticators.some((a) => a.get('type') === 'totp' && a.get('verified') === true),
+        email: authenticators.some((a) => a.get('type') === 'email' && a.get('verified') === true),
+        phone: authenticators.some((a) => a.get('type') === 'phone' && a.get('verified') === true),
+        recoveryCode: !!(codes && codes.length > 0),
+      }
+    },
+
+    async getMfaRecoveryCodes(documents: UserDocuments, userId: string) {
+      const user = await operation('get user', () => documents.get(collection, userId))
+      if (user.empty()) throw new NotFoundError('User', { code: 'user_not_found' })
+      const codes = user.get(fields.mfaRecoveryCodes) as string[] | undefined
+      return {
+        $id: userId,
+        total: codes ? codes.length : 0,
+      }
+    },
+
+    async regenerateMfaRecoveryCodes(documents: UserDocuments, userId: string) {
+      const user = await operation('get user', () => documents.get(collection, userId))
+      if (user.empty()) throw new NotFoundError('User', { code: 'user_not_found' })
+      const codes = Array.from({ length: 6 }, () => randomBytes(4).toString('hex'))
+      await operation('update recovery codes', () =>
+        documents.update(collection, userId, new Doc({ [fields.mfaRecoveryCodes]: codes })),
+      )
+      return {
+        $id: userId,
+        total: 6,
+      }
+    },
+
+    async deleteMfaAuthenticator(
+      documents: UserDocuments,
+      userId: string,
+      type: string,
+    ): Promise<void> {
+      const user = await operation('get user', () => documents.get(collection, userId))
+      if (user.empty()) throw new NotFoundError('User', { code: 'user_not_found' })
+
+      await operation('delete authenticator', async () =>
+        documents.transaction(async (tx) => {
+          const auths = await tx.find(TENANT_AUTH_MODEL.collections.authenticators, [
+            Query.equal(TENANT_AUTH_MODEL.fields.authenticators.userId, [userId]),
+            Query.equal(TENANT_AUTH_MODEL.fields.authenticators.type, [type]),
+          ])
+          for (const auth of auths) {
+            await tx.remove(TENANT_AUTH_MODEL.collections.authenticators, auth.getId())
+          }
+        }),
+      )
+    },
 
     async updateName(documents: UserDocuments, userId: string, name: string) {
       await get(documents, userId)

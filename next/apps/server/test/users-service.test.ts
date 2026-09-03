@@ -49,6 +49,12 @@ function harness() {
       collection(collectionId).set(id, updated)
       return updated
     },
+    remove: async (collectionId, id) => {
+      return collection(collectionId).delete(id)
+    },
+    transaction: async (op) => {
+      return op(documents)
+    },
   }
   return { documents, users, collection }
 }

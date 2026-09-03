@@ -409,11 +409,33 @@ export function storageRoutes(
         '/storage/buckets/:bucketId/objects/*',
         {
           params: t.Object({ bucketId: BucketId, '*': t.String() }),
+          query: t.Object({
+            width: t.Optional(t.Numeric()),
+            height: t.Optional(t.Numeric()),
+            quality: t.Optional(t.Numeric()),
+            format: t.Optional(
+              t.Union([t.Literal('jpg'), t.Literal('jpeg'), t.Literal('png'), t.Literal('webp')]),
+            ),
+            gravity: t.Optional(t.String()),
+          }),
           detail: { tags: ['storage'] },
         },
-        async ({ params, request }) =>
+        async ({ params, query, request }) =>
           requests.withProject(request.headers, async ({ auth, session }) => {
-            const key = params['*']
+            let key = params['*']
+            let action: 'preview' | 'view' | 'download' = 'download'
+
+            if (key.endsWith('/preview')) {
+              key = key.slice(0, -8)
+              action = 'preview'
+            } else if (key.endsWith('/view')) {
+              key = key.slice(0, -5)
+              action = 'view'
+            } else if (key.endsWith('/download')) {
+              key = key.slice(0, -9)
+              action = 'download'
+            }
+
             const range = parseRangeHeader(request.headers.get('range'))
             const res = await service.getObject(
               storageDocuments(session),
@@ -422,6 +444,8 @@ export function storageRoutes(
               params.bucketId,
               key,
               range,
+              action,
+              query,
             )
 
             const mimeType =
@@ -432,6 +456,12 @@ export function storageRoutes(
               'Content-Type': mimeType,
               ETag: `"${etag}"`,
               'Accept-Ranges': 'bytes',
+            }
+
+            if (action === 'view' || action === 'preview') {
+              headers['Content-Disposition'] = 'inline'
+            } else {
+              headers['Content-Disposition'] = `attachment; filename="${key.split('/').pop()}"`
             }
 
             if (res.range) {

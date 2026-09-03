@@ -89,7 +89,7 @@ function probe(auth: ProjectAuthContext) {
         getTranslator: async () => ({ format: (key: string) => key }) as never,
       }),
     )
-    .use(teamRoutes(requests, service))
+    .use(teamRoutes(requests, undefined, service))
   return { app, calls }
 }
 

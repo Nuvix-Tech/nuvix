@@ -1,9 +1,23 @@
+import { randomBytes } from 'node:crypto'
 import { Doc, ID, Permission, Query, Role } from '@nuvix/db'
+import { createSecretVerifier, verifyCredentialSecret } from '../context/credential-secret'
 import { apiScopeLabel } from '../context/database-roles'
 import type { ProjectAuthContext } from '../context/project'
 import { TENANT_AUTH_MODEL } from '../context/tenant-auth-model'
 import { translatePackageError } from '../infrastructure/package-errors'
-import { AppError, BadRequestError, ForbiddenError, NotFoundError } from '../shared/errors'
+import {
+  createMessagingGateway,
+  type MessagingGateway,
+  type ProviderConfig,
+} from '../messaging/gateway'
+import { MESSAGING_MODEL } from '../messaging/model'
+import {
+  AppError,
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '../shared/errors'
 import type { TeamDocuments } from './documents'
 import { TEAM_MODEL, type TeamModel } from './model'
 
@@ -60,6 +74,7 @@ export interface TeamServiceOptions {
   readonly model?: TeamModel
   readonly id?: () => string
   readonly now?: () => Date
+  readonly messaging?: MessagingGateway
 }
 
 const ROLE_PATTERN = /^[\p{L}\p{M}\p{N}._-]{1,32}$/u
@@ -222,6 +237,7 @@ export function createTeamService(options: TeamServiceOptions = {}) {
   const model = options.model ?? TEAM_MODEL
   const createId = options.id ?? (() => ID.unique())
   const now = options.now ?? (() => new Date())
+  const messaging = options.messaging ?? createMessagingGateway()
 
   const get = async (documents: TeamDocuments, teamId: string): Promise<TeamResponse> => {
     const team = await operation('get team', () => documents.get(model.collection, teamId))
@@ -397,6 +413,178 @@ export function createTeamService(options: TeamServiceOptions = {}) {
       return membershipResponse(documents, membership)
     },
 
+    async createMembership(
+      documents: TeamDocuments,
+      teamId: string,
+      auth: ProjectAuthContext,
+      input: {
+        email?: string
+        userId?: string
+        phone?: string
+        roles: readonly string[]
+        url: string
+      },
+    ): Promise<MembershipResponse> {
+      const team = await get(documents, teamId)
+      authorizeMembershipManagement(auth, teamId)
+
+      let inviteeId = input.userId
+      if (!inviteeId && input.email) {
+        const users = await documents.find(USER_COLLECTION, [
+          Query.equal(USER_FIELDS.email, [input.email]),
+        ])
+        if (users.length > 0) inviteeId = users[0]?.getId()
+      }
+      if (!inviteeId && input.phone) {
+        const users = await documents.find(USER_COLLECTION, [
+          Query.equal(USER_FIELDS.phone, [input.phone]),
+        ])
+        if (users.length > 0) inviteeId = users[0]?.getId()
+      }
+      if (!inviteeId) {
+        inviteeId = createId()
+        await documents.create(
+          USER_COLLECTION,
+          new Doc({
+            $id: inviteeId,
+            $permissions: [
+              Permission.read(Role.user(inviteeId)),
+              Permission.update(Role.user(inviteeId)),
+              Permission.delete(Role.user(inviteeId)),
+            ],
+            [USER_FIELDS.email]: input.email || '',
+            [USER_FIELDS.phone]: input.phone || '',
+            [USER_FIELDS.name]: '',
+            [USER_FIELDS.status]: 'unverified',
+            [USER_FIELDS.emailVerified]: false,
+            [USER_FIELDS.phoneVerified]: false,
+          }),
+        )
+      }
+
+      const existing = await documents.find(MEMBERSHIP_COLLECTION, [
+        Query.equal(MEMBERSHIP_FIELDS.teamId, [teamId]),
+        Query.equal(MEMBERSHIP_FIELDS.userId, [inviteeId]),
+      ])
+      if (existing.length > 0) {
+        throw new ConflictError('Membership already exists', { code: 'team_invite_already_exists' })
+      }
+
+      const membershipId = createId()
+      const secret = randomBytes(32).toString('hex')
+      const verifier = await createSecretVerifier('session', new TextEncoder().encode(secret))
+
+      const timestamp = now()
+      const membership = new Doc({
+        $id: membershipId,
+        $permissions: membershipPermissions(teamId, inviteeId),
+        userId: inviteeId,
+        teamId,
+        roles: roles(input.roles ?? []),
+        status: 'invited',
+        invited: timestamp,
+        joined: null,
+        secretDigest: verifier.digest,
+        secretSalt: verifier.salt,
+        inviteExpiresAt: new Date(timestamp.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      await operation('create membership', () =>
+        documents.create(MEMBERSHIP_COLLECTION, membership),
+      )
+
+      const channel = input.phone && !input.email ? 'sms' : 'email'
+      let provider: ProviderConfig | undefined
+      try {
+        const providers = await documents.find(MESSAGING_MODEL.collections.providers, [
+          Query.equal(MESSAGING_MODEL.fields.providers.type, [channel]),
+          Query.equal(MESSAGING_MODEL.fields.providers.enabled, [true]),
+        ])
+        const providerDoc = providers[0]
+        if (providerDoc) {
+          provider = {
+            type: providerDoc.get('type') as 'email' | 'sms' | 'push',
+            adapter: providerDoc.get('adapter') as string,
+            options: providerDoc.get('options') as Record<string, unknown>,
+          }
+        }
+      } catch (_e) {
+        // ignore
+      }
+
+      if (provider) {
+        const url = new URL(input.url)
+        url.searchParams.append('membershipId', membershipId)
+        url.searchParams.append('userId', inviteeId)
+        url.searchParams.append('secret', secret)
+        url.searchParams.append('teamId', teamId)
+        url.searchParams.append('expiry', membership.get('inviteExpiresAt', ''))
+
+        await messaging
+          .send(
+            {
+              channel,
+              recipients: [input.email || input.phone || ''],
+              payload: {
+                subject: `Invitation to join ${team.name}`,
+                content: `Click here to join: ${url.toString()}`,
+              },
+            },
+            provider,
+          )
+          .catch(() => {})
+      }
+
+      return membershipResponse(documents, membership)
+    },
+
+    async updateMembershipStatus(
+      documents: TeamDocuments,
+      teamId: string,
+      membershipId: string,
+      _auth: ProjectAuthContext,
+      input: { userId: string; secret: string },
+    ): Promise<MembershipResponse> {
+      const membership = await requireMembership(documents, teamId, membershipId)
+
+      if (membership.get(MEMBERSHIP_FIELDS.userId) !== input.userId) {
+        throw new ForbiddenError('Invalid invite user', { code: 'invalid_invite_secret' })
+      }
+
+      const digest = membership.get('secretDigest')
+      const salt = membership.get('secretSalt')
+      if (typeof digest !== 'string' || typeof salt !== 'string') {
+        throw new ForbiddenError('Invalid invite secret', { code: 'invalid_invite_secret' })
+      }
+
+      const isValid = await verifyCredentialSecret(
+        'session',
+        new TextEncoder().encode(input.secret),
+        { digest, salt },
+      )
+      if (!isValid) {
+        throw new ForbiddenError('Invalid invite secret', { code: 'invalid_invite_secret' })
+      }
+
+      if (membership.get(MEMBERSHIP_FIELDS.status) === 'accepted') {
+        return membershipResponse(documents, membership)
+      }
+
+      await operation('update membership status', () =>
+        documents.transaction(async (tx) => {
+          const team = await tx.get(model.collection, teamId)
+          if (team.empty()) throw new NotFoundError('Team', { code: 'team_not_found' })
+
+          membership.set(MEMBERSHIP_FIELDS.status, 'accepted')
+          membership.set(MEMBERSHIP_FIELDS.joined, now())
+          await tx.update(MEMBERSHIP_COLLECTION, membershipId, membership)
+
+          team.set(model.fields.total, Number(team.get(model.fields.total, 0)) + 1)
+          await tx.update(model.collection, teamId, team)
+        }),
+      )
+
+      return membershipResponse(documents, membership)
+    },
     async updateMembershipRoles(
       documents: TeamDocuments,
       teamId: string,

@@ -1,13 +1,25 @@
 import { Doc, ID, Permission, Query, Role } from '@nuvix/db'
-import { createCredentialToken, createSecretVerifier } from '../context/credential-secret'
+import {
+  createCredentialToken,
+  createSecretVerifier,
+  parseCredentialToken,
+  verifyCredentialSecret,
+} from '../context/credential-secret'
 import { apiScopeLabel } from '../context/database-roles'
 import { TENANT_AUTH_MODEL } from '../context/tenant-auth-model'
 import { translatePackageError } from '../infrastructure/package-errors'
-import { AppError, ConflictError, NotFoundError, UnauthorizedError } from '../shared/errors'
+import {
+  AppError,
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+  UnauthorizedError,
+} from '../shared/errors'
 import type { TeamPreferences } from '../teams/service'
 import type { UserResponse } from '../users/service'
 import { signJwt } from '../utils/jwt'
 import { hashPassword, verifyPassword } from '../utils/passwords'
+import { createTotpUri, generateTotpSecret, verifyTotp } from '../utils/totp'
 import type { JwtResponse } from './contracts'
 import type { AccountDocuments } from './documents'
 
@@ -49,6 +61,19 @@ export interface UpdateEmailInput {
   readonly password: string
 }
 
+export interface UpdateAccountPhoneInput {
+  readonly phone: string
+  readonly password: string
+}
+
+export interface TokenResponse {
+  readonly $id: string
+  readonly userId: string
+  readonly secret: string
+  readonly expire: string
+  readonly $createdAt: string
+}
+
 export interface AccountServiceOptions {
   readonly id?: () => string
   readonly now?: () => Date
@@ -80,6 +105,7 @@ function userResponse(document: Doc): UserResponse {
     prefs: preferences(document.get(fields.prefs, {})),
     emailVerification: document.get(fields.emailVerified, false),
     phoneVerification: document.get(fields.phoneVerified, false),
+    mfa: document.get(fields.mfa, false),
     registration: createdAt,
     $createdAt: createdAt,
     $updatedAt: iso(document.updatedAt()),
@@ -656,6 +682,684 @@ export function createAccountService(options: AccountServiceOptions = {}) {
 
       const token = await signJwt(payload as never, secret, durationSeconds)
       return { jwt: token }
+    },
+
+    async updatePhone(
+      documents: AccountDocuments,
+      userId: string,
+      input: UpdateAccountPhoneInput,
+    ): Promise<UserResponse> {
+      const user = await operation('get user for phone update', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const currentHash: unknown = user.get(userFields.passwordHash)
+      if (typeof currentHash !== 'string' || !(await verifyPassword(input.password, currentHash))) {
+        throw invalidCredentials()
+      }
+
+      const phone = input.phone
+      const existing = await operation('check phone in use', () =>
+        documents.findUsers([Query.equal(userFields.phone, [phone]), Query.limit(1)]),
+      )
+      if (existing.length > 0 && existing[0]!.getId() !== userId) {
+        throw new ConflictError('A user with this phone already exists.', {
+          code: 'user_phone_exists',
+        })
+      }
+
+      const updated = await operation('update user phone', () =>
+        documents.updateUser(
+          userId,
+          new Doc({
+            [userFields.phone]: phone,
+            [userFields.phoneVerified]: false,
+          }),
+        ),
+      )
+      return userResponse(updated)
+    },
+
+    async updateStatus(
+      documents: AccountDocuments,
+      userId: string,
+      status: boolean,
+    ): Promise<UserResponse> {
+      const user = await operation('get user for status update', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const updated = await operation('update user status', () =>
+        documents.updateUser(userId, new Doc({ [userFields.status]: status })),
+      )
+
+      // If status is false, revoke all sessions
+      if (!status) {
+        await self.deleteSessions(documents, userId)
+      }
+
+      return userResponse(updated)
+    },
+
+    async createMagicUrlToken(
+      documents: AccountDocuments,
+      userId: string,
+      _url?: string,
+    ): Promise<TokenResponse> {
+      const user = await operation('get user for magic url', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const tokenId = createId()
+      const secretBytes = crypto.getRandomValues(new Uint8Array(32))
+      const verifier = await createSecretVerifier('session', secretBytes) // treating token secret like session secret
+      const secret = createCredentialToken('session', tokenId, secretBytes)
+      const expiresAt = new Date(now().getTime() + 60 * 60 * 1000) // 1 hour expiration
+
+      const tokenDoc = await operation('create magic url token', () =>
+        documents.createToken(
+          new Doc({
+            $id: tokenId,
+            userId,
+            type: 'magic-url',
+            secretDigest: verifier.digest,
+            secretSalt: verifier.salt,
+            expiresAt,
+          }),
+        ),
+      )
+
+      return {
+        $id: tokenDoc.getId(),
+        userId,
+        secret,
+        expire: iso(expiresAt),
+        $createdAt: iso(tokenDoc.createdAt()),
+      }
+    },
+
+    async confirmMagicUrlSession(
+      documents: AccountDocuments,
+      userId: string,
+      secret: string,
+    ): Promise<SessionResponse> {
+      const parsed = parseCredentialToken('session', secret)
+      if (!parsed) throw invalidCredentials()
+
+      const tokenDoc = await operation('get magic url token', () => documents.getToken(parsed.id))
+      if (
+        tokenDoc.empty() ||
+        tokenDoc.get('type') !== 'magic-url' ||
+        tokenDoc.get('userId') !== userId
+      ) {
+        throw invalidCredentials()
+      }
+
+      const expiresAt: unknown = tokenDoc.get('expiresAt')
+      if (expiresAt instanceof Date && expiresAt.getTime() < now().getTime()) {
+        throw invalidCredentials()
+      }
+
+      const verifier = {
+        salt: String(tokenDoc.get('secretSalt') || ''),
+        digest: String(tokenDoc.get('secretDigest') || ''),
+      }
+      if (!(await verifyCredentialSecret('session', parsed.secret, verifier))) {
+        throw invalidCredentials()
+      }
+
+      // Delete the used token
+      await operation('delete used token', () => documents.deleteToken(tokenDoc.getId()))
+
+      // Create a full session for the user
+      return await self.createSessionForUser(documents, userId)
+    },
+
+    async createPhoneToken(documents: AccountDocuments, userId: string): Promise<TokenResponse> {
+      const user = await operation('get user for phone token', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const tokenId = createId()
+      // Generate a 6-digit numeric OTP for phone
+      const otp = Math.floor(100000 + Math.random() * 900000).toString()
+      // In a real app we'd hash the OTP, for v2 compatibility we use the secretVerifier logic with the OTP as bytes
+      const secretBytes = new TextEncoder().encode(otp)
+      // Pad to 32 bytes to satisfy the credential verifier
+      const paddedBytes = new Uint8Array(32)
+      paddedBytes.set(secretBytes)
+
+      const verifier = await createSecretVerifier('session', paddedBytes)
+      const expiresAt = new Date(now().getTime() + 15 * 60 * 1000) // 15 mins
+
+      const tokenDoc = await operation('create phone token', () =>
+        documents.createToken(
+          new Doc({
+            $id: tokenId,
+            userId,
+            type: 'phone',
+            secretDigest: verifier.digest,
+            secretSalt: verifier.salt,
+            expiresAt,
+          }),
+        ),
+      )
+
+      return {
+        $id: tokenDoc.getId(),
+        userId,
+        secret: otp, // Return the raw OTP as the secret
+        expire: iso(expiresAt),
+        $createdAt: iso(tokenDoc.createdAt()),
+      }
+    },
+
+    async confirmPhoneSession(
+      documents: AccountDocuments,
+      userId: string,
+      secret: string,
+    ): Promise<SessionResponse> {
+      // Find the token for this user
+      const tokens = await operation('find phone tokens', () =>
+        documents.findTokens([
+          Query.equal('userId', [userId]),
+          Query.equal('type', ['phone']),
+          Query.orderDesc('$createdAt'),
+          Query.limit(1),
+        ]),
+      )
+
+      const tokenDoc = tokens[0]
+      if (!tokenDoc) throw invalidCredentials()
+
+      const expiresAt: unknown = tokenDoc.get('expiresAt')
+      if (expiresAt instanceof Date && expiresAt.getTime() < now().getTime()) {
+        throw invalidCredentials()
+      }
+
+      const secretBytes = new TextEncoder().encode(secret)
+      const paddedBytes = new Uint8Array(32)
+      paddedBytes.set(secretBytes)
+
+      const verifier = {
+        salt: String(tokenDoc.get('secretSalt') || ''),
+        digest: String(tokenDoc.get('secretDigest') || ''),
+      }
+      if (!(await verifyCredentialSecret('session', paddedBytes, verifier))) {
+        throw invalidCredentials()
+      }
+
+      await operation('delete used token', () => documents.deleteToken(tokenDoc.getId()))
+      return await self.createSessionForUser(documents, userId)
+    },
+
+    async createVerification(
+      documents: AccountDocuments,
+      userId: string,
+      _url?: string,
+    ): Promise<TokenResponse> {
+      const user = await operation('get user for verification', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+      if (user.get(userFields.emailVerified)) {
+        throw new ConflictError('User is already verified.', { code: 'user_already_verified' })
+      }
+
+      const tokenId = createId()
+      const secretBytes = crypto.getRandomValues(new Uint8Array(32))
+      const verifier = await createSecretVerifier('session', secretBytes)
+      const secret = createCredentialToken('session', tokenId, secretBytes)
+      const expiresAt = new Date(now().getTime() + 7 * 24 * 60 * 60 * 1000) // 7 days expiration
+
+      const tokenDoc = await operation('create verification token', () =>
+        documents.createToken(
+          new Doc({
+            $id: tokenId,
+            userId,
+            type: 'verification',
+            secretDigest: verifier.digest,
+            secretSalt: verifier.salt,
+            expiresAt,
+          }),
+        ),
+      )
+
+      return {
+        $id: tokenDoc.getId(),
+        userId,
+        secret,
+        expire: iso(expiresAt),
+        $createdAt: iso(tokenDoc.createdAt()),
+      }
+    },
+
+    async confirmVerification(
+      documents: AccountDocuments,
+      userId: string,
+      secret: string,
+    ): Promise<TokenResponse> {
+      const parsed = parseCredentialToken('session', secret)
+      if (!parsed) throw invalidCredentials()
+
+      const tokenDoc = await operation('get verification token', () =>
+        documents.getToken(parsed.id),
+      )
+      if (
+        tokenDoc.empty() ||
+        tokenDoc.get('type') !== 'verification' ||
+        tokenDoc.get('userId') !== userId
+      ) {
+        throw invalidCredentials()
+      }
+
+      const expiresAt: unknown = tokenDoc.get('expiresAt')
+      if (expiresAt instanceof Date && expiresAt.getTime() < now().getTime()) {
+        throw invalidCredentials()
+      }
+
+      const verifier = {
+        salt: String(tokenDoc.get('secretSalt') || ''),
+        digest: String(tokenDoc.get('secretDigest') || ''),
+      }
+      if (!(await verifyCredentialSecret('session', parsed.secret, verifier))) {
+        throw invalidCredentials()
+      }
+
+      await operation('mark user verified', () =>
+        documents.updateUser(userId, new Doc({ [userFields.emailVerified]: true })),
+      )
+
+      await operation('delete used token', () => documents.deleteToken(tokenDoc.getId()))
+
+      return {
+        $id: tokenDoc.getId(),
+        userId,
+        secret: '',
+        expire: iso(expiresAt as Date | string),
+        $createdAt: iso(tokenDoc.createdAt()),
+      }
+    },
+
+    async createPasswordRecovery(
+      documents: AccountDocuments,
+      email: string,
+      _url?: string,
+    ): Promise<TokenResponse> {
+      const normalized = normalizedEmail(email)
+      const found = await operation('find user by email', () =>
+        documents.findUsers([Query.equal(userFields.email, [normalized]), Query.limit(1)]),
+      )
+      const user = found[0]
+      if (!user) throw userNotFound()
+
+      const userId = user.getId()
+
+      const tokenId = createId()
+      const secretBytes = crypto.getRandomValues(new Uint8Array(32))
+      const verifier = await createSecretVerifier('session', secretBytes)
+      const secret = createCredentialToken('session', tokenId, secretBytes)
+      const expiresAt = new Date(now().getTime() + 60 * 60 * 1000) // 1 hour
+
+      const tokenDoc = await operation('create recovery token', () =>
+        documents.createToken(
+          new Doc({
+            $id: tokenId,
+            userId,
+            type: 'recovery',
+            secretDigest: verifier.digest,
+            secretSalt: verifier.salt,
+            expiresAt,
+          }),
+        ),
+      )
+
+      return {
+        $id: tokenDoc.getId(),
+        userId,
+        secret,
+        expire: iso(expiresAt),
+        $createdAt: iso(tokenDoc.createdAt()),
+      }
+    },
+
+    async confirmPasswordRecovery(
+      documents: AccountDocuments,
+      userId: string,
+      secret: string,
+      passwordInput: string,
+    ): Promise<TokenResponse> {
+      const parsed = parseCredentialToken('session', secret)
+      if (!parsed) throw invalidCredentials()
+
+      const tokenDoc = await operation('get recovery token', () => documents.getToken(parsed.id))
+      if (
+        tokenDoc.empty() ||
+        tokenDoc.get('type') !== 'recovery' ||
+        tokenDoc.get('userId') !== userId
+      ) {
+        throw invalidCredentials()
+      }
+
+      const expiresAt: unknown = tokenDoc.get('expiresAt')
+      if (expiresAt instanceof Date && expiresAt.getTime() < now().getTime()) {
+        throw invalidCredentials()
+      }
+
+      const verifier = {
+        salt: String(tokenDoc.get('secretSalt') || ''),
+        digest: String(tokenDoc.get('secretDigest') || ''),
+      }
+      if (!(await verifyCredentialSecret('session', parsed.secret, verifier))) {
+        throw invalidCredentials()
+      }
+
+      const newHash = await hashPassword(passwordInput)
+      const timestamp = now()
+
+      await operation('update password and revoke other sessions', () =>
+        documents.transaction(async (tx) => {
+          const res = await tx.updateUser(
+            userId,
+            new Doc({
+              [userFields.passwordHash]: newHash,
+              [userFields.passwordUpdate]: timestamp,
+            }),
+          )
+
+          const otherSessions = await tx.findSessions([
+            Query.equal(sessionFields.userId, [userId]),
+            Query.isNull(sessionFields.revokedAt),
+          ])
+
+          for (const s of otherSessions) {
+            await tx.updateSession(s.getId(), new Doc({ [sessionFields.revokedAt]: timestamp }))
+          }
+
+          return res
+        }),
+      )
+
+      await operation('delete used token', () => documents.deleteToken(tokenDoc.getId()))
+
+      return {
+        $id: tokenDoc.getId(),
+        userId,
+        secret: '',
+        expire: iso(expiresAt as Date | string),
+        $createdAt: iso(tokenDoc.createdAt()),
+      }
+    },
+
+    async updateMfa(
+      documents: AccountDocuments,
+      userId: string,
+      mfa: boolean,
+    ): Promise<UserResponse> {
+      const user = await operation('get user for mfa update', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const updated = await operation('update mfa', () =>
+        documents.updateUser(userId, new Doc({ [userFields.mfa]: mfa })),
+      )
+      return userResponse(updated)
+    },
+
+    async getMfaFactors(
+      documents: AccountDocuments,
+      userId: string,
+    ): Promise<{ totp: boolean; email: boolean; phone: boolean; recoveryCodes: boolean }> {
+      const user = await operation('get user for mfa factors', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const authenticators = await operation('find user authenticators', () =>
+        documents.findAuthenticators([
+          Query.equal('userId', [userId]),
+          Query.equal('type', ['totp']),
+          Query.equal('verified', [true]),
+        ]),
+      )
+
+      const recoveryCodes = (user.get(userFields.mfaRecoveryCodes) as string[]) || []
+      return {
+        totp: authenticators.length > 0,
+        email: Boolean(user.get(userFields.emailVerified)),
+        phone: Boolean(user.get(userFields.phoneVerified)),
+        recoveryCodes: recoveryCodes.length > 0,
+      }
+    },
+
+    async createMfaAuthenticator(
+      documents: AccountDocuments,
+      userId: string,
+      type: string,
+      issuer = 'Nuvix',
+    ): Promise<{ $id: string; type: string; secret: string; uri: string }> {
+      if (type !== 'totp') {
+        throw new BadRequestError('Unsupported authenticator type', {
+          code: 'unsupported_authenticator',
+        })
+      }
+      const user = await operation('get user for authenticator', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const existing = await operation('find existing authenticators', () =>
+        documents.findAuthenticators([
+          Query.equal('userId', [userId]),
+          Query.equal('type', ['totp']),
+        ]),
+      )
+      for (const auth of existing) {
+        if (!auth.get('verified')) {
+          await operation('delete unverified authenticator', () =>
+            documents.deleteAuthenticator(auth.getId()),
+          )
+        }
+      }
+
+      const secret = generateTotpSecret()
+      const uri = createTotpUri({
+        secret,
+        account: (user.get(userFields.email) as string) || userId,
+        issuer,
+      })
+      const authId = createId()
+
+      const doc = await operation('create authenticator', () =>
+        documents.createAuthenticator(
+          new Doc({
+            $id: authId,
+            userId,
+            type: 'totp',
+            secretData: secret,
+            verified: false,
+          }),
+        ),
+      )
+
+      return {
+        $id: doc.getId(),
+        type: 'totp',
+        secret,
+        uri,
+      }
+    },
+
+    async verifyMfaAuthenticator(
+      documents: AccountDocuments,
+      userId: string,
+      type: string,
+      otp: string,
+    ): Promise<UserResponse> {
+      if (type !== 'totp') throw new BadRequestError('Unsupported authenticator type')
+      const user = await operation('get user for authenticator verification', () =>
+        documents.getUser(userId),
+      )
+      if (user.empty()) throw userNotFound()
+
+      const authenticators = await operation('find authenticators for verification', () =>
+        documents.findAuthenticators([
+          Query.equal('userId', [userId]),
+          Query.equal('type', ['totp']),
+        ]),
+      )
+      const target = authenticators[0]
+      if (!target) {
+        throw new NotFoundError('Authenticator not found', { code: 'authenticator_not_found' })
+      }
+      const secret = (target.get('secretData') ?? target.get('secret')) as string
+      const valid = await verifyTotp(otp, secret)
+      if (!valid) throw invalidCredentials()
+
+      await operation('mark authenticator verified', () =>
+        documents.updateAuthenticator(target.getId(), new Doc({ verified: true })),
+      )
+
+      const updated = await operation('enable user mfa', () =>
+        documents.updateUser(userId, new Doc({ [userFields.mfa]: true })),
+      )
+      return userResponse(updated)
+    },
+
+    async deleteMfaAuthenticator(
+      documents: AccountDocuments,
+      userId: string,
+      type: string,
+    ): Promise<void> {
+      const authenticators = await operation('find authenticators for deletion', () =>
+        documents.findAuthenticators([
+          Query.equal('userId', [userId]),
+          Query.equal('type', [type]),
+        ]),
+      )
+      for (const a of authenticators) {
+        await operation('delete authenticator', () => documents.deleteAuthenticator(a.getId()))
+      }
+
+      const remaining = await operation('check remaining authenticators', () =>
+        documents.findAuthenticators([
+          Query.equal('userId', [userId]),
+          Query.equal('verified', [true]),
+        ]),
+      )
+      if (remaining.length === 0) {
+        await operation('disable mfa', () =>
+          documents.updateUser(userId, new Doc({ [userFields.mfa]: false })),
+        )
+      }
+    },
+
+    async createMfaRecoveryCodes(
+      documents: AccountDocuments,
+      userId: string,
+    ): Promise<{ recoveryCodes: string[] }> {
+      const user = await operation('get user for recovery codes', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const codes: string[] = []
+      for (let i = 0; i < 10; i++) {
+        const bytes = crypto.getRandomValues(new Uint8Array(5))
+        codes.push(Buffer.from(bytes).toString('hex'))
+      }
+
+      await operation('save recovery codes', () =>
+        documents.updateUser(userId, new Doc({ [userFields.mfaRecoveryCodes]: codes })),
+      )
+
+      return { recoveryCodes: codes }
+    },
+
+    async updateMfaRecoveryCodes(
+      documents: AccountDocuments,
+      userId: string,
+    ): Promise<{ recoveryCodes: string[] }> {
+      return await self.createMfaRecoveryCodes(documents, userId)
+    },
+
+    async getMfaRecoveryCodes(
+      documents: AccountDocuments,
+      userId: string,
+    ): Promise<{ recoveryCodes: string[] }> {
+      const user = await operation('get user for recovery codes', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const codes = (user.get(userFields.mfaRecoveryCodes) as string[]) || []
+      if (codes.length === 0) {
+        throw new NotFoundError('Recovery codes not found', {
+          code: 'user_recovery_codes_not_found',
+        })
+      }
+      return { recoveryCodes: codes }
+    },
+
+    async createMfaChallenge(
+      documents: AccountDocuments,
+      userId: string,
+      factor: string,
+    ): Promise<{ $id: string; userId: string; factor: string; expiresAt: string }> {
+      const user = await operation('get user for challenge', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const challengeId = createId()
+      const expiresAt = new Date(now().getTime() + 10 * 60 * 1000) // 10 mins
+
+      const doc = await operation('create challenge token', () =>
+        documents.createToken(
+          new Doc({
+            $id: challengeId,
+            userId,
+            type: `mfa-challenge-${factor}`,
+            secretDigest: '',
+            secretSalt: '',
+            expiresAt,
+          }),
+        ),
+      )
+
+      return {
+        $id: doc.getId(),
+        userId,
+        factor,
+        expiresAt: iso(expiresAt),
+      }
+    },
+
+    async verifyMfaChallenge(
+      documents: AccountDocuments,
+      userId: string,
+      otp: string,
+      challengeId?: string,
+    ): Promise<boolean> {
+      const user = await operation('get user for challenge verify', () => documents.getUser(userId))
+      if (user.empty()) throw userNotFound()
+
+      const authenticators = await operation('find verified totp authenticators', () =>
+        documents.findAuthenticators([
+          Query.equal('userId', [userId]),
+          Query.equal('type', ['totp']),
+          Query.equal('verified', [true]),
+        ]),
+      )
+
+      for (const a of authenticators) {
+        const secret = (a.get('secretData') ?? a.get('secret')) as string
+        if (await verifyTotp(otp, secret)) {
+          if (challengeId) {
+            await operation('delete challenge token', () => documents.deleteToken(challengeId))
+          }
+          return true
+        }
+      }
+
+      const recoveryCodes = (user.get(userFields.mfaRecoveryCodes) as string[]) || []
+      const codeIndex = recoveryCodes.indexOf(otp)
+      if (codeIndex !== -1) {
+        const updatedCodes = [...recoveryCodes]
+        updatedCodes.splice(codeIndex, 1)
+        await operation('consume recovery code', () =>
+          documents.updateUser(userId, new Doc({ [userFields.mfaRecoveryCodes]: updatedCodes })),
+        )
+        if (challengeId) {
+          await operation('delete challenge token', () => documents.deleteToken(challengeId))
+        }
+        return true
+      }
+
+      throw invalidCredentials()
     },
 
     async rotateSigningKey(documents: AccountDocuments): Promise<{ secret: string }> {

@@ -5,6 +5,9 @@ export interface TenantAuthModel {
     readonly memberships: string
     readonly apiKeys: string
     readonly jwtKeys: string
+    readonly tokens: string
+    readonly targets: string
+    readonly authenticators: string
   }
   readonly fields: {
     readonly users: {
@@ -18,6 +21,8 @@ export interface TenantAuthModel {
       readonly prefs: string
       readonly passwordHash: string
       readonly passwordUpdate: string
+      readonly mfa: string
+      readonly mfaRecoveryCodes: string
     }
     readonly sessions: {
       readonly userId: string
@@ -46,6 +51,24 @@ export interface TenantAuthModel {
       readonly expiresAt: string
       readonly revokedAt: string
     }
+    readonly tokens: {
+      readonly userId: string
+      readonly type: string
+      readonly secretDigest: string
+      readonly secretSalt: string
+      readonly expiresAt: string
+    }
+    readonly targets: {
+      readonly userId: string
+      readonly providerType: string
+      readonly identifier: string
+    }
+    readonly authenticators: {
+      readonly userId: string
+      readonly type: string
+      readonly secretData: string
+      readonly verified: string
+    }
     readonly jwtKeys: {
       readonly signingKey: string
       readonly algorithm: string
@@ -62,6 +85,9 @@ export const TENANT_AUTH_MODEL = {
     memberships: 'memberships',
     apiKeys: 'api_keys',
     jwtKeys: 'jwt_keys',
+    tokens: 'tokens',
+    targets: 'targets',
+    authenticators: 'authenticators',
   },
   fields: {
     users: {
@@ -75,6 +101,8 @@ export const TENANT_AUTH_MODEL = {
       prefs: 'prefs',
       passwordHash: 'passwordHash',
       passwordUpdate: 'passwordUpdate',
+      mfa: 'mfa',
+      mfaRecoveryCodes: 'mfaRecoveryCodes',
     },
     sessions: {
       userId: 'userId',
@@ -102,6 +130,24 @@ export const TENANT_AUTH_MODEL = {
       enabled: 'enabled',
       expiresAt: 'expiresAt',
       revokedAt: 'revokedAt',
+    },
+    tokens: {
+      userId: 'userId',
+      type: 'type',
+      secretDigest: 'secretDigest',
+      secretSalt: 'secretSalt',
+      expiresAt: 'expiresAt',
+    },
+    targets: {
+      userId: 'userId',
+      providerType: 'providerType',
+      identifier: 'identifier',
+    },
+    authenticators: {
+      userId: 'userId',
+      type: 'type',
+      secretData: 'secretData',
+      verified: 'verified',
     },
     jwtKeys: {
       signingKey: 'signingKey',

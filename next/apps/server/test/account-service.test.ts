@@ -329,4 +329,158 @@ describe('account service', () => {
     expect(updatedPriorKey?.get('active')).toBe(false)
     expect(updatedPriorKey?.get('expiresAt')).toBeDefined()
   })
+
+  test('updates phone number with password confirmation', async () => {
+    const docs = memoryDocuments()
+    await service.register(docs, {
+      userId: 'user_1',
+      email: 'user@example.com',
+      password: 'password123',
+    })
+
+    const updated = await service.updatePhone(docs, 'user_1', {
+      phone: '+1234567890',
+      password: 'password123',
+    })
+    expect(updated.phone).toBe('+1234567890')
+    expect(updated.phoneVerification).toBe(false)
+  })
+
+  test('updates account status and revokes sessions when disabled', async () => {
+    const docs = memoryDocuments()
+    await service.register(docs, {
+      userId: 'user_1',
+      email: 'user@example.com',
+      password: 'password123',
+    })
+    await service.createEmailSession(docs, {
+      email: 'user@example.com',
+      password: 'password123',
+    })
+
+    const updated = await service.updateStatus(docs, 'user_1', false)
+    expect(updated.status).toBe(false)
+
+    const sessions = await service.listSessions(docs, 'user_1')
+    expect(sessions.data).toHaveLength(0)
+  })
+
+  test('creates magic URL token and confirms session', async () => {
+    const docs = memoryDocuments()
+    await service.register(docs, {
+      userId: 'user_1',
+      email: 'user@example.com',
+      password: 'password123',
+    })
+
+    const token = await service.createMagicUrlToken(docs, 'user_1')
+    expect(token.secret).toBeDefined()
+    expect(token.userId).toBe('user_1')
+
+    const session = await service.confirmMagicUrlSession(docs, 'user_1', token.secret)
+    expect(session.userId).toBe('user_1')
+    expect(session.token).toStartWith('ses_v1.')
+  })
+
+  test('creates phone OTP token and confirms session', async () => {
+    const docs = memoryDocuments()
+    await service.register(docs, {
+      userId: 'user_1',
+      email: 'user@example.com',
+      password: 'password123',
+    })
+
+    const token = await service.createPhoneToken(docs, 'user_1')
+    expect(token.secret).toHaveLength(6)
+
+    const session = await service.confirmPhoneSession(docs, 'user_1', token.secret)
+    expect(session.userId).toBe('user_1')
+  })
+
+  test('email verification token flow marks email as verified', async () => {
+    const docs = memoryDocuments()
+    await service.register(docs, {
+      userId: 'user_1',
+      email: 'user@example.com',
+      password: 'password123',
+    })
+
+    const token = await service.createVerification(docs, 'user_1')
+    expect(token.secret).toBeDefined()
+
+    await service.confirmVerification(docs, 'user_1', token.secret)
+    const user = await service.get(docs, 'user_1')
+    expect(user.emailVerification).toBe(true)
+  })
+
+  test('password recovery flow resets password and allows login with new password', async () => {
+    const docs = memoryDocuments()
+    await service.register(docs, {
+      userId: 'user_1',
+      email: 'user@example.com',
+      password: 'password123',
+    })
+
+    const token = await service.createPasswordRecovery(docs, 'user@example.com')
+    expect(token.secret).toBeDefined()
+
+    await service.confirmPasswordRecovery(docs, 'user_1', token.secret, 'new-password-456')
+
+    const session = await service.createEmailSession(docs, {
+      email: 'user@example.com',
+      password: 'new-password-456',
+    })
+    expect(session.userId).toBe('user_1')
+  })
+
+  test('full MFA lifecycle: factors, authenticator enrollment, recovery codes, and challenge', async () => {
+    const docs = memoryDocuments()
+    await service.register(docs, {
+      userId: 'user_1',
+      email: 'user@example.com',
+      password: 'password123',
+    })
+
+    const initialFactors = await service.getMfaFactors(docs, 'user_1')
+    expect(initialFactors.totp).toBe(false)
+    expect(initialFactors.recoveryCodes).toBe(false)
+
+    // Create TOTP authenticator
+    const auth = await service.createMfaAuthenticator(docs, 'user_1', 'totp', 'TestProject')
+    expect(auth.type).toBe('totp')
+    expect(auth.secret).toBeDefined()
+    expect(auth.uri).toStartWith('otpauth://totp/')
+
+    // Generate valid TOTP token for verification
+    const { generateTotp } = await import('../src/utils/totp')
+    const code = await generateTotp(auth.secret)
+
+    // Verify authenticator
+    const verifiedUser = await service.verifyMfaAuthenticator(docs, 'user_1', 'totp', code)
+    expect(verifiedUser.mfa).toBe(true)
+
+    // Recovery codes
+    const recoveryRes = await service.createMfaRecoveryCodes(docs, 'user_1')
+    expect(recoveryRes.recoveryCodes).toHaveLength(10)
+
+    const factorsAfter = await service.getMfaFactors(docs, 'user_1')
+    expect(factorsAfter.totp).toBe(true)
+    expect(factorsAfter.recoveryCodes).toBe(true)
+
+    // Challenge flow with TOTP
+    const challenge = await service.createMfaChallenge(docs, 'user_1', 'totp')
+    expect(challenge.factor).toBe('totp')
+
+    const newCode = await generateTotp(auth.secret)
+    const success = await service.verifyMfaChallenge(docs, 'user_1', newCode, challenge.$id)
+    expect(success).toBe(true)
+
+    // Challenge flow with recovery code
+    const recoveryCode = recoveryRes.recoveryCodes[0]!
+    const recSuccess = await service.verifyMfaChallenge(docs, 'user_1', recoveryCode)
+    expect(recSuccess).toBe(true)
+
+    const remainingCodes = await service.getMfaRecoveryCodes(docs, 'user_1')
+    expect(remainingCodes.recoveryCodes).toHaveLength(9)
+  })
 })

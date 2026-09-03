@@ -45,6 +45,9 @@ describe('tenant auth schema', () => {
       'memberships',
       'api_keys',
       'jwt_keys',
+      'tokens',
+      'targets',
+      'authenticators',
     ])
     expect(
       state.created.flatMap(({ indexes = [] }) => indexes.map((item) => item.get('type'))),

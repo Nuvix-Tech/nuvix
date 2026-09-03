@@ -7,6 +7,8 @@ export interface UserDocuments {
   get(collection: string, id: string, queries?: Query[]): Promise<Doc>
   create(collection: string, document: Doc): Promise<Doc>
   update(collection: string, id: string, document: Doc): Promise<Doc>
+  remove(collection: string, id: string): Promise<boolean>
+  transaction<Result>(operation: (documents: UserDocuments) => Promise<Result>): Promise<Result>
 }
 
 export function userDocuments(session: Session): UserDocuments {
@@ -20,5 +22,8 @@ export function userDocuments(session: Session): UserDocuments {
     create: (collection: string, document: Doc) => session.createDocument(collection, document),
     update: (collection: string, id: string, document: Doc) =>
       session.updateDocument(collection, id, document),
+    remove: (collection: string, id: string) => session.deleteDocument(collection, id),
+    transaction: <Result>(operation: (documents: UserDocuments) => Promise<Result>) =>
+      session.withTransaction((transaction) => operation(userDocuments(transaction))),
   })
 }

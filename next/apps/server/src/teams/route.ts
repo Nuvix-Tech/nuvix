@@ -1,6 +1,8 @@
 import { Elysia } from 'elysia'
 import type { DatabaseRequestCapabilities } from '../infrastructure/database-composition'
+import { createMessagingGateway, type MessagingGateway } from '../messaging/gateway'
 import {
+  CreateMembershipBody,
   CreateTeamBody,
   MembershipListQuery,
   MembershipListResponse,
@@ -11,6 +13,7 @@ import {
   TeamParams,
   TeamResponse,
   UpdateMembershipRolesBody,
+  UpdateMembershipStatusBody,
   UpdateTeamBody,
   UpdateTeamPrefsBody,
 } from './contracts'
@@ -19,7 +22,8 @@ import { authorizeTeams, createTeamService, type TeamService } from './service'
 
 export function teamRoutes(
   requests: DatabaseRequestCapabilities,
-  service: TeamService = createTeamService(),
+  messaging: MessagingGateway = createMessagingGateway(),
+  service: TeamService = createTeamService({ messaging }),
 ) {
   return new Elysia({ name: 'team-routes' })
     .post(
@@ -141,6 +145,40 @@ export function teamRoutes(
             teamDocuments(session),
             params.teamId,
             params.membershipId,
+          )
+        }),
+    )
+    .post(
+      '/teams/:teamId/memberships',
+      {
+        params: TeamParams,
+        body: CreateMembershipBody,
+        response: MembershipResponse,
+        detail: { tags: ['teams'] },
+      },
+      ({ params, body, request, set }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          authorizeTeams(auth, 'teams.write')
+          set.status = 201
+          return await service.createMembership(teamDocuments(session), params.teamId, auth, body)
+        }),
+    )
+    .patch(
+      '/teams/:teamId/memberships/:membershipId/status',
+      {
+        params: MembershipParams,
+        body: UpdateMembershipStatusBody,
+        response: MembershipResponse,
+        detail: { tags: ['teams'] },
+      },
+      ({ params, body, request }) =>
+        requests.withProject(request.headers, async ({ auth, session }) => {
+          return await service.updateMembershipStatus(
+            teamDocuments(session),
+            params.teamId,
+            params.membershipId,
+            auth,
+            body,
           )
         }),
     )

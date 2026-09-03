@@ -7,6 +7,8 @@ export interface MemoryAccountDocuments extends AccountDocuments {
   readonly memberships: Map<string, Doc>
   readonly teamTotals: Map<string, number>
   readonly jwtKeys: Map<string, Doc>
+  readonly tokens: Map<string, Doc>
+  readonly authenticators: Map<string, Doc>
 }
 
 export function memoryDocuments(): MemoryAccountDocuments {
@@ -15,6 +17,8 @@ export function memoryDocuments(): MemoryAccountDocuments {
   const memberships = new Map<string, Doc>()
   const teamTotals = new Map<string, number>()
   const jwtKeys = new Map<string, Doc>()
+  const tokens = new Map<string, Doc>()
+  const authenticators = new Map<string, Doc>()
 
   const self: AccountDocuments = {
     getUser: async (id: string) => users.get(id) ?? new Doc(),
@@ -54,6 +58,79 @@ export function memoryDocuments(): MemoryAccountDocuments {
       return merged
     },
     deleteUser: async (id: string) => users.delete(id),
+
+    getToken: async (id: string) => tokens.get(id) ?? new Doc(),
+    findTokens: async (queries: Query[] = []) => {
+      let result = [...tokens.values()]
+      for (const q of queries) {
+        if (q.getMethod() === 'equal' && q.getAttribute() === 'userId') {
+          const target = (q.getValues() as string[])[0]
+          result = result.filter((t) => t.get('userId') === target)
+        }
+        if (q.getMethod() === 'equal' && q.getAttribute() === 'type') {
+          const target = (q.getValues() as string[])[0]
+          result = result.filter((t) => t.get('type') === target)
+        }
+      }
+      return result
+    },
+    createToken: async (doc: Doc) => {
+      const now = new Date()
+      const stored = new Doc({
+        ...doc.getAll(),
+        $id: doc.getId(),
+        $createdAt: doc.createdAt() ?? now,
+        $updatedAt: doc.updatedAt() ?? now,
+      })
+      tokens.set(stored.getId(), stored)
+      return stored
+    },
+    deleteToken: async (id: string) => tokens.delete(id),
+
+    getAuthenticator: async (id: string) => authenticators.get(id) ?? new Doc(),
+    findAuthenticators: async (queries: Query[] = []) => {
+      let result = [...authenticators.values()]
+      for (const q of queries) {
+        if (q.getMethod() === 'equal' && q.getAttribute() === 'userId') {
+          const target = (q.getValues() as string[])[0]
+          result = result.filter((a) => a.get('userId') === target)
+        }
+        if (q.getMethod() === 'equal' && q.getAttribute() === 'type') {
+          const target = (q.getValues() as string[])[0]
+          result = result.filter((a) => a.get('type') === target)
+        }
+        if (q.getMethod() === 'equal' && q.getAttribute() === 'verified') {
+          const target = (q.getValues() as boolean[])[0]
+          result = result.filter((a) => Boolean(a.get('verified')) === target)
+        }
+      }
+      return result
+    },
+    createAuthenticator: async (doc: Doc) => {
+      const now = new Date()
+      const stored = new Doc({
+        ...doc.getAll(),
+        $id: doc.getId(),
+        $createdAt: doc.createdAt() ?? now,
+        $updatedAt: doc.updatedAt() ?? now,
+      })
+      authenticators.set(stored.getId(), stored)
+      return stored
+    },
+    updateAuthenticator: async (id: string, doc: Doc) => {
+      const existing = authenticators.get(id) ?? new Doc({ $id: id })
+      const now = new Date()
+      const merged = new Doc({
+        ...existing.getAll(),
+        ...doc.getAll(),
+        $id: id,
+        $createdAt: existing.createdAt() ?? now,
+        $updatedAt: now,
+      })
+      authenticators.set(id, merged)
+      return merged
+    },
+    deleteAuthenticator: async (id: string) => authenticators.delete(id),
 
     getSession: async (id: string) => sessions.get(id) ?? new Doc(),
     findSessions: async (queries: Query[] = []) => {
@@ -164,5 +241,7 @@ export function memoryDocuments(): MemoryAccountDocuments {
     memberships,
     teamTotals,
     jwtKeys,
+    tokens,
+    authenticators,
   }
 }

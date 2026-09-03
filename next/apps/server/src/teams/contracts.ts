@@ -83,3 +83,16 @@ export const UpdateMembershipRolesBody = t.Object(
   { roles: t.Array(TeamRole, { maxItems: 100 }) },
   { additionalProperties: false },
 )
+
+export const CreateMembershipBody = t.Object({
+  email: t.Optional(t.String({ format: 'email' })),
+  userId: t.Optional(t.String({ minLength: 1, maxLength: 36 })),
+  phone: t.Optional(t.String()),
+  roles: t.Array(TeamRole, { maxItems: 100 }),
+  url: t.String({ format: 'uri' }),
+})
+
+export const UpdateMembershipStatusBody = t.Object({
+  userId: t.String({ minLength: 1, maxLength: 36 }),
+  secret: t.String({ maxLength: 256 }),
+})

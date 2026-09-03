@@ -314,8 +314,8 @@ next/
 - [x] Implement the reviewed database schema CRUD service and five routes
 - [x] Teams core CRUD/preferences, including accepted owner membership creation
 - [x] Users core identity/profile administration
-- [x] Teams memberships and user membership projection; invitations and logs
-      remain assigned to messaging/audit phases
+- [x] Teams memberships, user membership projection, and invitations; logs
+      remain assigned to audit phases
 - [ ] Users auth/session/MFA/targets/usage/logs/deletion remain assigned to
       their dedicated later phases
 - [x] Complete the Phase 3 infrastructure/core-data live gate: PostgreSQL and
@@ -360,7 +360,7 @@ the remaining auth/session/MFA surface stay deferred to their documented phases.
 - [x] Contract first: sessions, MFA, recovery, OAuth2, JWT/API-key issuance (`docs/api/account.md`)
 - [x] Password hashing: bcrypt/argon2 only — legacy algos (MD5 etc.) NOT supported per D29 (`utils/passwords.ts`)
 - [x] Account registration, anonymous sessions, & email/password session lifecycle (`POST /v2/account`, `POST /v2/account/sessions/anonymous`, `POST /v2/account/sessions/email`, profile updates, session listing & revocation, verified live against `nuvix/postgres:18.1`)
-- [x] User administration endpoints (`DELETE /v2/users/:userId`, `POST /v2/users/argon2`, `POST /v2/users/bcrypt`, `PATCH /v2/users/:userId/password`, `GET /v2/users/:userId/sessions`, `POST /v2/users/:userId/sessions`, `DELETE /v2/users/:userId/sessions`, `DELETE /v2/users/:userId/sessions/:sessionId`)
+- [x] User administration endpoints (`DELETE /v2/users/:userId`, `POST /v2/users/argon2`, `POST /v2/users/bcrypt`, `PATCH /v2/users/:userId/password`, `GET /v2/users/:userId/sessions`, `POST /v2/users/:userId/sessions`, `DELETE /v2/users/:userId/sessions`, `DELETE /v2/users/:userId/sessions/:sessionId`, MFA endpoints)
 - [x] Tenant JWT signing-key storage, strict JOSE/claims validation, issuance,
       and rotation (no process-global project JWT secret, verified live against `nuvix/postgres:18.1`)
 - [x] MFA: decide otplib vs hand-rolled RFC-6238 (decided: zero-dependency hand-rolled RFC-6238 on `crypto.subtle`, 100% test-vector verified against RFC 4226/6238 in `utils/totp.ts`)
