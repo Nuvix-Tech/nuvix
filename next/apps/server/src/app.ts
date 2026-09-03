@@ -11,6 +11,7 @@ import type { DatabaseRequestCapabilities } from './infrastructure/database-comp
 import { localeRoutes } from './locale/route'
 import { createMessagingGateway, type MessagingGateway } from './messaging/gateway'
 import { messagingRoutes } from './messaging/route'
+import { type PlatformRouteDependencies, platformRoute } from './platform/route'
 import { cors } from './plugins/cors'
 import { problemErrors } from './plugins/errors'
 import { rateLimit } from './plugins/rate-limit'
@@ -34,6 +35,7 @@ export interface AppOptions {
   readonly projectRequests?: DatabaseRequestCapabilities
   readonly messagingGateway?: MessagingGateway
   readonly webhookDispatcher?: WebhookDispatcher
+  readonly platform?: PlatformRouteDependencies
 }
 
 const UNAVAILABLE_PROJECT_REQUESTS: DatabaseRequestCapabilities = {
@@ -69,7 +71,7 @@ export async function createApp(options: AppOptions = {}) {
     () => ({ status: 'ok', version: '2.0.0-alpha.1', uptime: uptime() }),
   )
 
-  return new Elysia({ prefix: '/v2' })
+  const app = new Elysia({ prefix: '/v2' })
     .use(
       cors({
         origin: options.isProduction ? [] : true,
@@ -118,6 +120,12 @@ export async function createApp(options: AppOptions = {}) {
       }),
     )
     .use(health)
+
+  if (options.platform) {
+    app.use(platformRoute(options.platform))
+  }
+
+  return app
 }
 
 export type NuvixApp = Awaited<ReturnType<typeof createApp>>

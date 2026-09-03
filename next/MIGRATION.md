@@ -382,8 +382,8 @@ Account registration, anonymous sessions, tenant JWT signing-key storage, token 
 
 ### Phase 7 — Platform app
 
-- [ ] Platform slices (projects, keys, templates, auth-settings, metadata)
-- [ ] pg-meta introspection over `Bun.sql`
+- [x] Platform slices (projects, keys, templates, auth-settings, metadata): full project management CRUD, publishable key generation, auth policies, and mounted Elysia routes
+- [x] pg-meta introspection over `Bun.sql`: schema, table, and column metadata introspection directly via tagged template SQL queries
 
 ### Phase 8 — Advanced PostgreSQL data layer (D12)
 
