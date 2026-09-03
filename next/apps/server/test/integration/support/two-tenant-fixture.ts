@@ -19,6 +19,7 @@ import {
   createTenantDatabaseResource,
   type TenantDatabaseResource,
 } from '../../../src/infrastructure/tenant-database-resource'
+import { MESSAGING_MODEL } from '../../../src/messaging/model'
 import { HEADERS } from '../../../src/shared/constants'
 import { STORAGE_MODEL } from '../../../src/storage/model'
 import { TEAM_MODEL } from '../../../src/teams/model'
@@ -52,10 +53,18 @@ export const TENANT_FULL_SCOPES = Object.freeze([
   'buckets.write',
   'files.read',
   'files.write',
+  'messages.read',
+  'messages.write',
+  'providers.read',
+  'providers.write',
   'schemas.read',
   'schemas.write',
+  'subscribers.read',
+  'subscribers.write',
   'teams.read',
   'teams.write',
+  'topics.read',
+  'topics.write',
   'users.read',
   'users.write',
 ] as const)
@@ -71,6 +80,10 @@ export const TENANT_FIXTURE_COLLECTIONS = Object.freeze([
   STORAGE_MODEL.collections.buckets,
   STORAGE_MODEL.collections.objects,
   STORAGE_MODEL.collections.multipartUploads,
+  MESSAGING_MODEL.collections.providers,
+  MESSAGING_MODEL.collections.topics,
+  MESSAGING_MODEL.collections.subscribers,
+  MESSAGING_MODEL.collections.messages,
 ] as const)
 
 export type TwoTenantName = 'a' | 'b'

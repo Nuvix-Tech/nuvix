@@ -1236,6 +1236,83 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     expect(presignA.status).toBe(200)
     expect(presignA.data?.url).toContain('/objects/assets/logo.png?token=')
 
+    // ================= Messaging Verification =================
+    // 1. Create a Provider in Tenant A
+    const createProviderA = observe(
+      await client.v2.messaging.providers.post(
+        {
+          providerId: 'sendgrid-test',
+          name: 'Sendgrid Test',
+          type: 'email',
+          adapter: 'sendgrid',
+          options: { apiKey: 'SG.test_key' },
+        },
+        { headers: headersA },
+      ),
+    )
+    expect(createProviderA.status).toBe(201)
+    expect(createProviderA.data?.$id).toBe('sendgrid-test')
+
+    // 2. Create Topic in Tenant A
+    const createTopicA = observe(
+      await client.v2.messaging.topics.post(
+        {
+          topicId: 'newsletters',
+          name: 'Newsletters',
+          description: 'Weekly tech news',
+        },
+        { headers: headersA },
+      ),
+    )
+    expect(createTopicA.status).toBe(201)
+    expect(createTopicA.data?.$id).toBe('newsletters')
+
+    // 3. Add Subscriber to Topic in Tenant A
+    const addSubA = observe(
+      await client.v2.messaging.topics({ topicId: 'newsletters' }).subscribers.post(
+        {
+          subscriberId: 'sub-user-1',
+          target: 'member@nuvix.io',
+          providerType: 'email',
+          userName: 'Member One',
+        },
+        { headers: headersA },
+      ),
+    )
+    expect(addSubA.status).toBe(201)
+    expect(addSubA.data?.$id).toBe('sub-user-1')
+
+    // 4. Create Draft Message in Tenant A
+    const createMsgA = observe(
+      await client.v2.messaging.messages.email.post(
+        {
+          messageId: 'msg-promo',
+          topics: ['newsletters'],
+          subject: 'Promo Week',
+          content: 'Hello {{name}}',
+          draft: true,
+        },
+        { headers: headersA },
+      ),
+    )
+    expect(createMsgA.status).toBe(201)
+    expect(createMsgA.data?.status).toBe('draft')
+
+    // 5. Cross-tenant Isolation: Tenant B cannot access Tenant A's topic or provider
+    const crossTopicB = observe(
+      await client.v2.messaging.topics({ topicId: 'newsletters' }).get({
+        headers: headersB,
+      }),
+    )
+    expect(crossTopicB.status).toBe(404)
+
+    const crossProviderB = observe(
+      await client.v2.messaging.providers({ providerId: 'sendgrid-test' }).get({
+        headers: headersB,
+      }),
+    )
+    expect(crossProviderB.status).toBe(404)
+
     const requestDiagnostics = JSON.stringify(
       observedResults.map((result) => ({
         data: result.data,

@@ -9,6 +9,8 @@ import { getTranslator, localeContext } from './context/locale'
 import { schemaRoutes } from './database/route'
 import type { DatabaseRequestCapabilities } from './infrastructure/database-composition'
 import { localeRoutes } from './locale/route'
+import { createMessagingGateway, type MessagingGateway } from './messaging/gateway'
+import { messagingRoutes } from './messaging/route'
 import { cors } from './plugins/cors'
 import { problemErrors } from './plugins/errors'
 import { rateLimit } from './plugins/rate-limit'
@@ -28,6 +30,7 @@ export interface AppOptions {
   readonly avatars?: AvatarService
   readonly uptime?: () => number
   readonly projectRequests?: DatabaseRequestCapabilities
+  readonly messagingGateway?: MessagingGateway
 }
 
 const UNAVAILABLE_PROJECT_REQUESTS: DatabaseRequestCapabilities = {
@@ -48,6 +51,7 @@ export async function createApp(options: AppOptions = {}) {
   const geoip = options.geoip ?? (await createGeoIP())
   const avatars = options.avatars ?? createAvatarService()
   const uptime = options.uptime ?? (() => process.uptime())
+  const messagingGateway = options.messagingGateway ?? createMessagingGateway()
 
   const health = new Elysia({ name: 'health' }).get(
     '/health',
@@ -97,6 +101,12 @@ export async function createApp(options: AppOptions = {}) {
     .use(userRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(accountRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(storageRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
+    .use(
+      messagingRoutes({
+        requests: options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS,
+        gateway: messagingGateway,
+      }),
+    )
     .use(health)
 }
 

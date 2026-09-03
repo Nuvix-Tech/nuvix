@@ -142,6 +142,14 @@ describe('database provisioning', () => {
       'create:objects',
       'exists:multipart_uploads',
       'create:multipart_uploads',
+      'exists:messaging_providers',
+      'create:messaging_providers',
+      'exists:messaging_topics',
+      'create:messaging_topics',
+      'exists:messaging_subscribers',
+      'create:messaging_subscribers',
+      'exists:messaging_messages',
+      'create:messaging_messages',
     ])
     expect(state.metadata).toEqual([DATABASE_METADATA.tenant.postgresql])
   })

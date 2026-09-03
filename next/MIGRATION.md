@@ -77,7 +77,7 @@ onError`), typed context via `derive`/`resolve`, `t` (TypeBox) schemas,
 | D6  | JWT                            | Hand-rolled HS256/HS512 on `crypto.subtle`                                                                                                                                                                                                                                              | Drops @nestjs/jwt                                                                                             |
 | D7  | Monorepo                       | Plain Bun workspaces (no Turborepo)                                                                                                                                                                                                                                                     | Native tooling only                                                                                           |
 | D8  | Runtime                        | **Bun-only**, Node dropped                                                                                                                                                                                                                                                              | Unlocks all native APIs                                                                                       |
-| D9  | Templates                      | Keep Handlebars                                                                                                                                                                                                                                                                         | Template-syntax compat for users                                                                              |
+| D9  | Templates                      | Bun-native zero-dependency template compiler + HTML/JSX tagged templates                                                                                                                                                | Drops `handlebars` while maintaining `{{var}}`/`{{#if}}`/`{{#each}}` syntax compat for users                                  |
 | D10 | API docs                       | `@elysia/openapi` (official 2.x plugin, Scalar UI)                                                                                                                                                                                                                                      | Spec at `/v2/openapi/json`, Scalar UI at `/v2/openapi`. Needs a small Bun patch (Phase 1 notes)               |
 | D11 | Nuvix infrastructure packages  | Bun/ESM-only sibling source checkouts linked from `@nuvix/server`: `file:../../../../database`, `file:../../../../pg-ts`, `file:../../../../cache`, `file:../../../../storage`, and `file:../../../../messaging`                                                                        | Build siblings before installing/validating `next`; see `docs/architecture/integrations.md`                   |
 | D12 | `@nuvix/pg`                    | Use Bun-native `@nuvix/pg@2.0.0` from the `pg-ts` sibling checkout                                                                                                                                                                                                                      | Infrastructure-only PostgreSQL tenant capability; immutable builders and caller-owned Bun SQL                 |
@@ -163,12 +163,12 @@ long-running connections during AOT dry-run.
 | `@nestjs/event-emitter`                              | typed emitter on `EventTarget`                                                  |
 | `sharp`                                              | `Bun.Image` (D21)                                                               |
 | `otplib`                                             | deleted — replaced by zero-dependency RFC-6238 TOTP on `crypto.subtle` (`utils/totp.ts`) |
+| `handlebars`                                         | deleted — replaced by zero-dependency Bun-native template engine + HTML tagged templates (`messaging/template.ts`) |
 
 ### Kept (justified)
 
 | Package                                                                        | Why                                                                           |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `handlebars`                                                                   | User template syntax compat (D9)                                              |
 | `bullmq`                                                                       | Queue engine w/ Bun adapter (D4)                                              |
 | `maxmind`                                                                      | GeoIP; no Bun native equivalent                                               |
 | `@resvg/resvg-js`                                                              | SVG→PNG rendering — `Bun.Image` has no SVG support (pending Open Question #7) |
@@ -371,7 +371,7 @@ Account registration, anonymous sessions, tenant JWT signing-key storage, token 
 ### Phase 5 — Storage + Messaging + Webhooks
 
 - [x] Storage: S3-grade object storage redesign with buckets, hierarchical keys, S3 Bucket Policies + Nuvix ACLs, byte-range streaming, presigned URLs, S3 multipart upload lifecycle, and centrally configured `@nuvix/storage` devices
-- [ ] Messaging: shared `@nuvix/messaging` gateway for topics/subscribers/providers; Handlebars templates kept
+- [x] Messaging: multi-channel `@nuvix/messaging` gateway (Mailgun, Sendgrid, SMTP, Twilio, Vonage, Msg91, Telesign, TextMagic, FCM, APNS) for topics/subscribers/providers/messages, draft and immediate dispatch, delivery reporting, Bun-native zero-dependency template compiler + HTML tagged templates (replaces handlebars)
 - [ ] Webhooks
 
 ### Phase 6 — Async jobs
