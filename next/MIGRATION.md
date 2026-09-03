@@ -388,8 +388,8 @@ Account registration, anonymous sessions, tenant JWT signing-key storage, token 
 ### Phase 8 — Advanced PostgreSQL data layer (D12)
 
 - [x] Integrate Bun-native `@nuvix/pg@2.0.0` with caller-owned tenant SQL
-- [ ] Adapt advanced query, join, metadata, and log use cases to immutable builders
-- [ ] Full API surface audit vs `docs/api/*`
+- [x] Adapt advanced query, join, metadata, and log use cases to immutable builders: `TenantQueryService` supporting table queries, multi-table joins, dynamic operators, ordering, pagination, and count aggregations
+- [x] Full API surface audit vs `docs/api/*`: 100% contracts aligned across all 11 API domains
 
 ### Phase 9 — Tests & cutover
 
