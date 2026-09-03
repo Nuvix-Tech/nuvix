@@ -150,6 +150,10 @@ describe('database provisioning', () => {
       'create:messaging_subscribers',
       'exists:messaging_messages',
       'create:messaging_messages',
+      'exists:_webhooks',
+      'create:_webhooks',
+      'exists:_webhook_logs',
+      'create:_webhook_logs',
     ])
     expect(state.metadata).toEqual([DATABASE_METADATA.tenant.postgresql])
   })

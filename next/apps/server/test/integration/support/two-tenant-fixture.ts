@@ -23,6 +23,7 @@ import { MESSAGING_MODEL } from '../../../src/messaging/model'
 import { HEADERS } from '../../../src/shared/constants'
 import { STORAGE_MODEL } from '../../../src/storage/model'
 import { TEAM_MODEL } from '../../../src/teams/model'
+import { WEBHOOK_MODEL } from '../../../src/webhooks/model'
 import {
   createPlatformFixture,
   type PlatformFixture,
@@ -67,6 +68,8 @@ export const TENANT_FULL_SCOPES = Object.freeze([
   'topics.write',
   'users.read',
   'users.write',
+  'webhooks.read',
+  'webhooks.write',
 ] as const)
 
 export const TENANT_FIXTURE_COLLECTIONS = Object.freeze([
@@ -84,6 +87,8 @@ export const TENANT_FIXTURE_COLLECTIONS = Object.freeze([
   MESSAGING_MODEL.collections.topics,
   MESSAGING_MODEL.collections.subscribers,
   MESSAGING_MODEL.collections.messages,
+  WEBHOOK_MODEL.collections.webhooks,
+  WEBHOOK_MODEL.collections.webhookLogs,
 ] as const)
 
 export type TwoTenantName = 'a' | 'b'

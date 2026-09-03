@@ -1313,6 +1313,39 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     )
     expect(crossProviderB.status).toBe(404)
 
+    // ================= Webhooks Verification =================
+    // 1. Create Webhook in Tenant A
+    const createWebhookA = observe(
+      await client.v2.webhooks.post(
+        {
+          webhookId: 'wh-alerts',
+          name: 'Alerts Hook',
+          events: ['users.*'],
+          url: 'https://api.external.com/webhooks',
+          security: true,
+        },
+        { headers: headersA },
+      ),
+    )
+    expect(createWebhookA.status).toBe(201)
+    expect(createWebhookA.data?.$id).toBe('wh-alerts')
+
+    // 2. Rotate Webhook Signature in Tenant A
+    const rotateSigA = observe(
+      await client.v2
+        .webhooks({ webhookId: 'wh-alerts' })
+        .signature.patch({}, { headers: headersA }),
+    )
+    expect(rotateSigA.status).toBe(200)
+
+    // 3. Cross-tenant Isolation: Tenant B cannot access Tenant A's webhook
+    const crossWebhookB = observe(
+      await client.v2.webhooks({ webhookId: 'wh-alerts' }).get({
+        headers: headersB,
+      }),
+    )
+    expect(crossWebhookB.status).toBe(404)
+
     const requestDiagnostics = JSON.stringify(
       observedResults.map((result) => ({
         data: result.data,

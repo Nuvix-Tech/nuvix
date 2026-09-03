@@ -3,6 +3,7 @@ import { setupTenantAuthSchema } from '../context/tenant-auth-schema'
 import { setupMessagingSchema } from '../messaging/schema'
 import { setupStorageSchema } from '../storage/schema'
 import { setupTeamSchema } from '../teams/schema'
+import { setupWebhookSchema } from '../webhooks/schema'
 import { DATABASE_METADATA } from './database-metadata'
 import { setupPlatformSchema } from './platform-schema'
 import {
@@ -77,4 +78,5 @@ export async function provisionTenantDatabase(database: DatabaseProvisioningAdmi
   await setupTeamSchema(database)
   await setupStorageSchema(database)
   await setupMessagingSchema(database)
+  await setupWebhookSchema(database)
 }

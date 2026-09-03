@@ -372,7 +372,7 @@ Account registration, anonymous sessions, tenant JWT signing-key storage, token 
 
 - [x] Storage: S3-grade object storage redesign with buckets, hierarchical keys, S3 Bucket Policies + Nuvix ACLs, byte-range streaming, presigned URLs, S3 multipart upload lifecycle, and centrally configured `@nuvix/storage` devices
 - [x] Messaging: multi-channel `@nuvix/messaging` gateway (Mailgun, Sendgrid, SMTP, Twilio, Vonage, Msg91, Telesign, TextMagic, FCM, APNS) for topics/subscribers/providers/messages, draft and immediate dispatch, delivery reporting, Bun-native zero-dependency template compiler + HTML tagged templates (replaces handlebars)
-- [ ] Webhooks
+- [x] Webhooks: webhook management, SSRF protection against private/loopback/cloud metadata IPs, event wildcard matching with ReDoS defense, RFC HMAC-SHA256 request signing (`crypto.subtle`), delivery logging, and signature rotation
 
 ### Phase 6 — Async jobs
 

@@ -19,6 +19,8 @@ import { ServiceUnavailableError } from './shared/errors'
 import { storageRoutes } from './storage/route'
 import { teamRoutes } from './teams/route'
 import { userRoutes } from './users/route'
+import { createWebhookDispatcher, type WebhookDispatcher } from './webhooks/dispatcher'
+import { webhookRoutes } from './webhooks/route'
 
 const DEFAULT_TRANSLATIONS = new URL('../../../assets/locale/translations', import.meta.url)
   .pathname
@@ -31,6 +33,7 @@ export interface AppOptions {
   readonly uptime?: () => number
   readonly projectRequests?: DatabaseRequestCapabilities
   readonly messagingGateway?: MessagingGateway
+  readonly webhookDispatcher?: WebhookDispatcher
 }
 
 const UNAVAILABLE_PROJECT_REQUESTS: DatabaseRequestCapabilities = {
@@ -52,6 +55,7 @@ export async function createApp(options: AppOptions = {}) {
   const avatars = options.avatars ?? createAvatarService()
   const uptime = options.uptime ?? (() => process.uptime())
   const messagingGateway = options.messagingGateway ?? createMessagingGateway()
+  const webhookDispatcher = options.webhookDispatcher ?? createWebhookDispatcher()
 
   const health = new Elysia({ name: 'health' }).get(
     '/health',
@@ -105,6 +109,12 @@ export async function createApp(options: AppOptions = {}) {
       messagingRoutes({
         requests: options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS,
         gateway: messagingGateway,
+      }),
+    )
+    .use(
+      webhookRoutes({
+        requests: options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS,
+        dispatcher: webhookDispatcher,
       }),
     )
     .use(health)
