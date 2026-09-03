@@ -321,8 +321,7 @@ next/
 - [x] Complete the Phase 3 infrastructure/core-data live gate: PostgreSQL and
       real-file SQLite platform persistence each resolve two isolated PostgreSQL
       tenants through production request composition
-- [x] Schemas CRUD slice — implemented on `@nuvix/pg@2.0.0`; collection,
-      attribute, index, and document contracts remain separate
+- [x] Schemas CRUD, Tables & Rows (SQL data plane), and Collections, Attributes, Indexes, and Documents (Document data plane) — implemented on `@nuvix/pg@2.0.0` and `@nuvix/db@2.0.0`
 
 **Infrastructure/core-data gate verified 2026-08-30:**
 

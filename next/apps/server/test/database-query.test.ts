@@ -153,4 +153,120 @@ describe('TenantQueryService (@nuvix/pg immutable builders)', () => {
 
     expect(count).toBe(42)
   })
+
+  test('getRow fetches single row by _id or fallback to id', async () => {
+    const service = createTenantQueryService()
+    const mockBuilder: any = {
+      withSchema() {
+        return mockBuilder
+      },
+      where(_col: string, val: unknown) {
+        return {
+          limit() {
+            return {
+              async execute() {
+                return [{ _id: val, name: 'Alice' }]
+              },
+            }
+          },
+        }
+      },
+    }
+    const mockDb = {
+      table() {
+        return mockBuilder
+      },
+    } as unknown as PostgresDatabase
+
+    const row = await service.getRow(mockDb, {
+      schema: 'core',
+      table: 'users',
+      rowId: '123',
+    })
+    expect(row).toEqual({ _id: '123', name: 'Alice' })
+  })
+
+  test('insertRows inserts rows and returns them', async () => {
+    const service = createTenantQueryService()
+    const mockBuilder: any = {
+      withSchema() {
+        return mockBuilder
+      },
+      insert(data: any) {
+        return {
+          returning() {
+            return {
+              async execute() {
+                return Array.isArray(data) ? data : [data]
+              },
+            }
+          },
+        }
+      },
+    }
+    const mockDb = {
+      table() {
+        return mockBuilder
+      },
+    } as unknown as PostgresDatabase
+
+    const rows = await service.insertRows(mockDb, {
+      schema: 'core',
+      table: 'users',
+      data: [{ name: 'Bob' }, { name: 'Charlie' }],
+    })
+    expect(rows).toEqual([{ name: 'Bob' }, { name: 'Charlie' }])
+  })
+
+  test('updateRows and deleteRows work with filters', async () => {
+    const service = createTenantQueryService()
+    const mockBuilder: any = {
+      withSchema() {
+        return mockBuilder
+      },
+      where() {
+        return mockBuilder
+      },
+      update(data: any) {
+        return {
+          returning() {
+            return {
+              async execute() {
+                return [data]
+              },
+            }
+          },
+        }
+      },
+      delete() {
+        return {
+          returning() {
+            return {
+              async execute() {
+                return [{ _id: '1', deleted: true }]
+              },
+            }
+          },
+        }
+      },
+    }
+    const mockDb = {
+      table() {
+        return mockBuilder
+      },
+    } as unknown as PostgresDatabase
+
+    const updated = await service.updateRows(mockDb, {
+      table: 'users',
+      data: { name: 'Bob Updated' },
+      rowId: '1',
+    })
+    expect(updated).toEqual([{ name: 'Bob Updated' }])
+
+    const deleted = await service.deleteRows(mockDb, {
+      table: 'users',
+      rowId: '1',
+    })
+    expect(deleted).toEqual([{ _id: '1', deleted: true }])
+  })
 })

@@ -5,6 +5,7 @@ import type {
   TenantAuthDocuments,
   TenantAuthResolver,
 } from '../context/project-request'
+import type { TableDataService } from '../database/query'
 import type { SchemaService } from '../database/service'
 import type { TenantDatabaseTarget } from './platform-persistence-model'
 import { ProjectRequestScope } from './project-request-scope'
@@ -23,11 +24,13 @@ interface TenantDatabaseAdmin {
 
 interface RequestTenantDatabase extends TenantDatabaseAdmin {
   readonly schemas: SchemaService
+  readonly tables?: TableDataService
 }
 
 interface CompositionTenantDatabaseResource
   extends RegistryTenantDatabaseResource<TenantDatabaseAdmin> {
   readonly schemas: SchemaService
+  readonly tables?: TableDataService
 }
 
 export type DatabaseRegistryOptions = Omit<
@@ -64,6 +67,7 @@ function requestResource(
     database: Object.freeze({
       for: database.for.bind(database),
       schemas: resource.schemas,
+      tables: resource.tables,
       system: database.system.bind(database),
     }),
     close: resource.close.bind(resource),

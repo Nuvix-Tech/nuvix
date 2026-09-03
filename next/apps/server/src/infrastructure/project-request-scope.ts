@@ -8,6 +8,7 @@ import type {
   TenantAuthDocuments,
   TenantAuthResolver,
 } from '../context/project-request'
+import type { TableDataService } from '../database/query'
 import type { SchemaService } from '../database/service'
 import { ServiceUnavailableError } from '../shared/errors'
 import type { TenantDatabases } from './tenant-databases'
@@ -15,6 +16,7 @@ import type { TenantDatabases } from './tenant-databases'
 interface RequestTenantDatabase {
   for(...roles: string[]): Session
   readonly schemas: SchemaService
+  readonly tables?: TableDataService
   system(): TenantAuthDocuments
 }
 
@@ -77,6 +79,7 @@ export class ProjectRequestScope {
         auth,
         session,
         schemas: lease.database.schemas,
+        tables: lease.database.tables,
         account: accountDocuments(system as unknown as Session),
       })
       return await operation(context)

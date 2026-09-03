@@ -115,6 +115,7 @@ describe('project request scope', () => {
         'project',
         'schemas',
         'session',
+        'tables',
       ])
       expect(context.session).toBe(state.session)
       expect(context.schemas).toBe(state.schemas)

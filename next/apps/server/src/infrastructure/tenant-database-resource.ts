@@ -10,6 +10,7 @@ import {
   createDocumentSchemaBootstrap,
   type DocumentSchemaAdmin,
 } from '../database/document-schema'
+import { createTableDataService, type TableDataService } from '../database/query'
 import { createSchemaService, type SchemaService } from '../database/service'
 import { DATABASE_METADATA } from './database-metadata'
 import type { TenantDatabaseTarget } from './platform-persistence-model'
@@ -48,6 +49,7 @@ export interface TenantDatabaseResource<
   readonly cache: CacheDriver
   readonly postgres: PostgresResource
   readonly schemas: SchemaService
+  readonly tables?: TableDataService
 }
 
 const DEFAULT_CONSTRUCTION: TenantDatabaseConstruction<SQL, Adapter, Database, PostgresDatabase> = {
@@ -155,6 +157,7 @@ export async function createTenantDatabaseResource(
       forSchema: (schema) => dependencies.documentAdmin(sql, selectedCache, schema),
     })
     const schemas = createSchemaService({ catalog, bootstrap })
+    const tables = createTableDataService(postgres as PostgresDatabase)
     await dependencies.ready(postgres)
 
     return {
@@ -163,6 +166,7 @@ export async function createTenantDatabaseResource(
       database,
       postgres,
       schemas,
+      tables,
       close,
     }
   } catch (error) {

@@ -110,17 +110,67 @@ schema → `404 /errors/not-found`.
 
 ---
 
+## SQL Data Plane (Tables & Rows)
+
+Direct table access for `managed` and `unmanaged` schemas via `@nuvix/pg`.
+
+| Method | Path                                                 | Purpose                      | Scope                 |
+| ------ | ---------------------------------------------------- | ---------------------------- | --------------------- |
+| GET    | `/v2/database/schemas/:name/tables/:table`           | Query table rows with filter | `schemas.tables.read` |
+| GET    | `/v2/database/schemas/:name/tables/:table/count`     | Count rows matching filter   | `schemas.tables.read` |
+| GET    | `/v2/database/schemas/:name/tables/:table/:rowId`    | Get single row by primary ID | `schemas.tables.read` |
+| POST   | `/v2/database/schemas/:name/tables/:table`           | Insert row(s)                | `schemas.tables.write`|
+| PATCH  | `/v2/database/schemas/:name/tables/:table/:rowId`    | Update row by primary ID     | `schemas.tables.write`|
+| PATCH  | `/v2/database/schemas/:name/tables/:table`           | Update rows matching filter  | `schemas.tables.write`|
+| DELETE | `/v2/database/schemas/:name/tables/:table/:rowId`    | Delete row by primary ID     | `schemas.tables.write`|
+| DELETE | `/v2/database/schemas/:name/tables/:table`           | Delete rows matching filter  | `schemas.tables.write`|
+
+---
+
+## Document Data Plane (Collections, Attributes, Indexes, Documents)
+
+NoSQL-style DBaaS collection management and document CRUD for `document` schemas via `@nuvix/db`.
+
+### Collections
+| Method | Path                                                           | Purpose                 | Scope               |
+| ------ | -------------------------------------------------------------- | ----------------------- | ------------------- |
+| GET    | `/v2/database/schemas/:name/collections`                       | List collections        | `collections.read`  |
+| POST   | `/v2/database/schemas/:name/collections`                       | Create collection       | `collections.write` |
+| GET    | `/v2/database/schemas/:name/collections/:collectionId`         | Get collection details  | `collections.read`  |
+| PUT    | `/v2/database/schemas/:name/collections/:collectionId`         | Update collection       | `collections.write` |
+| DELETE | `/v2/database/schemas/:name/collections/:collectionId`         | Delete collection       | `collections.write` |
+
+### Attributes & Indexes
+| Method | Path                                                                          | Purpose            | Scope               |
+| ------ | ----------------------------------------------------------------------------- | ------------------ | ------------------- |
+| GET    | `/v2/database/schemas/:name/collections/:collectionId/attributes`              | List attributes    | `collections.read`  |
+| POST   | `/v2/database/schemas/:name/collections/:collectionId/attributes`              | Create attribute   | `collections.write` |
+| DELETE | `/v2/database/schemas/:name/collections/:collectionId/attributes/:attributeId`| Delete attribute   | `collections.write` |
+| GET    | `/v2/database/schemas/:name/collections/:collectionId/indexes`                 | List indexes       | `collections.read`  |
+| POST   | `/v2/database/schemas/:name/collections/:collectionId/indexes`                 | Create index       | `collections.write` |
+| DELETE | `/v2/database/schemas/:name/collections/:collectionId/indexes/:indexId`        | Delete index       | `collections.write` |
+
+### Documents
+| Method | Path                                                                          | Purpose            | Scope               |
+| ------ | ----------------------------------------------------------------------------- | ------------------ | ------------------- |
+| GET    | `/v2/database/schemas/:name/collections/:collectionId/documents`               | List documents     | `documents.read`    |
+| POST   | `/v2/database/schemas/:name/collections/:collectionId/documents`               | Create document    | `documents.write`   |
+| GET    | `/v2/database/schemas/:name/collections/:collectionId/documents/:documentId`  | Get document       | `documents.read`    |
+| PATCH  | `/v2/database/schemas/:name/collections/:collectionId/documents/:documentId`  | Update document    | `documents.write`   |
+| DELETE | `/v2/database/schemas/:name/collections/:collectionId/documents/:documentId`  | Delete document    | `documents.write`   |
+
+---
+
 ## v1 → v2 deviations
 
 1. **Envelope**: `{ data, meta: { total } }` replaces v1's `{ data, total }`.
 2. **Error format**: RFC-9457 problem+json replaces legacy `Exception`
-   codes — but the _specificity_ returns as the stable `code` field:
-   `schema_already_exists`, `schema_not_found` (matching i18n keys
-   `errors.database.schemaExists` / `.schemaNotFound`). English `detail`
-   remains the fallback; translations never mask it.
-3. **Out of scope (deferred)**: collections, attributes, indexes, and document
-   endpoints require their own contract. Do not infer or implement stubs from
-   the now-stable package API.
+   codes — with stable `code` values:
+   `schema_already_exists`, `schema_not_found`, `collection_not_found`,
+   `collection_already_exists`, `attribute_not_found`, `attribute_already_exists`,
+   `index_not_found`, `index_already_exists`, `document_not_found`, `row_not_found`.
+3. **Unified REST Routing**: All database routes are neatly nested under
+   `/v2/database/schemas/:name/` for both SQL tables/rows and Document collections/documents.
 
 ## Implementation notes
 

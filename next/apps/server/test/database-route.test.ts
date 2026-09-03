@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import type { Session } from '@nuvix/db'
+import { Doc, type Session } from '@nuvix/db'
 import type { AccountDocuments } from '../src/account/documents'
 import { createApp } from '../src/app'
 import type { ProjectAuthContext } from '../src/context/project'
+import type { TableDataService } from '../src/database/query'
 import type { SchemaService } from '../src/database/service'
 import type { DatabaseRequestCapabilities } from '../src/infrastructure/database-composition'
 import { ConflictError, NotFoundError } from '../src/shared/errors'
@@ -24,7 +25,16 @@ const ADMIN_SESSION: ProjectAuthContext = {
   sessionId: 'admin_session',
   userId: 'admin_user',
   verified: true,
-  scopes: ['schemas.read', 'schemas.write'],
+  scopes: [
+    'schemas.read',
+    'schemas.write',
+    'schemas.tables.read',
+    'schemas.tables.write',
+    'collections.read',
+    'collections.write',
+    'documents.read',
+    'documents.write',
+  ],
 }
 
 type SchemaOperation = keyof SchemaService
@@ -71,14 +81,88 @@ async function harness(auth: ProjectAuthContext, options: HarnessOptions = {}) {
       record('remove', name)
     },
   })
+
+  const mockTableData: Record<string, unknown>[] = [{ _id: '1', name: 'Row 1' }]
+  const tables: TableDataService = {
+    async query(_schema, _table, _options) {
+      return mockTableData
+    },
+    async count(_schema, _table, _filters) {
+      return mockTableData.length
+    },
+    async get(_schema, _table, rowId) {
+      return mockTableData.find((r) => r._id === rowId) ?? null
+    },
+    async insert(_schema, _table, data) {
+      const items = Array.isArray(data) ? data : [data]
+      mockTableData.push(...items)
+      return items
+    },
+    async update(_schema, _table, data, _filters, rowId) {
+      const item = mockTableData.find((r) => r._id === rowId)
+      if (!item) return []
+      Object.assign(item, data)
+      return [item]
+    },
+    async delete(_schema, _table, _filters, rowId) {
+      const idx = mockTableData.findIndex((r) => r._id === rowId)
+      if (idx === -1) return []
+      return mockTableData.splice(idx, 1)
+    },
+  }
+
+  const memoryDocs = new Map<string, Map<string, Doc>>()
+  const mockSession = {
+    async find(col: string, _queries: unknown[]) {
+      const c = memoryDocs.get(col)
+      if (!c) return []
+      return Array.from(c.values())
+    },
+    async count(col: string, _queries: unknown[]) {
+      const c = memoryDocs.get(col)
+      if (!c) return 0
+      return c.size
+    },
+    async getDocument(col: string, id: string) {
+      const c = memoryDocs.get(col)
+      const doc = c?.get(id)
+      if (!doc) throw new Error('Not found')
+      return doc
+    },
+    async createDocument(col: string, doc: Doc) {
+      let c = memoryDocs.get(col)
+      if (!c) {
+        c = new Map()
+        memoryDocs.set(col, c)
+      }
+      c.set(doc.getId(), doc)
+      return doc
+    },
+    async updateDocument(col: string, id: string, doc: Doc) {
+      let c = memoryDocs.get(col)
+      if (!c) {
+        c = new Map()
+        memoryDocs.set(col, c)
+      }
+      c.set(id, doc)
+      return doc
+    },
+    async deleteDocument(col: string, id: string) {
+      const c = memoryDocs.get(col)
+      if (!c) return false
+      return c.delete(id)
+    },
+  } as unknown as Session
+
   const requests: DatabaseRequestCapabilities = {
     withProject: async (headers, operation) => {
       projectRequests.push(headers)
       return await operation({
         project: { id: 'project_a', enabled: true },
         auth,
-        session: {} as Session,
+        session: mockSession,
         schemas,
+        tables,
         account: {} as AccountDocuments,
       })
     },
@@ -89,10 +173,10 @@ async function harness(auth: ProjectAuthContext, options: HarnessOptions = {}) {
     uptime: () => 42,
   })
 
-  return { app, calls, projectRequests }
+  return { app, calls, projectRequests, mockTableData }
 }
 
-function json(method: 'POST' | 'PATCH', body: unknown): RequestInit {
+function json(method: 'POST' | 'PATCH' | 'PUT', body: unknown): RequestInit {
   return {
     method,
     headers: { 'content-type': 'application/json' },
@@ -311,5 +395,200 @@ describe('database schema routes', () => {
     expect(response.status).toBe(404)
     expect(state.projectRequests).toEqual([])
     expect(state.calls).toEqual([])
+  })
+
+  test('queries, gets, inserts, updates, and deletes table rows', async () => {
+    const state = await harness(ADMIN_SESSION)
+
+    // List rows
+    const listRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/tables/users'),
+    )
+    expect(listRes.status).toBe(200)
+    const listData = (await listRes.json()) as { data: unknown[]; meta: { total: number } }
+    expect(listData.data).toHaveLength(1)
+    expect(listData.meta.total).toBe(1)
+
+    // Count rows
+    const countRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/tables/users/count'),
+    )
+    expect(countRes.status).toBe(200)
+    expect((await countRes.json()) as Record<string, unknown>).toEqual({ count: 1 })
+
+    // Get single row
+    const getRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/tables/users/1'),
+    )
+    expect(getRes.status).toBe(200)
+    expect((await getRes.json()) as Record<string, unknown>).toEqual({ _id: '1', name: 'Row 1' })
+
+    // Insert row
+    const insertRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/tables/users',
+        json('POST', { name: 'Row 2' }),
+      ),
+    )
+    expect(insertRes.status).toBe(201)
+
+    // Update row
+    const updateRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/tables/users/1',
+        json('PATCH', { name: 'Row 1 Modified' }),
+      ),
+    )
+    expect(updateRes.status).toBe(200)
+    expect(((await updateRes.json()) as Record<string, unknown>).name).toBe('Row 1 Modified')
+
+    // Delete row
+    const deleteRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/tables/users/1', {
+        method: 'DELETE',
+      }),
+    )
+    expect(deleteRes.status).toBe(204)
+  })
+
+  test('performs full collection, attribute, index, and document lifecycle', async () => {
+    const state = await harness(ADMIN_SESSION)
+
+    // 1. Create collection
+    const createColRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/collections',
+        json('POST', { collectionId: 'posts', name: 'Blog Posts' }),
+      ),
+    )
+    expect(createColRes.status).toBe(201)
+    const col = (await createColRes.json()) as Record<string, unknown>
+    expect(col.$id).toBe('posts')
+    expect(col.name).toBe('Blog Posts')
+
+    // 2. List collections
+    const listColsRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections'),
+    )
+    expect(listColsRes.status).toBe(200)
+    const cols = (await listColsRes.json()) as Record<string, unknown>
+    expect(cols.data).toHaveLength(1)
+
+    // 3. Get collection
+    const getColRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections/posts'),
+    )
+    expect(getColRes.status).toBe(200)
+
+    // 4. Update collection
+    const updateColRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/collections/posts',
+        json('PUT', { name: 'Updated Posts' }),
+      ),
+    )
+    expect(updateColRes.status).toBe(200)
+    expect(((await updateColRes.json()) as Record<string, unknown>).name).toBe('Updated Posts')
+
+    // 5. Create attribute
+    const createAttrRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/collections/posts/attributes',
+        json('POST', { key: 'title', type: 'string', size: 255, required: true }),
+      ),
+    )
+    expect(createAttrRes.status).toBe(201)
+    expect(((await createAttrRes.json()) as Record<string, unknown>).key).toBe('title')
+
+    // 6. List attributes
+    const listAttrRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections/posts/attributes'),
+    )
+    expect(listAttrRes.status).toBe(200)
+    expect(((await listAttrRes.json()) as Record<string, unknown>).data).toHaveLength(1)
+
+    // 7. Create index
+    const createIdxRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/collections/posts/indexes',
+        json('POST', { key: 'idx_title', type: 'key', attributes: ['title'] }),
+      ),
+    )
+    expect(createIdxRes.status).toBe(201)
+
+    // 8. List indexes
+    const listIdxRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections/posts/indexes'),
+    )
+    expect(listIdxRes.status).toBe(200)
+    expect(((await listIdxRes.json()) as Record<string, unknown>).data).toHaveLength(1)
+
+    // 9. Create document
+    const createDocRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/collections/posts/documents',
+        json('POST', { documentId: 'post_1', data: { title: 'First Post' } }),
+      ),
+    )
+    expect(createDocRes.status).toBe(201)
+    const doc = (await createDocRes.json()) as Record<string, unknown>
+    expect(doc.$id).toBe('post_1')
+    expect(doc.title).toBe('First Post')
+
+    // 10. List documents
+    const listDocsRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections/posts/documents'),
+    )
+    expect(listDocsRes.status).toBe(200)
+    expect(((await listDocsRes.json()) as Record<string, unknown>).data).toHaveLength(1)
+
+    // 11. Get document
+    const getDocRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections/posts/documents/post_1'),
+    )
+    expect(getDocRes.status).toBe(200)
+
+    // 12. Update document
+    const updateDocRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/collections/posts/documents/post_1',
+        json('PATCH', { data: { title: 'Updated Title' } }),
+      ),
+    )
+    expect(updateDocRes.status).toBe(200)
+    expect(((await updateDocRes.json()) as Record<string, unknown>).title).toBe('Updated Title')
+
+    // 13. Delete document
+    const deleteDocRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections/posts/documents/post_1', {
+        method: 'DELETE',
+      }),
+    )
+    expect(deleteDocRes.status).toBe(204)
+
+    // 14. Delete index
+    const deleteIdxRes = await state.app.handle(
+      new Request(
+        'http://nuvix.test/v2/database/schemas/core/collections/posts/indexes/idx_title',
+        { method: 'DELETE' },
+      ),
+    )
+    expect(deleteIdxRes.status).toBe(204)
+
+    // 15. Delete attribute
+    const deleteAttrRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections/posts/attributes/title', {
+        method: 'DELETE',
+      }),
+    )
+    expect(deleteAttrRes.status).toBe(204)
+
+    // 16. Delete collection
+    const deleteColRes = await state.app.handle(
+      new Request('http://nuvix.test/v2/database/schemas/core/collections/posts', {
+        method: 'DELETE',
+      }),
+    )
+    expect(deleteColRes.status).toBe(204)
   })
 })
