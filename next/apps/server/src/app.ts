@@ -14,6 +14,7 @@ import { problemErrors } from './plugins/errors'
 import { rateLimit } from './plugins/rate-limit'
 import { securityHeaders } from './plugins/security'
 import { ServiceUnavailableError } from './shared/errors'
+import { storageRoutes } from './storage/route'
 import { teamRoutes } from './teams/route'
 import { userRoutes } from './users/route'
 
@@ -95,6 +96,7 @@ export async function createApp(options: AppOptions = {}) {
     .use(teamRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(userRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(accountRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
+    .use(storageRoutes(options.projectRequests ?? UNAVAILABLE_PROJECT_REQUESTS))
     .use(health)
 }
 

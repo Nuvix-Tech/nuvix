@@ -63,8 +63,11 @@ export class UnauthorizedError extends AppError {
 }
 
 export class ForbiddenError extends AppError {
-  constructor(detail = 'Insufficient permissions') {
-    super(403, { type: '/errors/forbidden', detail })
+  constructor(
+    detail = 'Insufficient permissions',
+    fields?: Omit<ProblemFields, 'type' | 'detail'>,
+  ) {
+    super(403, { type: '/errors/forbidden', detail, ...fields })
   }
 }
 

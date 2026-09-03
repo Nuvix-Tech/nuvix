@@ -1183,6 +1183,59 @@ async function runScenario(driver: (typeof PLATFORM_FIXTURE_DRIVERS)[number]): P
     )
     expect(logoutAnonymousA.status).toBe(204)
 
+    // S3-grade Storage: Bucket creation, S3 policy, cross-tenant isolation, and presigning
+    const createBucketA = observe(
+      await client.v2.storage.buckets.post(
+        {
+          bucketId: 'storage-test',
+          name: 'Tenant A Storage',
+          permissions: ['read("any")'],
+        },
+        { headers: headersA },
+      ),
+    )
+    expect(createBucketA.status).toBe(201)
+    expect(createBucketA.data?.$id).toBe('storage-test')
+
+    const putPolicyA = observe(
+      await client.v2.storage.buckets({ bucketId: 'storage-test' }).policy.put(
+        {
+          version: '2026-09-03',
+          statements: [
+            {
+              sid: 'PublicAssets',
+              effect: 'allow',
+              principal: '*',
+              actions: ['storage:GetObject'],
+              resources: ['assets/*'],
+            },
+          ],
+        },
+        { headers: headersA },
+      ),
+    )
+    expect(putPolicyA.status).toBe(200)
+
+    // Cross-tenant storage isolation: Tenant B cannot see Tenant A's bucket
+    const crossTenantBucketGet = observe(
+      await client.v2.storage.buckets({ bucketId: 'storage-test' }).get({
+        headers: headersB,
+      }),
+    )
+    expect(crossTenantBucketGet.status).toBe(404)
+
+    const presignA = observe(
+      await client.v2.storage.buckets({ bucketId: 'storage-test' }).presign.post(
+        {
+          key: 'assets/logo.png',
+          action: 'getObject',
+        },
+        { headers: headersA },
+      ),
+    )
+    expect(presignA.status).toBe(200)
+    expect(presignA.data?.url).toContain('/objects/assets/logo.png?token=')
+
     const requestDiagnostics = JSON.stringify(
       observedResults.map((result) => ({
         data: result.data,

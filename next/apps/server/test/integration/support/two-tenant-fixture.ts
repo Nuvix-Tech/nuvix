@@ -20,6 +20,7 @@ import {
   type TenantDatabaseResource,
 } from '../../../src/infrastructure/tenant-database-resource'
 import { HEADERS } from '../../../src/shared/constants'
+import { STORAGE_MODEL } from '../../../src/storage/model'
 import { TEAM_MODEL } from '../../../src/teams/model'
 import {
   createPlatformFixture,
@@ -47,6 +48,10 @@ const FAILURE_PROJECT_IDS = Object.freeze({
 } as const)
 
 export const TENANT_FULL_SCOPES = Object.freeze([
+  'buckets.read',
+  'buckets.write',
+  'files.read',
+  'files.write',
   'schemas.read',
   'schemas.write',
   'teams.read',
@@ -63,6 +68,9 @@ export const TENANT_FIXTURE_COLLECTIONS = Object.freeze([
   TENANT_AUTH_MODEL.collections.apiKeys,
   TENANT_AUTH_MODEL.collections.jwtKeys,
   TEAM_MODEL.collection,
+  STORAGE_MODEL.collections.buckets,
+  STORAGE_MODEL.collections.objects,
+  STORAGE_MODEL.collections.multipartUploads,
 ] as const)
 
 export type TwoTenantName = 'a' | 'b'

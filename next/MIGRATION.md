@@ -370,7 +370,7 @@ Account registration, anonymous sessions, tenant JWT signing-key storage, token 
 
 ### Phase 5 — Storage + Messaging + Webhooks
 
-- [ ] Storage: buckets/files through centrally configured `@nuvix/storage` devices; uploads via Elysia `t.File`
+- [x] Storage: S3-grade object storage redesign with buckets, hierarchical keys, S3 Bucket Policies + Nuvix ACLs, byte-range streaming, presigned URLs, S3 multipart upload lifecycle, and centrally configured `@nuvix/storage` devices
 - [ ] Messaging: shared `@nuvix/messaging` gateway for topics/subscribers/providers; Handlebars templates kept
 - [ ] Webhooks
 

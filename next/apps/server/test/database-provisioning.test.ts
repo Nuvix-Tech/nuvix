@@ -136,6 +136,12 @@ describe('database provisioning', () => {
       'create:jwt_keys',
       'exists:teams',
       'create:teams',
+      'exists:buckets',
+      'create:buckets',
+      'exists:objects',
+      'create:objects',
+      'exists:multipart_uploads',
+      'create:multipart_uploads',
     ])
     expect(state.metadata).toEqual([DATABASE_METADATA.tenant.postgresql])
   })

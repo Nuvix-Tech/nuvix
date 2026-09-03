@@ -1,5 +1,6 @@
 import { Database, DuplicateException, type Filter } from '@nuvix/db'
 import { setupTenantAuthSchema } from '../context/tenant-auth-schema'
+import { setupStorageSchema } from '../storage/schema'
 import { setupTeamSchema } from '../teams/schema'
 import { DATABASE_METADATA } from './database-metadata'
 import { setupPlatformSchema } from './platform-schema'
@@ -73,4 +74,5 @@ export async function provisionTenantDatabase(database: DatabaseProvisioningAdmi
   await setupMetadata(database)
   await setupTenantAuthSchema(database)
   await setupTeamSchema(database)
+  await setupStorageSchema(database)
 }
