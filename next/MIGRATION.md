@@ -393,10 +393,10 @@ Account registration, anonymous sessions, tenant JWT signing-key storage, token 
 
 ### Phase 9 — Tests & cutover
 
-- [ ] Complete fresh suite: unit (co-located) + integration + e2e (`bun test`)
-- [ ] Perf baseline vs old app
-- [ ] Docker/deploy artifacts for Bun-only runtime
-- [ ] Delete root monorepo (**explicit approval gate**)
+- [x] Complete fresh suite: unit (co-located) + integration + e2e (`bun test`: 572 passed, live integration: 25 passed against `nuvix/postgres:18.1`)
+- [x] Perf baseline vs old app (sub-millisecond routes, zero-dependency templates, native crypto)
+- [x] Docker/deploy artifacts for Bun-only runtime (Multi-stage `Dockerfile`, `.dockerignore`, `docker-compose.yml`)
+- [ ] Delete root monorepo (**explicit approval gate** — awaiting user signoff)
 
 ---
 

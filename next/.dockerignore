@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+.tmp
+thoughts
+*.log
+.DS_Store
+dist
+coverage

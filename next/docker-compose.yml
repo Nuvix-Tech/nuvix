@@ -1,0 +1,28 @@
+services:
+  nuvix-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NUVIX_PLATFORM_PERSISTENCE=postgresql
+      - NUVIX_PLATFORM_POSTGRESQL_URL=postgresql://postgres:postgres@postgres-platform:5432/platform
+    depends_on:
+      - postgres-platform
+
+  postgres-platform:
+    image: nuvix/postgres:18.1
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - platform-data:/var/lib/postgresql/data
+
+volumes:
+  platform-data:
